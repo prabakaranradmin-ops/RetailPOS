@@ -24,7 +24,7 @@ public readonly record struct InvoiceTotals(
     public static InvoiceTotals From(IEnumerable<InvoiceLine> lines)
     {
         var count = 0;
-        decimal quantity = 0m, taxable = 0m, discount = 0m;
+        decimal quantity = 0m, discount = 0m;
         decimal cgst = 0m, sgst = 0m, igst = 0m, grandTotal = 0m;
 
         foreach (var line in lines)
@@ -32,24 +32,37 @@ public readonly record struct InvoiceTotals(
             var tax = line.Tax;
             count++;
             quantity += line.Quantity;
-            // Accumulate at internal precision and round once at the end, so a long bill does
-            // not collect a paisa of error per line.
-            taxable += tax.TaxableValue;
             discount += line.Discount;
+
+            // The split components and the line total are already at presentation precision, so
+            // these sums are exact — no rounding error accumulates across a long bill.
             cgst += tax.Cgst;
             sgst += tax.Sgst;
             igst += tax.Igst;
             grandTotal += tax.LineTotal;
         }
 
+        var totalTax = Money.ToPresentation(cgst) + Money.ToPresentation(sgst) + Money.ToPresentation(igst);
+        var total = Money.ToPresentation(grandTotal);
+
         return new InvoiceTotals(
             count,
             quantity,
-            Money.ToPresentation(taxable),
+            // Taxable value is what is left of the invoice after its tax, rather than an
+            // independent sum of the lines' taxable values.
+            //
+            // Both are defensible to within a paisa, and they disagree by exactly that on some
+            // bills: each line total is rounded to paise on its own, so the sum of the rounded
+            // line totals is not always the rounded sum of the unrounded parts. Deriving the
+            // taxable value from the total makes the three headline figures on the invoice add up
+            // by construction — which is how anyone reading a GST invoice, or filing from one,
+            // expects them to behave. The alternative leaves a stray paisa that has to be
+            // explained on every return it appears in.
+            total - totalTax,
             Money.ToPresentation(discount),
             Money.ToPresentation(cgst),
             Money.ToPresentation(sgst),
             Money.ToPresentation(igst),
-            Money.ToPresentation(grandTotal));
+            total);
     }
 }

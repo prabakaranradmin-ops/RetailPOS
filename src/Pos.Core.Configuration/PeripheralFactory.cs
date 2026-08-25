@@ -109,6 +109,15 @@ public static class PeripheralFactory
 
         return string.IsNullOrWhiteSpace(settings.ScalePort)
             ? new NoScaleService()
-            : new SerialScaleService(new SystemSerialPort(new SerialPortSettings(settings.ScalePort, settings.ScaleBaudRate)));
+            : new SerialScaleService(
+                new SystemSerialPort(new SerialPortSettings(settings.ScalePort, settings.ScaleBaudRate)),
+                CreateWeightReader(settings.ScaleProtocol));
     }
+
+    public static IWeightFrameReader CreateWeightReader(ScaleProtocol protocol) => protocol switch
+    {
+        ScaleProtocol.Line => new LineWeightFrameReader(),
+        ScaleProtocol.StxEtx => new StxEtxWeightFrameReader(),
+        _ => new AutoDetectingWeightFrameReader(),
+    };
 }

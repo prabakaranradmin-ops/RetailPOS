@@ -2,6 +2,17 @@ using Microsoft.Data.Sqlite;
 
 namespace Pos.Core.Data;
 
+/// <param name="IsHealthy">True when SQLite found nothing wrong with the file.</param>
+/// <param name="Problems">
+/// What it found, in its own words. Empty when healthy. These are diagnostics for whoever has to
+/// recover the file, not something to show a cashier.
+/// </param>
+public readonly record struct IntegrityReport(bool IsHealthy, IReadOnlyList<string> Problems)
+{
+    public override string ToString() =>
+        IsHealthy ? "ok" : string.Join("; ", Problems);
+}
+
 /// <summary>
 /// Opens connections to the lane's local database file. Everything the till needs lives in this
 /// one file on this one machine — there is no server to reach and nothing to fall back to.
@@ -73,6 +84,58 @@ public sealed class PosDatabase
         using var connection = OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "ANALYZE;";
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Checks the database file for damage.
+    /// </summary>
+    /// <remarks>
+    /// Run before a trading day rather than after a problem. A till's database is the shop's book
+    /// of account, and corruption on a page nobody has read yet is silent until someone tries to
+    /// read it — which will be during a GST filing, not at a convenient moment. The check walks
+    /// every page, so it costs real time on a large file and is not something to do at startup.
+    /// </remarks>
+    public IntegrityReport CheckIntegrity(bool thorough = true)
+    {
+        try
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+
+            // quick_check skips the index cross-checks, which is most of the cost; integrity_check
+            // also verifies that every index agrees with its table.
+            command.CommandText = thorough ? "PRAGMA integrity_check;" : "PRAGMA quick_check;";
+
+            var problems = new List<string>();
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var line = reader.GetString(0);
+
+                // A healthy database answers with the single word "ok".
+                if (!string.Equals(line, "ok", StringComparison.OrdinalIgnoreCase))
+                    problems.Add(line);
+            }
+
+            return new IntegrityReport(problems.Count == 0, problems);
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException)
+        {
+            // A file damaged badly enough that SQLite will not open it is the worst finding of all,
+            // and has to come back as a report rather than as an exception out of a health check.
+            return new IntegrityReport(false, [ex.Message]);
+        }
+    }
+
+    /// <summary>Reclaims free pages and defragments the file. Slow; run out of hours.</summary>
+    public void Vacuum()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "VACUUM;";
         command.ExecuteNonQuery();
     }
 }

@@ -97,12 +97,39 @@ is asserted directly, by pricing the bill both ways and comparing. And a drawer 
 must not cost a sale that has already been paid for, so the checkout is tested with a drawer that
 reports failure and the invoice is still expected to be on disk afterwards.
 
-**Phase 5 — Multi-lane & polish**
-- [x] Invoice ID uniqueness test across simulated concurrent lanes — `InvoicePersistenceTests`, done early
-      because Phase 4 had to mint numbers to save anything. Covers several lanes numbering at once,
-      and several threads on one lane, and asserts the per-lane run is consecutive with no holes.
-- [ ] Offline resilience test: application starts and bills correctly with network disabled at the OS level
-- [ ] Full end-to-end regression across all phases
+**Phase 5 — Multi-lane & polish** — passing
+- [x] Invoice ID uniqueness test across simulated concurrent lanes — `InvoicePersistenceTests`,
+      `RegressionSweepTests`. Several lanes numbering at once, several threads on one lane, and
+      complete sales rather than bare row writes; each lane's run is asserted consecutive with no
+      holes.
+- [x] Offline resilience — `OfflineResilienceTests`
+- [x] Full end-to-end regression across all phases — `RegressionSweepTests`
+
+Added because the brief asked for them, and because each covers a failure the unit tests cannot:
+- [x] Abrupt process termination mid-sale — `CrashDurabilityTests`
+- [x] Database corruption detection — `DatabaseIntegrityTests`
+- [x] Parked bills under concurrent recall — `RegressionSweepTests`
+
+**On the offline test.** Disabling the network adapter and billing a sale is worth doing on a lane,
+but it only proves the network was not needed on the path the tester happened to walk. These tests
+read the compiled assemblies instead and assert that no billing assembly so much as *references* a
+type under `System.Net`, `System.Web` or `System.ServiceModel`. That is a stronger claim than any
+amount of clicking can establish, and it fails the build the moment somebody adds an `HttpClient`
+to a repository. The behavioural half — a complete sale against nothing but a local file — is
+covered alongside it.
+
+**On the crash tests.** Durability is a property of what survives a process ceasing to exist, and
+that cannot be tested inside the process that has to survive it: disposing a connection runs the
+orderly rollback path, which was never the case in doubt. `Pos.CrashHarness` is a separate
+executable the tests launch, let get partway through a sale, and end with `Environment.FailFast` —
+no finalizers, no flush, no orderly close. What is asserted afterwards: a committed invoice is
+still there, an uncommitted one left no trace, a half-written batch left no orphan lines, the
+number an abandoned sale took went back to the sequence, and the till carries on billing without
+anyone running a repair tool.
+
+**On the corruption tests.** A health check nobody has seen fail is not known to work, so these
+damage real files — a page of zeroes mid-file, a truncation, a wrecked header, a text file renamed
+to `.db` — and assert the check catches each. `pos check-db` runs the same check on a lane.
 
 ## Reporting
 

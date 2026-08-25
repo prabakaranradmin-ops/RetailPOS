@@ -1,4 +1,5 @@
 using Pos.Core.Configuration;
+using Pos.Core.Data;
 using Pos.Core.Domain.Printing;
 using Pos.Diagnostics;
 
@@ -41,6 +42,53 @@ switch (command)
     case "list-ports":
         checks.ListPorts();
         return 0;
+
+    case "check-db":
+    {
+        var databasePath = Path.Combine(dataDirectory, "pos.db");
+
+        if (!File.Exists(databasePath))
+        {
+            Console.Error.WriteLine($"No database at {databasePath}.");
+            return 2;
+        }
+
+        var database = new PosDatabase(databasePath);
+        var thorough = !flags.Contains("--quick");
+
+        Console.WriteLine();
+        Console.WriteLine($"Checking {databasePath}");
+        Console.WriteLine($"  {new FileInfo(databasePath).Length / 1024:N0} KB, {(thorough ? "full" : "quick")} check");
+
+        var report = database.CheckIntegrity(thorough);
+
+        if (report.IsHealthy)
+        {
+            Console.WriteLine("  No problems found.");
+        }
+        else
+        {
+            Console.WriteLine("  PROBLEMS FOUND:");
+
+            foreach (var problem in report.Problems)
+                Console.WriteLine($"    {problem}");
+
+            // Deliberately not offering to repair. A damaged till database is the shop's book of
+            // account, and the right first move is a copy of the file and a look at the backup,
+            // not a tool that rewrites it.
+            Console.WriteLine();
+            Console.WriteLine("  Take a copy of the file before doing anything else, then restore from backup.");
+        }
+
+        if (report.IsHealthy && flags.Contains("--vacuum"))
+        {
+            Console.WriteLine("  Compacting...");
+            database.Vacuum();
+            Console.WriteLine($"  Now {new FileInfo(databasePath).Length / 1024:N0} KB.");
+        }
+
+        return report.IsHealthy ? 0 : 1;
+    }
 
     case "receipt-preview":
     {
@@ -155,6 +203,12 @@ static void WriteHelp()
           pos receipt-preview [--width N]
               Renders a sample receipt as text. Touches no hardware, so it works
               on a bench and against any paper width.
+
+          pos check-db [--quick] [--vacuum]
+              Checks the lane's database for damage. Run it before a trading
+              day, not after a problem: corruption on a page nobody has read
+              is silent until someone reads it. --vacuum compacts the file
+              afterwards, and only if the check passed.
 
           pos list-ports
               Lists the serial ports this machine can see.

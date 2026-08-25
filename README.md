@@ -16,7 +16,7 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 2 | Item search, line grid, keyboard flow | Complete, gate passing |
 | 4 | Loyalty, multi-tender, hold/recall, invoicing | Complete, gate passing |
 | 3 | Printer, cash drawer, scanner, scale | Services and tests complete; hardware-in-the-loop pending devices |
-| 5 | Multi-lane numbering, hardening | Not started |
+| 5 | Multi-lane, offline resilience, hardening | Complete, gate passing |
 | 6 | Pilot | Not started |
 
 Phase order and gates are defined in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
@@ -127,6 +127,7 @@ means printing test pages and firing drawers:
 pos test-hardware                      # every configured peripheral
 pos test-hardware --printer --drawer   # just these
 pos receipt-preview --width 32         # render a sample receipt, no hardware needed
+pos check-db [--quick] [--vacuum]      # check the lane's database for damage
 pos list-ports                         # what serial ports this machine can see
 ```
 
@@ -157,3 +158,8 @@ or kicked. A printer out of paper, a drawer that will not open, a loyalty balanc
 write back — each is reported to the cashier and none is allowed to throw out of a completed sale.
 Nothing in the hardware layer throws for a device fault; it returns a result and the caller
 decides.
+
+**A crash must not leave half a sale behind.** The invoice number is taken inside the same
+transaction that writes the invoice, so an interrupted save returns it to the sequence rather than
+leaving a hole in a run that has to be unbroken. This is tested by launching a separate process,
+letting it get partway through a sale, and killing it — see `CrashDurabilityTests`.

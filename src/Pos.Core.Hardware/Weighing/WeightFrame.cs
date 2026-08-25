@@ -72,7 +72,7 @@ public static class WeightFrameParser
         if (!TryParseMode(fields[1].Trim(), out var mode))
             return false;
 
-        if (!TryParseWeight(fields[2].Trim(), out var kilograms))
+        if (!TryParseMagnitude(fields[2].Trim(), out var kilograms))
             return false;
 
         reading = new WeightFrame(stability, mode, kilograms);
@@ -163,11 +163,14 @@ public static class WeightFrameParser
     }
 
     /// <summary>
-    /// Parses the signed magnitude and its unit, normalising to kilograms. The scale pads the
-    /// number with spaces to a fixed width, so those are stripped rather than treated as a
-    /// separator.
+    /// Parses a signed magnitude and its unit, normalising to kilograms. The scale pads the number
+    /// with spaces to a fixed width, so those are stripped rather than treated as a separator.
     /// </summary>
-    private static bool TryParseWeight(string field, out decimal kilograms)
+    /// <remarks>
+    /// Shared with the STX-framed readers, which carry the same magnitude field inside a different
+    /// envelope.
+    /// </remarks>
+    public static bool TryParseMagnitude(string field, out decimal kilograms)
     {
         kilograms = 0m;
 

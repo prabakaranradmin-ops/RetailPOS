@@ -168,11 +168,40 @@ Left for when the devices are on site: only the confirmation itself. The drivers
 the transports (`RawSpoolPrinterService`, `SystemSerialPort`) are deliberately thin, because
 attaching a device is the only real test of them.
 
-## Phase 5 — Multi-lane & hardening
+## Phase 5 — Multi-lane & hardening — **complete**
 - Lane-prefixed local invoice numbering
 - Offline resilience validation
 - Full regression suite across all phases
-- **Gate:** Phase 5 tests
+- **Gate:** Phase 5 tests — **passing** (`OfflineResilienceTests`, `CrashDurabilityTests`,
+  `DatabaseIntegrityTests`, `RegressionSweepTests`)
+
+Decisions taken:
+- **Offline is asserted from the compiled assemblies**, not only by unplugging a cable. No billing
+  assembly may reference a type under `System.Net`, `System.Web` or `System.ServiceModel`. Pulling
+  the cable proves the network was unnecessary on one path; this proves it is unreachable from any
+  of them, and fails the build the moment somebody adds an `HttpClient` to a repository.
+- **Crash durability is tested by killing a real process.** `tests/Pos.CrashHarness` is a separate
+  executable that gets partway through a sale and calls `Environment.FailFast`. Testing this
+  in-process would only exercise the orderly rollback path, which was never in doubt.
+- **`PosDatabase.CheckIntegrity` reports rather than throws**, including for a file too damaged to
+  open — a health check that throws is a health check nobody can call from a startup script.
+- **`pos check-db` does not offer to repair anything.** A damaged till database is the shop's book
+  of account; the right first move is a copy of the file and the backup, not a tool that rewrites
+  it in place.
+- **The invoice's taxable value is now derived as total less tax**, rather than summed
+  independently from the lines. Found by the regression sweep: because each line total is rounded
+  to paise on its own, the sum of the rounded lines is not always the rounded sum of the unrounded
+  parts, and the two disagreed by a paisa on some bills. Deriving it from the total makes the three
+  headline figures add up by construction, which is how anyone filing a GST return expects them to
+  behave. Pinned across 400 randomly built bills.
+- **The scale protocol was wrong for the specified hardware and has been corrected.** The original
+  implementation read the comma-separated Essae/Contech format; the pilot scales speak STX-framed
+  Toledo/CAS with a block check character. Both are now supported, and an auto-detecting reader
+  works out which from the stream, because the setting is usually behind a service menu.
+- **A status-less scale frame is settled in software.** The bare `STX + 1.250 kg CR` variant
+  carries no stability field, and assuming stable would bill a weight while the pan was still
+  moving. A reading is called stable only once it has repeated unchanged. This is a substitute for
+  a field the protocol does not carry and is worth confirming against the actual scale at pilot.
 
 ## Phase 6 — Pilot
 - Deploy to one lane at a pilot store, run in parallel with existing billing if applicable

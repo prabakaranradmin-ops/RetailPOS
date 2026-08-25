@@ -64,15 +64,8 @@ public interface IScaleService : IDisposable
 /// </summary>
 public sealed class SerialScaleService : IScaleService
 {
-    /// <summary>
-    /// Longest a frame may be before the buffer is treated as garbage and dropped. A real frame is
-    /// around twenty characters; anything far longer means the line is noisy or the scale is
-    /// speaking a different protocol, and the buffer must not be allowed to grow without limit.
-    /// </summary>
-    private const int MaxFrameLength = 128;
-
     private readonly ISerialPort _port;
-    private readonly StringBuilder _buffer = new();
+    private readonly IWeightFrameReader _reader;
 
     // Frames arrive on the serial port's own thread while the UI reads Current from its own.
     private readonly object _gate = new();
@@ -82,15 +75,24 @@ public sealed class SerialScaleService : IScaleService
     private bool _started;
     private bool _disposed;
 
-    public SerialScaleService(ISerialPort port)
+    /// <param name="port">The line the scale is on.</param>
+    /// <param name="reader">
+    /// Which protocol to expect. Defaults to trying the ones in the field and latching onto
+    /// whichever the scale turns out to be speaking.
+    /// </param>
+    public SerialScaleService(ISerialPort port, IWeightFrameReader? reader = null)
     {
         ArgumentNullException.ThrowIfNull(port);
         _port = port;
+        _reader = reader ?? new AutoDetectingWeightFrameReader();
     }
 
     public bool IsConfigured => true;
 
-    public string Name => $"serial scale ({_port.PortName})";
+    public string Name => $"serial scale ({_port.PortName}, {_reader.Name})";
+
+    /// <summary>The protocol reader in use, for diagnostics to report what was detected.</summary>
+    public IWeightFrameReader Reader => _reader;
 
     public bool IsConnected => _started && _port.IsOpen;
 
@@ -129,7 +131,7 @@ public sealed class SerialScaleService : IScaleService
         _started = false;
 
         lock (_gate)
-            _buffer.Clear();
+            _reader.Reset();
     }
 
     public bool Tare()
@@ -166,33 +168,13 @@ public sealed class SerialScaleService : IScaleService
 
         lock (_gate)
         {
-            foreach (var b in data)
+            foreach (var frame in _reader.Consume(data))
             {
-                var character = (char)b;
-
-                if (character is '\r' or '\n')
-                {
-                    if (_buffer.Length > 0)
-                    {
-                        if (WeightFrameParser.TryParse(_buffer.ToString(), out var frame))
-                        {
-                            // A frame the scale has already tared reports net; applying our own
-                            // tare on top would subtract the container twice.
-                            var tare = frame.Mode == WeightMode.Net ? 0m : _tare;
-                            _current = new WeightReading(frame.Kilograms, tare, frame.Stability);
-                            completed.Add(_current);
-                        }
-
-                        _buffer.Clear();
-                    }
-
-                    continue;
-                }
-
-                _buffer.Append(character);
-
-                if (_buffer.Length > MaxFrameLength)
-                    _buffer.Clear();
+                // A frame the scale has already tared reports net; applying our own tare on top
+                // would subtract the container twice.
+                var tare = frame.Mode == WeightMode.Net ? 0m : _tare;
+                _current = new WeightReading(frame.Kilograms, tare, frame.Stability);
+                completed.Add(_current);
             }
         }
 

@@ -2,6 +2,18 @@ using System.Text.Json.Serialization;
 
 namespace Pos.Core.Configuration;
 
+public enum ScaleProtocol
+{
+    /// <summary>Try the known protocols and use whichever the scale answers in.</summary>
+    Auto = 0,
+
+    /// <summary>Comma-separated and CR/LF terminated: <c>ST,GS,+  1.234kg</c>. Essae, Contech.</summary>
+    Line = 1,
+
+    /// <summary>STX-framed with a block check character. Toledo, CAS.</summary>
+    StxEtx = 2,
+}
+
 public enum DrawerConnection
 {
     /// <summary>No drawer on this lane.</summary>
@@ -70,6 +82,13 @@ public sealed class HardwareSettings
 
     [JsonPropertyName("scaleBaudRate")]
     public int ScaleBaudRate { get; set; } = 9600;
+
+    /// <summary>
+    /// Which protocol the scale speaks. "Auto" tries the ones in the field and latches onto
+    /// whichever answers, which is usually easier than finding the setting in a service menu.
+    /// </summary>
+    [JsonPropertyName("scaleProtocol")]
+    public ScaleProtocol ScaleProtocol { get; set; } = ScaleProtocol.Auto;
 
     public void Validate()
     {
