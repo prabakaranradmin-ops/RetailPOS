@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Windows, not Linux: the application project targets net8.0-windows for WPF and the
+    # hardware layer talks to Win32 printing and serial ports.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore RetailPos.sln
+
+      - name: Build
+        run: dotnet build RetailPos.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test RetailPos.sln --configuration Release --no-build --verbosity normal
