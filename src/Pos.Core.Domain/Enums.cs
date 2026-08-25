@@ -9,12 +9,31 @@ public enum UnitType
     Metre = 3,
 }
 
+/// <remarks>
+/// Values are persisted in <c>payments.tender_type</c>, so existing members must keep their
+/// numbers. Add new ones at the end.
+/// </remarks>
 public enum TenderType
 {
     Cash = 0,
     Card = 1,
     Upi = 2,
     StoreCredit = 3,
+
+    /// <summary>
+    /// Loyalty points, settled as a payment rather than as a discount. Points offset what the
+    /// customer hands over; they never alter a line's price or its GST.
+    /// </summary>
+    LoyaltyPoints = 4,
+}
+
+public static class TenderTypeExtensions
+{
+    /// <summary>
+    /// Only cash can be handed over in excess of the bill, because only cash gives change back.
+    /// Every other tender is taken for an exact amount.
+    /// </summary>
+    public static bool AllowsOverTender(this TenderType type) => type == TenderType.Cash;
 }
 
 public enum InvoiceStatus

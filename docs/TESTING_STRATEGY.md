@@ -55,13 +55,26 @@ gate.
 - [ ] Hardware-in-the-loop test per peripheral: printer (receipt renders correctly), drawer (kick fires on cash tender), scanner (HID input classified correctly), scale (reading captured correctly)
 - [ ] Fallback behavior test: what happens if a peripheral is disconnected mid-transaction
 
-**Phase 4 — Loyalty, multi-tender, hold/recall**
-- [ ] LoyaltyEngine tests: redemption cap enforcement, balance never negative, accrual on net bill after redemption
-- [ ] Split-tender tests: partial cash + partial UPI reconciles to grand total, change-due calculation
-- [ ] Hold/recall round-trip test: park a bill with discounts applied, recall, verify exact state restored
+**Phase 4 — Loyalty, multi-tender, hold/recall** — passing *(run before Phase 3; see the note in `IMPLEMENTATION_PLAN.md`)*
+- [x] LoyaltyEngine tests: redemption cap enforcement, balance never negative, accrual on net bill after redemption — `LoyaltyEngineTests`
+- [x] Split-tender tests: partial cash + partial UPI reconciles to grand total, change-due calculation — `TenderBasketTests`, `TenderFlowTests`
+- [x] Hold/recall round-trip test: park a bill with discounts applied, recall, verify exact state restored — `HeldBillPersistenceTests`
+
+Added beyond the original list, because settlement is the point at which a sale becomes a record:
+- [x] Invoice numbering and persistence round-trip — `InvoicePersistenceTests`
+- [x] Settlement end to end against a real database, including the drawer — `CheckoutTests`
+- [x] Tender and loyalty driven from the keyboard alone — `TenderFlowTests`
+
+Two behaviours worth knowing are pinned rather than merely implemented. Redeeming points must
+leave every line's taxable value and GST split **identical** to the same bill paid in cash — that
+is asserted directly, by pricing the bill both ways and comparing. And a drawer that fails to open
+must not cost a sale that has already been paid for, so the checkout is tested with a drawer that
+reports failure and the invoice is still expected to be on disk afterwards.
 
 **Phase 5 — Multi-lane & polish**
-- [ ] Invoice ID uniqueness test across simulated concurrent lanes
+- [x] Invoice ID uniqueness test across simulated concurrent lanes — `InvoicePersistenceTests`, done early
+      because Phase 4 had to mint numbers to save anything. Covers several lanes numbering at once,
+      and several threads on one lane, and asserts the per-lane run is consecutive with no holes.
 - [ ] Offline resilience test: application starts and bills correctly with network disabled at the OS level
 - [ ] Full end-to-end regression across all phases
 

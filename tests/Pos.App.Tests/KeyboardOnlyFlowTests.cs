@@ -416,8 +416,45 @@ public class KeyboardOnlyFlowTests
         Assert.Empty(till.ViewModel.HeldBills);
     }
 
+    /// <summary>
+    /// The recall list puts the most recently parked bill first, since that is the one most likely
+    /// to be wanted back, and the arrows walk from there to the older ones.
+    /// </summary>
     [Fact]
     public void ArrowsChooseWhichParkedBillToRecall()
+    {
+        using var till = Till();
+
+        // Parked first: one line at 100.00.
+        till.Scan("8901234567890");
+        till.Press(Key.F5);
+
+        // Parked second: two lines at 367.00.
+        till.Scan("8901234567891");
+        till.Scan("8901234567892");
+        till.Press(Key.F5);
+
+        Assert.Equal(2, till.ViewModel.HeldBills.Count);
+
+        till.Press(Key.F6);
+
+        Assert.Equal(367.00m, till.ViewModel.HeldBills[0].GrandTotal);
+        Assert.Equal(100.00m, till.ViewModel.HeldBills[1].GrandTotal);
+
+        // Down moves off the newest and onto the bill parked before it.
+        till.Press(Key.Down);
+        till.Press(Key.Enter);
+
+        Assert.Single(till.ViewModel.Lines);
+        Assert.Equal(100.00m, till.ViewModel.GrandTotal);
+
+        // The bill not chosen is still parked.
+        Assert.Single(till.ViewModel.HeldBills);
+        Assert.Equal(367.00m, till.ViewModel.HeldBills[0].GrandTotal);
+    }
+
+    [Fact]
+    public void CommittingStraightAwayRecallsTheMostRecentlyParkedBill()
     {
         using var till = Till();
 
@@ -428,10 +465,7 @@ public class KeyboardOnlyFlowTests
         till.Scan("8901234567892");
         till.Press(Key.F5);
 
-        Assert.Equal(2, till.ViewModel.HeldBills.Count);
-
         till.Press(Key.F6);
-        till.Press(Key.Down);
         till.Press(Key.Enter);
 
         Assert.Equal(2, till.ViewModel.Lines.Count);

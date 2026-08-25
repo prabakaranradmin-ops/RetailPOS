@@ -21,6 +21,8 @@ public interface IBillingActions
     void HoldBill();
     void RecallBill();
     void NewBill();
+    void Tender();
+    void FindCustomer();
 }
 
 /// <summary>
@@ -77,6 +79,8 @@ public sealed class KeyboardRouter
             case PosAction.HoldBill: _target.HoldBill(); break;
             case PosAction.RecallBill: _target.RecallBill(); break;
             case PosAction.NewBill: _target.NewBill(); break;
+            case PosAction.Tender: _target.Tender(); break;
+            case PosAction.FindCustomer: _target.FindCustomer(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a
             // debug run beats a key that silently does nothing at the till.

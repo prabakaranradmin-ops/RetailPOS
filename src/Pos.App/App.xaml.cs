@@ -5,6 +5,7 @@ using Pos.App.ViewModels;
 using Pos.App.Views;
 using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Hardware;
 
 namespace Pos.App;
 
@@ -30,9 +31,25 @@ public partial class App : Application
         var database = new PosDatabase(Path.Combine(DataDirectory, "pos.db"));
         database.EnsureMigrated();
 
+        var customers = new CustomerRepository(database);
+
+        // Phase 3 replaces this with the ESC/POS driver. Until then the lane simply has no drawer,
+        // which is a state the checkout already handles rather than a stub that pretends.
+        var drawer = new NoDrawerService();
+
+        var checkout = new CheckoutService(
+            new InvoiceRepository(database),
+            customers,
+            drawer,
+            settings.LoyaltyRules);
+
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode),
             new ItemRepository(database),
+            new HeldBillRepository(database),
+            customers,
+            checkout,
+            settings.LaneId,
             new DispatcherDelayScheduler(Dispatcher),
             new SystemClock(),
             settings.SearchDebounce,

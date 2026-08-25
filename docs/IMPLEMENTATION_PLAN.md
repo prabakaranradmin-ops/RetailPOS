@@ -74,16 +74,58 @@ Decisions taken:
 Not built in this phase, by design: tender and print are Phase 3/4, so they have no action, no
 binding and no stub. The keymap gains them when the features land.
 
-## Phase 3 — Hardware integration
-- `PrinterService` (ESC/POS), `DrawerService` (kick pulse), `ScannerService` (HID), `ScaleService` (serial)
-- Graceful degradation when a peripheral is missing/disconnected
-- **Gate:** Phase 3 tests (hardware-in-the-loop per peripheral, disconnect fallback)
+> **Phases 3 and 4 were swapped**, approved 2026-08-25. Phase 3's gate is hardware-in-the-loop
+> tests on a real scanner, printer, drawer and scale, so it cannot be closed until physical devices
+> are on site — following the original order would have stalled at the gate rather than at the
+> code. Phase 4 is pure domain logic, testable now, and it is the half that turns a billing
+> calculator into a till that can actually complete a sale. Phase 4 therefore runs first and Phase
+> 3 follows.
+>
+> The one coupling this creates is SRS §2.4, where the cash drawer kicks on cash tender
+> confirmation. Phase 4 defines the peripheral *interfaces* and settles against a fake; Phase 3
+> supplies the real ESC/POS and serial drivers behind them. The interface is cheap, only the driver
+> needs the device.
 
-## Phase 4 — Loyalty, multi-tender, hold/recall
+## Phase 4 — Loyalty, multi-tender, hold/recall — **complete** *(ran before Phase 3)*
 - `LoyaltyEngine`: capped redemption, accrual, balance tracking
 - Multi-tender settlement (cash/card/UPI/credit, split tender, change-due)
 - Bill hold/recall with full state preservation
-- **Gate:** Phase 4 tests
+- Invoice numbering, and persistence across `invoices` / `invoice_lines` / `payments`
+- `IDrawerService` and its fake, so settlement is decoupled from the physical driver
+- **Gate:** Phase 4 tests — **passing** (`LoyaltyEngineTests`, `TenderBasketTests`, `CheckoutTests`,
+  `InvoicePersistenceTests`, `HeldBillPersistenceTests`, `TenderFlowTests`)
+
+Decisions taken:
+- **Loyalty redemption is a tender, not a line discount** (approved 2026-08-25). Points offset what
+  the customer hands over; line prices, taxable values and the CGST/SGST split are untouched.
+  Accrual is on the net bill after redemption, so points spent on an invoice cannot earn points
+  back. `CheckoutTests` and `TenderFlowTests` both price the same bill with and without a
+  redemption and assert the tax comes out identical — that is the guard on this decision.
+- **The invoice number is minted inside the save transaction.** A rolled-back save returns its
+  number to the sequence, so a failed save cannot leave a hole in a run that has to be unbroken.
+  The transaction is IMMEDIATE so two threads on one lane cannot read the same next value.
+- **Parked bills live in their own tables**, not in `invoices`. A parked bill is not a tax invoice:
+  it has no number and no tax point, and may never become one. Reasoning is in migration 003.
+  `invoices.hold_token` survives, repurposed to record which parked bill a settled invoice came
+  from, and its index is no longer unique because tokens are short and get reused.
+- **The sale is saved before anything else happens.** A drawer that will not open, or a loyalty
+  balance that fails to write back, is reported — never a reason to discard an invoice the customer
+  has already paid for.
+- **Only cash may be over-tendered.** There is no way to give change on a card or a UPI transfer,
+  so every other tender is capped at the remaining balance.
+- Hold tokens are short (`H001`) and **reused once freed**, so a cashier can read one off a slip
+  rather than watching them climb forever.
+- An unknown mobile number **takes two commits** to become a customer, matching the confirm-twice
+  pattern already used for discarding a bill. Creating a customer on a typo is worse than a keypress.
+- The recall list is **newest first**, since the bill just parked is the one most likely wanted back.
+- `Pos.Core.Hardware` currently holds only `IDrawerService` and a `NoDrawerService`. The other
+  peripherals get their interfaces in Phase 3 alongside their drivers; there is no value in stubs
+  for features that do not exist yet.
+
+## Phase 3 — Hardware integration — **runs after Phase 4; needs physical devices**
+- `PrinterService` (ESC/POS), `DrawerService` (kick pulse), `ScannerService` (HID), `ScaleService` (serial)
+- Graceful degradation when a peripheral is missing/disconnected
+- **Gate:** Phase 3 tests (hardware-in-the-loop per peripheral, disconnect fallback)
 
 ## Phase 5 — Multi-lane & hardening
 - Lane-prefixed local invoice numbering

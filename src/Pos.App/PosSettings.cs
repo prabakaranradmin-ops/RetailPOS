@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Pos.Core.Loyalty;
 
 namespace Pos.App;
 
@@ -34,9 +35,24 @@ public sealed class PosSettings
     [JsonPropertyName("scannerMaxKeystrokeGapMs")]
     public int ScannerMaxKeystrokeGapMs { get; set; } = 30;
 
+    /// <summary>Most of a bill that may be settled with points, as a percentage (SRS section 4).</summary>
+    [JsonPropertyName("loyaltyRedemptionCapPercent")]
+    public decimal LoyaltyRedemptionCapPercent { get; set; } = 30m;
+
+    /// <summary>What one point is worth when redeemed.</summary>
+    [JsonPropertyName("loyaltyRupeesPerPoint")]
+    public decimal LoyaltyRupeesPerPoint { get; set; } = 0.50m;
+
+    /// <summary>Spend needed to earn one point, on the net bill after any redemption.</summary>
+    [JsonPropertyName("loyaltyRupeesPerPointEarned")]
+    public decimal LoyaltyRupeesPerPointEarned { get; set; } = 50m;
+
     public TimeSpan SearchDebounce => TimeSpan.FromMilliseconds(SearchDebounceMs);
 
     public TimeSpan ScannerMaxKeystrokeGap => TimeSpan.FromMilliseconds(ScannerMaxKeystrokeGapMs);
+
+    public LoyaltyRules LoyaltyRules =>
+        new(LoyaltyRedemptionCapPercent, LoyaltyRupeesPerPoint, LoyaltyRupeesPerPointEarned);
 
     /// <summary>
     /// Reads the settings file, falling back to defaults when it is absent. A malformed file is an
@@ -72,6 +88,17 @@ public sealed class PosSettings
 
         if (settings.SearchDebounceMs < 0 || settings.ScannerMaxKeystrokeGapMs <= 0)
             throw new InvalidOperationException($"The settings file at '{path}' has a non-positive timing value.");
+
+        // Surfaces an unworkable loyalty scheme here rather than at the moment a cashier tries to
+        // redeem against it.
+        try
+        {
+            settings.LoyaltyRules.Validate();
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new InvalidOperationException($"The settings file at '{path}' has an unworkable loyalty scheme: {ex.Message}", ex);
+        }
 
         return settings;
     }

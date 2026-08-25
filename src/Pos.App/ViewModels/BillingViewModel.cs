@@ -3,6 +3,7 @@ using System.Globalization;
 using Pos.App.Input;
 using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Hardware;
 
 namespace Pos.App.ViewModels;
 
@@ -12,6 +13,12 @@ public enum BillingMode
 
     /// <summary>Picking a parked bill from the recall list.</summary>
     Recall = 1,
+
+    /// <summary>Taking payment.</summary>
+    Tender = 2,
+
+    /// <summary>Looking a customer up by mobile number.</summary>
+    Customer = 3,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -22,13 +29,18 @@ public enum EditableColumn
 }
 
 /// <summary>
-/// The billing screen. Owns the search box, the line grid and the parked-bill list, and exposes
-/// every one of them as an action so the whole flow is reachable from the keyboard (SRS UR-03).
+/// The billing screen. Owns the search box, the line grid, the tender pane and the parked-bill
+/// list, and exposes every one of them as an action so the whole flow is reachable from the
+/// keyboard (SRS UR-03).
 /// </summary>
 public sealed class BillingViewModel : ObservableObject, IBillingActions, IDisposable
 {
     private readonly InvoiceEngine _bill;
     private readonly ItemRepository _items;
+    private readonly IHeldBillStore _heldBills;
+    private readonly ICustomerStore _customers;
+    private readonly CheckoutService _checkout;
+    private readonly string _laneId;
     private readonly ScannerInputClassifier _classifier;
     private readonly SearchDebouncer _debouncer;
     private readonly Func<DateTimeOffset> _now;
@@ -40,19 +52,29 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private int _selectedResultIndex = -1;
     private int _selectedLineIndex = -1;
     private int _selectedHeldBillIndex = -1;
+    private int _selectedTenderTypeIndex;
 
     private BillingMode _mode = BillingMode.Billing;
     private EditableColumn? _editingColumn;
     private string _editBuffer = string.Empty;
     private string _statusMessage = string.Empty;
 
+    private TenderBasket? _basket;
+    private int _pointsRedeemed;
+    private string? _recalledFromToken;
+    private CheckoutResult? _lastSale;
+
     private bool _pendingNewBillConfirmation;
-    private int _nextHoldToken = 1;
+    private bool _pendingCustomerCreate;
     private bool _disposed;
 
     public BillingViewModel(
         InvoiceEngine bill,
         ItemRepository items,
+        IHeldBillStore heldBills,
+        ICustomerStore customers,
+        CheckoutService checkout,
+        string laneId,
         IDelayScheduler scheduler,
         IClock clock,
         TimeSpan? debounceWindow = null,
@@ -61,14 +83,24 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(heldBills);
+        ArgumentNullException.ThrowIfNull(customers);
+        ArgumentNullException.ThrowIfNull(checkout);
+        ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(clock);
 
         _bill = bill;
         _items = items;
+        _heldBills = heldBills;
+        _customers = customers;
+        _checkout = checkout;
+        _laneId = laneId;
         _now = now ?? (() => DateTimeOffset.Now);
         _classifier = new ScannerInputClassifier(clock, maxKeystrokeGap);
         _debouncer = new SearchDebouncer(scheduler, OnDebounceElapsed, debounceWindow);
+
+        RefreshHeldBills();
     }
 
     /// <summary>Raised when the caret should be put back in the search box.</summary>
@@ -147,6 +179,17 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public decimal WeighedQuantityStep { get; set; } = 0.1m;
 
+    // ---- Customer ----------------------------------------------------------------------------
+
+    public Customer? Customer => _bill.Customer;
+
+    public string CustomerLabel =>
+        _bill.Customer is null ? "Walk-in" : _bill.Customer.Name ?? _bill.Customer.MobileNo;
+
+    public int LoyaltyBalance => _bill.Customer?.LoyaltyBalance ?? 0;
+
+    public bool HasCustomer => _bill.Customer is not null;
+
     // ---- Editing and mode --------------------------------------------------------------------
 
     public BillingMode Mode
@@ -154,12 +197,20 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         get => _mode;
         private set
         {
-            if (Set(ref _mode, value))
-                Raise(nameof(IsRecalling));
+            if (!Set(ref _mode, value))
+                return;
+
+            Raise(nameof(IsRecalling));
+            Raise(nameof(IsTendering));
+            Raise(nameof(IsFindingCustomer));
         }
     }
 
     public bool IsRecalling => _mode == BillingMode.Recall;
+
+    public bool IsTendering => _mode == BillingMode.Tender;
+
+    public bool IsFindingCustomer => _mode == BillingMode.Customer;
 
     public EditableColumn? EditingColumn
     {
@@ -173,7 +224,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public bool IsEditing => _editingColumn.HasValue;
 
-    /// <summary>Text of the cell being edited. Bound two-way to the in-place editor.</summary>
+    /// <summary>
+    /// Whatever the cashier is typing right now — a cell value, a payment amount, or a mobile
+    /// number. Which one depends on the mode.
+    /// </summary>
     public string EditBuffer
     {
         get => _editBuffer;
@@ -186,9 +240,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         private set => Set(ref _statusMessage, value ?? string.Empty);
     }
 
-    // ---- Held bills --------------------------------------------------------------------------
+    // ---- Parked bills ------------------------------------------------------------------------
 
-    public ObservableCollection<HeldBill> HeldBills { get; } = [];
+    public ObservableCollection<HeldBillSummary> HeldBills { get; } = [];
 
     public int SelectedHeldBillIndex
     {
@@ -200,16 +254,66 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         }
     }
 
-    public HeldBill? SelectedHeldBill =>
+    public HeldBillSummary? SelectedHeldBill =>
         _selectedHeldBillIndex >= 0 && _selectedHeldBillIndex < HeldBills.Count
             ? HeldBills[_selectedHeldBillIndex]
             : null;
+
+    // ---- Tender ------------------------------------------------------------------------------
+
+    /// <summary>Tender types offered in the pane, in the order the arrow keys walk them.</summary>
+    public IReadOnlyList<TenderType> TenderTypes { get; } =
+        [TenderType.Cash, TenderType.Card, TenderType.Upi, TenderType.StoreCredit, TenderType.LoyaltyPoints];
+
+    public int SelectedTenderTypeIndex
+    {
+        get => _selectedTenderTypeIndex;
+        set
+        {
+            if (Set(ref _selectedTenderTypeIndex, value))
+                Raise(nameof(SelectedTenderType));
+        }
+    }
+
+    public TenderType SelectedTenderType => TenderTypes[Math.Clamp(_selectedTenderTypeIndex, 0, TenderTypes.Count - 1)];
+
+    public ObservableCollection<Tender> Payments { get; } = [];
+
+    public decimal AmountDue => _basket?.AmountDue ?? 0m;
+
+    public decimal AmountTendered => _basket?.TotalTendered ?? 0m;
+
+    public decimal AmountRemaining => _basket?.Remaining ?? 0m;
+
+    public decimal ChangeDue => _basket?.ChangeDue ?? 0m;
+
+    public bool IsFullyTendered => _basket?.IsSettled ?? false;
+
+    /// <summary>Most points this customer may put against the bill, given the cap and their balance.</summary>
+    public int MaxRedeemablePoints => _checkout.QuoteRedemption(AmountDue, _bill.Customer).Points;
+
+    /// <summary>The completed sale, for the confirmation line after settlement.</summary>
+    public CheckoutResult? LastSale
+    {
+        get => _lastSale;
+        private set
+        {
+            if (Set(ref _lastSale, value))
+                Raise(nameof(LastInvoiceNo));
+        }
+    }
+
+    public string LastInvoiceNo => _lastSale?.Invoice.InvoiceNo ?? string.Empty;
 
     // ---- Actions -----------------------------------------------------------------------------
 
     public void FocusSearch()
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
+
+        if (Mode == BillingMode.Tender)
+            return;
+
         CancelEdit();
         Mode = BillingMode.Billing;
         SearchFocusRequested?.Invoke(this, EventArgs.Empty);
@@ -223,10 +327,19 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         ClearPendingNewBill();
 
-        if (Mode == BillingMode.Recall)
+        switch (Mode)
         {
-            RecallSelected();
-            return;
+            case BillingMode.Recall:
+                RecallSelected();
+                return;
+
+            case BillingMode.Tender:
+                CommitTender();
+                return;
+
+            case BillingMode.Customer:
+                CommitCustomerLookup();
+                return;
         }
 
         if (IsEditing)
@@ -240,13 +353,24 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public void Cancel()
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
 
-        if (Mode == BillingMode.Recall)
+        switch (Mode)
         {
-            Mode = BillingMode.Billing;
-            StatusMessage = string.Empty;
-            return;
+            case BillingMode.Recall:
+                Mode = BillingMode.Billing;
+                StatusMessage = string.Empty;
+                return;
+
+            case BillingMode.Tender:
+                AbandonTender();
+                return;
+
+            case BillingMode.Customer:
+                Mode = BillingMode.Billing;
+                EditBuffer = string.Empty;
+                StatusMessage = string.Empty;
+                return;
         }
 
         if (IsEditing)
@@ -261,7 +385,13 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public void DeleteLine()
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
+
+        if (Mode == BillingMode.Tender)
+        {
+            RemoveLastPayment();
+            return;
+        }
 
         if (SelectedLine is null)
         {
@@ -291,8 +421,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public void HoldBill()
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
         CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment before parking this bill.";
+            return;
+        }
 
         if (_bill.IsEmpty)
         {
@@ -300,17 +436,27 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        var token = $"H{_nextHoldToken++:D3}";
-        HeldBills.Add(new HeldBill(token, _now(), _bill.SnapshotLines(), _bill.Customer));
+        var token = _heldBills.NextToken(_laneId);
+        _heldBills.Park(_laneId, token, _now(), _bill.Customer, _bill.SnapshotLines());
 
         ClearBill();
+        RefreshHeldBills();
+
         StatusMessage = $"Bill parked as {token}.";
     }
 
     public void RecallBill()
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
         CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        RefreshHeldBills();
 
         if (HeldBills.Count == 0)
         {
@@ -331,6 +477,12 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         CancelEdit();
 
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
         if (_bill.IsEmpty)
         {
             ClearBill();
@@ -349,10 +501,57 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         StatusMessage = "Bill discarded.";
     }
 
+    /// <summary>Opens the tender pane against the bill's current total.</summary>
+    public void Tender()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+            return;
+
+        if (_bill.IsEmpty)
+        {
+            StatusMessage = "Nothing to tender.";
+            return;
+        }
+
+        _basket = new TenderBasket(_bill.Totals.GrandTotal);
+        _pointsRedeemed = 0;
+        Payments.Clear();
+        SelectedTenderTypeIndex = 0;
+        EditBuffer = string.Empty;
+        Mode = BillingMode.Tender;
+        RefreshTender();
+
+        StatusMessage = $"{AmountDue:0.00} due. Choose a tender, type an amount, then commit.";
+    }
+
+    /// <summary>Attaches a customer by mobile number, which is what unlocks loyalty on the bill.</summary>
+    public void FindCustomer()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Attach the customer before taking payment.";
+            return;
+        }
+
+        Mode = BillingMode.Customer;
+        EditBuffer = string.Empty;
+        StatusMessage = "Type the customer's mobile number, then commit.";
+    }
+
     // ---- Search internals --------------------------------------------------------------------
 
     private void OnDebounceElapsed(string text)
     {
+        // A debounced query that lands after the cashier has moved on to paying is not wanted.
+        if (Mode != BillingMode.Billing)
+            return;
+
         var trimmed = (text ?? string.Empty).Trim();
 
         if (trimmed.Length == 0)
@@ -391,13 +590,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         // A result list built from this exact text is what the cashier is looking at, so Enter
         // takes their highlighted choice. Anything else is stale and gets re-queried.
-        if (IsResultListOpen && _resultsForText == text)
+        if (IsResultListOpen && _resultsForText == text && SelectedResult is { } chosen)
         {
-            if (SelectedResult is { } chosen)
-            {
-                AddItem(chosen);
-                return;
-            }
+            AddItem(chosen);
+            return;
         }
 
         RunSearch(text);
@@ -482,12 +678,22 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private void Move(int delta)
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
 
-        if (Mode == BillingMode.Recall)
+        switch (Mode)
         {
-            SelectedHeldBillIndex = Clamp(_selectedHeldBillIndex + delta, HeldBills.Count);
-            return;
+            case BillingMode.Recall:
+                SelectedHeldBillIndex = Clamp(_selectedHeldBillIndex + delta, HeldBills.Count);
+                return;
+
+            case BillingMode.Tender:
+                SelectedTenderTypeIndex = Math.Clamp(_selectedTenderTypeIndex + delta, 0, TenderTypes.Count - 1);
+                EditBuffer = string.Empty;
+                Raise(nameof(SelectedTenderType));
+                return;
+
+            case BillingMode.Customer:
+                return;
         }
 
         // With a result list open the arrows belong to it; with the box quiet they walk the bill.
@@ -502,7 +708,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private void Nudge(int direction)
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
+
+        if (Mode != BillingMode.Billing)
+            return;
 
         if (SelectedLine is null)
         {
@@ -531,9 +740,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private void BeginEdit(EditableColumn column)
     {
-        ClearPendingNewBill();
+        ClearPendingConfirmations();
 
-        if (Mode == BillingMode.Recall)
+        if (Mode != BillingMode.Billing)
             return;
 
         if (SelectedLine is not { } line)
@@ -552,7 +761,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (EditingColumn is not { } column || SelectedLine is null)
             return;
 
-        if (!decimal.TryParse(EditBuffer, NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+        if (!TryParseAmount(EditBuffer, out var value))
         {
             StatusMessage = $"'{EditBuffer}' is not a number.";
             return;
@@ -580,12 +789,277 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private void CancelEdit()
     {
         EditingColumn = null;
+
+        if (Mode == BillingMode.Billing)
+            EditBuffer = string.Empty;
+    }
+
+    // ---- Tender internals --------------------------------------------------------------------
+
+    private void CommitTender()
+    {
+        if (_basket is null)
+            return;
+
+        var typed = EditBuffer.Trim();
+
+        // An empty box with the bill already covered means "that's everything, finish the sale".
+        if (typed.Length == 0 && _basket.IsSettled)
+        {
+            CompleteSale();
+            return;
+        }
+
+        if (SelectedTenderType == TenderType.LoyaltyPoints)
+        {
+            AddLoyaltyTender(typed);
+            return;
+        }
+
+        if (typed.Length == 0)
+        {
+            // No amount typed: take the whole remaining balance under this tender.
+            typed = Format(_basket.Remaining);
+        }
+
+        if (!TryParseAmount(typed, out var amount))
+        {
+            StatusMessage = $"'{EditBuffer}' is not an amount.";
+            return;
+        }
+
+        try
+        {
+            _basket.Add(SelectedTenderType, amount);
+        }
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            StatusMessage = ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
+            return;
+        }
+
         EditBuffer = string.Empty;
+        RefreshTender();
+
+        StatusMessage = _basket.IsSettled
+            ? _basket.ChangeDue > 0m
+                ? $"Change {_basket.ChangeDue:0.00}. Commit again to finish."
+                : "Paid in full. Commit again to finish."
+            : $"{_basket.Remaining:0.00} still due.";
+    }
+
+    /// <summary>
+    /// Loyalty is entered in points, not rupees — that is the number the customer knows. An empty
+    /// box redeems the most the rules allow.
+    /// </summary>
+    private void AddLoyaltyTender(string typed)
+    {
+        if (_basket is null)
+            return;
+
+        if (_bill.Customer is null)
+        {
+            StatusMessage = "Attach a customer before redeeming points.";
+            return;
+        }
+
+        if (_basket.Contains(TenderType.LoyaltyPoints))
+        {
+            StatusMessage = "Points have already been redeemed on this bill.";
+            return;
+        }
+
+        int requested;
+
+        if (typed.Length == 0)
+        {
+            requested = int.MaxValue;
+        }
+        else if (!int.TryParse(typed, NumberStyles.Integer, CultureInfo.InvariantCulture, out requested) || requested < 0)
+        {
+            StatusMessage = $"'{typed}' is not a number of points.";
+            return;
+        }
+
+        var redemption = _checkout.Redeem(_basket.AmountDue, _bill.Customer, requested);
+
+        if (!redemption.IsSomething)
+        {
+            StatusMessage = "No points can be redeemed on this bill.";
+            return;
+        }
+
+        // The redemption may still exceed what is left to pay if other tenders came first.
+        if (redemption.Value > _basket.Remaining)
+        {
+            StatusMessage = $"Only {_basket.Remaining:0.00} is left to pay; redeem fewer points.";
+            return;
+        }
+
+        _basket.Add(TenderType.LoyaltyPoints, redemption.Value, $"{redemption.Points} points");
+        _pointsRedeemed = redemption.Points;
+
+        EditBuffer = string.Empty;
+        RefreshTender();
+
+        StatusMessage = $"{redemption.Points} points redeemed, worth {redemption.Value:0.00}. {_basket.Remaining:0.00} still due.";
+    }
+
+    private void RemoveLastPayment()
+    {
+        if (_basket is null || _basket.IsEmpty)
+        {
+            StatusMessage = "No payment to remove.";
+            return;
+        }
+
+        var index = _basket.Tenders.Count - 1;
+
+        if (_basket.Tenders[index].Type == TenderType.LoyaltyPoints)
+            _pointsRedeemed = 0;
+
+        _basket.RemoveAt(index);
+        EditBuffer = string.Empty;
+        RefreshTender();
+
+        StatusMessage = $"Payment removed. {_basket.Remaining:0.00} due.";
+    }
+
+    private void CompleteSale()
+    {
+        if (_basket is null)
+            return;
+
+        CheckoutResult result;
+
+        try
+        {
+            result = _checkout.Complete(_laneId, _bill, _basket, _pointsRedeemed, _recalledFromToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = ex.Message;
+            return;
+        }
+
+        LastSale = result;
+
+        var message = $"{result.Invoice.InvoiceNo} settled for {result.Invoice.GrandTotal:0.00}.";
+
+        if (result.ChangeDue > 0m)
+            message += $" Change {result.ChangeDue:0.00}.";
+
+        if (result.PointsEarned > 0)
+            message += $" {result.PointsEarned} points earned, balance {result.NewLoyaltyBalance}.";
+
+        if (result.Drawer == DrawerKickResult.Failed)
+            message += " The cash drawer did not open — open it by hand.";
+
+        _basket = null;
+        _pointsRedeemed = 0;
+        _recalledFromToken = null;
+        Payments.Clear();
+        Mode = BillingMode.Billing;
+
+        ClearBill();
+        RefreshTender();
+
+        StatusMessage = message;
+    }
+
+    private void AbandonTender()
+    {
+        _basket = null;
+        _pointsRedeemed = 0;
+        Payments.Clear();
+        EditBuffer = string.Empty;
+        Mode = BillingMode.Billing;
+        RefreshTender();
+
+        StatusMessage = "Payment abandoned. The bill is still here.";
+    }
+
+    private void RefreshTender()
+    {
+        Payments.Clear();
+
+        if (_basket is not null)
+        {
+            foreach (var payment in _basket.Tenders)
+                Payments.Add(payment);
+        }
+
+        Raise(nameof(AmountDue));
+        Raise(nameof(AmountTendered));
+        Raise(nameof(AmountRemaining));
+        Raise(nameof(ChangeDue));
+        Raise(nameof(IsFullyTendered));
+        Raise(nameof(MaxRedeemablePoints));
+    }
+
+    // ---- Customer internals ------------------------------------------------------------------
+
+    private void CommitCustomerLookup()
+    {
+        var mobile = EditBuffer.Trim();
+
+        if (mobile.Length == 0)
+        {
+            StatusMessage = "Type a mobile number.";
+            return;
+        }
+
+        var existing = _customers.FindByMobile(mobile);
+
+        if (existing is not null)
+        {
+            AttachCustomer(existing);
+            return;
+        }
+
+        // Creating a customer on a mistyped number is worse than making the cashier confirm, so
+        // the first press reports and the second creates.
+        if (!_pendingCustomerCreate)
+        {
+            _pendingCustomerCreate = true;
+            StatusMessage = $"No customer on {mobile}. Commit again to add them.";
+            return;
+        }
+
+        _pendingCustomerCreate = false;
+        AttachCustomer(_customers.Add(new Customer { MobileNo = mobile, StateCode = _bill.OutletStateCode }));
+    }
+
+    private void AttachCustomer(Customer customer)
+    {
+        _bill.SetCustomer(customer);
+
+        foreach (var line in Lines)
+            line.Refresh();
+
+        EditBuffer = string.Empty;
+        Mode = BillingMode.Billing;
+        RefreshTotals();
+        RefreshCustomer();
+
+        StatusMessage = $"{CustomerLabel} attached. {customer.LoyaltyBalance} points.";
+    }
+
+    // ---- Parked bill internals ---------------------------------------------------------------
+
+    private void RefreshHeldBills()
+    {
+        HeldBills.Clear();
+
+        foreach (var summary in _heldBills.List(_laneId))
+            HeldBills.Add(summary);
+
+        SelectedHeldBillIndex = HeldBills.Count > 0 ? Math.Min(Math.Max(_selectedHeldBillIndex, 0), HeldBills.Count - 1) : -1;
     }
 
     private void RecallSelected()
     {
-        if (SelectedHeldBill is not { } held)
+        if (SelectedHeldBill is not { } summary)
             return;
 
         if (!_bill.IsEmpty)
@@ -594,15 +1068,28 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        _bill.Restore(held.Lines, held.Customer);
+        var recalled = _heldBills.Recall(_laneId, summary.Token);
+
+        if (recalled is null)
+        {
+            // Someone else took it, or it was discarded since the list was drawn.
+            RefreshHeldBills();
+            StatusMessage = $"{summary.Token} is no longer parked.";
+            return;
+        }
+
+        _bill.Restore(recalled.Lines, recalled.Customer);
+        _recalledFromToken = recalled.Token;
+
         RebuildLines();
-        HeldBills.Remove(held);
+        RefreshHeldBills();
+        RefreshTotals();
+        RefreshCustomer();
 
         SelectedHeldBillIndex = -1;
         Mode = BillingMode.Billing;
-        RefreshTotals();
 
-        StatusMessage = $"Recalled {held.Token}.";
+        StatusMessage = $"Recalled {recalled.Token}.";
     }
 
     private void ClearBill()
@@ -610,8 +1097,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         _bill.Clear();
         Lines.Clear();
         SelectedLineIndex = -1;
+        _recalledFromToken = null;
         ClearSearch();
         RefreshTotals();
+        RefreshCustomer();
     }
 
     private void RebuildLines()
@@ -629,10 +1118,26 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private void ClearPendingNewBill() => _pendingNewBillConfirmation = false;
 
+    private void ClearPendingConfirmations()
+    {
+        _pendingNewBillConfirmation = false;
+        _pendingCustomerCreate = false;
+    }
+
     private void RefreshTotals()
     {
         Raise(nameof(Totals));
         Raise(nameof(GrandTotal));
+        Raise(nameof(MaxRedeemablePoints));
+    }
+
+    private void RefreshCustomer()
+    {
+        Raise(nameof(Customer));
+        Raise(nameof(CustomerLabel));
+        Raise(nameof(LoyaltyBalance));
+        Raise(nameof(HasCustomer));
+        Raise(nameof(MaxRedeemablePoints));
     }
 
     private static int Clamp(int index, int count) =>
@@ -640,6 +1145,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private static string Format(decimal value) =>
         value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static bool TryParseAmount(string text, out decimal value) =>
+        decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value);
 
     public void Dispose()
     {

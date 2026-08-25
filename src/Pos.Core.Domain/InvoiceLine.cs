@@ -111,6 +111,45 @@ public sealed class InvoiceLine
         IsInterState = IsInterState,
     };
 
+    /// <summary>
+    /// Rebuilds a line from stored fields, for reading an invoice or a parked bill back.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is re-derived from the item master: the stored name, HSN and price are used exactly
+    /// as they were written, so a reprint shows what was sold rather than what the item looks like
+    /// today. Going through a factory also fixes the order the quantity and discount setters run
+    /// in, since both validate against fields that must already be populated.
+    /// </remarks>
+    public static InvoiceLine Rehydrate(
+        long itemId,
+        string nameSnapshot,
+        string hsnSnapshot,
+        string? barcodeSnapshot,
+        string? batchNo,
+        UnitType unit,
+        decimal mrp,
+        decimal unitPrice,
+        bool isTaxInclusive,
+        decimal gstRate,
+        decimal quantity,
+        decimal discount,
+        bool isInterState) => new()
+    {
+        ItemId = itemId,
+        NameSnapshot = nameSnapshot,
+        HsnSnapshot = hsnSnapshot,
+        BarcodeSnapshot = barcodeSnapshot,
+        BatchNo = batchNo,
+        Unit = unit,
+        Mrp = mrp,
+        UnitPrice = unitPrice,
+        IsTaxInclusive = isTaxInclusive,
+        GstRate = gstRate,
+        Quantity = quantity,
+        Discount = discount,
+        IsInterState = isInterState,
+    };
+
     /// <summary>Builds a line from an item master record at quantity 1.</summary>
     public static InvoiceLine FromItem(Item item, decimal quantity = 1m, bool isInterState = false) => new()
     {

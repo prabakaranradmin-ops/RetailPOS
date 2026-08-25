@@ -44,6 +44,9 @@ public sealed class Keymap
         [new(Key.Subtract)] = PosAction.DecrementQuantity,
         [new(Key.OemMinus)] = PosAction.DecrementQuantity,
 
+        [new(Key.F7)] = PosAction.FindCustomer,
+        [new(Key.F12)] = PosAction.Tender,
+
         [new(Key.N, ModifierKeys.Control)] = PosAction.NewBill,
     });
 

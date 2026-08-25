@@ -14,8 +14,8 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 0 | Repo, local DB schema, migrations, CI | Complete, gate passing |
 | 1 | GST engine, invoice engine | Complete, gate passing |
 | 2 | Item search, line grid, keyboard flow | Complete, gate passing |
-| 3 | Printer, cash drawer, scanner, scale | Not started |
-| 4 | Loyalty, multi-tender, hold/recall | Not started |
+| 4 | Loyalty, multi-tender, hold/recall, invoicing | Complete, gate passing |
+| 3 | Printer, cash drawer, scanner, scale | Not started — needs physical devices |
 | 5 | Multi-lane numbering, hardening | Not started |
 | 6 | Pilot | Not started |
 
@@ -23,18 +23,23 @@ Phase order and gates are defined in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 and [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md). A phase does not start until the
 previous phase's gate passes.
 
+Phases 3 and 4 were deliberately swapped: Phase 3's gate is hardware-in-the-loop testing on real
+peripherals, so it cannot close until devices are on site, while Phase 4 is pure logic and is the
+half that lets a sale actually be completed. Phase 4 defines the peripheral interfaces and settles
+against a fake; Phase 3 supplies the drivers behind them.
+
 ## Layout
 
 ```
 src/Pos.Core.Tax/        GST calculation — pure, stateless, exhaustively tested
 src/Pos.Core.Domain/     Invoice, line, item, customer model and the live bill
-src/Pos.Core.Data/       SQLite access, schema migrations, item search
-src/Pos.Core.Loyalty/    Points accrual and redemption            (Phase 4)
-src/Pos.Core.Hardware/   Scanner, printer, drawer, scale          (Phase 3)
+src/Pos.Core.Data/       SQLite access, migrations, item search, invoice and held-bill storage
+src/Pos.Core.Loyalty/    Points accrual and redemption
+src/Pos.Core.Hardware/   Peripheral interfaces (drawer today; the rest arrive with Phase 3)
 src/Pos.App/             WPF UI, MVVM, keyboard routing
-tests/Pos.Core.Tests/    Tax, invoice, schema, search, latency
-tests/Pos.App.Tests/     Input classification, debounce, keymap, keyboard-only flow
-tests/Pos.TestSupport/   Shared fixtures (throwaway database, catalogue generator)
+tests/Pos.Core.Tests/    Tax, invoice, loyalty, tender, checkout, schema, search, latency
+tests/Pos.App.Tests/     Input classification, debounce, keymap, keyboard-only flow, tender flow
+tests/Pos.TestSupport/   Shared fixtures (throwaway database, catalogue generator, fake drawer)
 docs/                    Requirements, architecture, plan, testing strategy
 ```
 
@@ -42,6 +47,13 @@ docs/                    Requirements, architecture, plan, testing strategy
 
 Everything in that screenshot was done from the keyboard: three barcodes scanned, a quantity
 stepped up, and a ₹49 discount applied with F4.
+
+![Taking payment](docs/tender-pane.png)
+
+And so was this: customer attached by mobile with F7, tender pane opened with F12, the maximum
+allowed loyalty redemption taken, and ₹500 cash on top. The 682 points come to ₹341.00 — the 30%
+cap on a ₹1,137 bill — and the bill's GST is untouched by them, because points settle a bill
+rather than discounting it.
 
 ## Build and test
 
@@ -66,7 +78,10 @@ that are created from defaults if absent.
   "laneId": "L1",
   "outletStateCode": "33",
   "searchDebounceMs": 150,
-  "scannerMaxKeystrokeGapMs": 30
+  "scannerMaxKeystrokeGapMs": 30,
+  "loyaltyRedemptionCapPercent": 30,
+  "loyaltyRupeesPerPoint": 0.5,
+  "loyaltyRupeesPerPointEarned": 50
 }
 ```
 
@@ -95,3 +110,8 @@ rather than rounding each half separately, because the original wording could dr
 **Billing never touches the network.** There is no server, no sync, no cloud call anywhere in the
 billing path, and nothing may introduce one. A lane generates its own invoice numbers with its
 lane id baked in, which is what lets several lanes run with nothing coordinating them.
+
+**Loyalty points are a payment, not a discount.** They offset what the customer hands over and
+never touch a line's price, taxable value or GST split. Anything that would make a redemption
+change the tax on an invoice is a bug, and the tests assert it directly by pricing the same bill
+both ways.

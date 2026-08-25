@@ -2,13 +2,11 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>Pos.Core.Domain</RootNamespace>
+    <RootNamespace>Pos.Core.Loyalty</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
-    <ProjectReference Include="..\Pos.Core.Loyalty\Pos.Core.Loyalty.csproj" />
-    <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
   </ItemGroup>
 
 </Project>

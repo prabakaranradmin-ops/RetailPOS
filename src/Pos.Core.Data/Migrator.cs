@@ -14,6 +14,7 @@ public static class Migrator
     [
         "001_initial_schema.sql",
         "002_case_insensitive_sku.sql",
+        "003_held_bills.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

@@ -1,7 +1,9 @@
 using System.Windows.Input;
 using Pos.App.Input;
 using Pos.App.ViewModels;
+using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Loyalty;
 using Pos.TestSupport;
 
 namespace Pos.App.Tests;
@@ -20,6 +22,11 @@ public sealed class BillingHarness : IDisposable
     private readonly TempDatabase _temp;
 
     public BillingHarness(params Item[] catalogue)
+        : this(LoyaltyRules.Default, catalogue)
+    {
+    }
+
+    public BillingHarness(LoyaltyRules loyaltyRules, params Item[] catalogue)
     {
         _temp = new TempDatabase();
 
@@ -28,10 +35,21 @@ public sealed class BillingHarness : IDisposable
 
         Clock = new FakeClock();
         Scheduler = new VirtualScheduler();
+        Drawer = new RecordingDrawerService();
+
+        Invoices = new InvoiceRepository(_temp.Database);
+        Customers = new CustomerRepository(_temp.Database);
+        HeldBills = new HeldBillRepository(_temp.Database);
+
+        Checkout = new CheckoutService(Invoices, Customers, Drawer, loyaltyRules);
 
         ViewModel = new BillingViewModel(
             new InvoiceEngine(OutletStateCode),
             _temp.Items,
+            HeldBills,
+            Customers,
+            Checkout,
+            LaneId,
             Scheduler,
             Clock,
             TimeSpan.FromMilliseconds(DebounceMs),
@@ -41,6 +59,28 @@ public sealed class BillingHarness : IDisposable
     }
 
     public const string OutletStateCode = "33";
+
+    public const string LaneId = "L1";
+
+    public RecordingDrawerService Drawer { get; }
+
+    public InvoiceRepository Invoices { get; }
+
+    public CustomerRepository Customers { get; }
+
+    public HeldBillRepository HeldBills { get; }
+
+    public CheckoutService Checkout { get; }
+
+    /// <summary>Registers a customer so tests can attach one without going through the pane.</summary>
+    public Customer AddCustomer(string mobile, int loyaltyBalance = 0, string? name = null, string? stateCode = OutletStateCode) =>
+        Customers.Add(new Customer
+        {
+            MobileNo = mobile,
+            Name = name,
+            LoyaltyBalance = loyaltyBalance,
+            StateCode = stateCode,
+        });
 
     public FakeClock Clock { get; }
 

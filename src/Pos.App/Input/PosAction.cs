@@ -32,4 +32,10 @@ public enum PosAction
     HoldBill,
     RecallBill,
     NewBill,
+
+    /// <summary>Open the tender pane and start taking payment.</summary>
+    Tender,
+
+    /// <summary>Attach a customer to the bill, by mobile number.</summary>
+    FindCustomer,
 }
