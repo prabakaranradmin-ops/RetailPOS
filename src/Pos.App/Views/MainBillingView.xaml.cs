@@ -92,8 +92,14 @@ public partial class MainBillingView : Window
                 Dispatcher.BeginInvoke(() => Focus(CustomerBox));
                 break;
 
-            case nameof(BillingViewModel.IsTendering) or nameof(BillingViewModel.IsFindingCustomer):
-                if (!_viewModel.IsTendering && !_viewModel.IsFindingCustomer)
+            case nameof(BillingViewModel.IsReprinting) when _viewModel.IsReprinting:
+                Dispatcher.BeginInvoke(() => Focus(ReprintBox));
+                break;
+
+            case nameof(BillingViewModel.IsTendering)
+                or nameof(BillingViewModel.IsFindingCustomer)
+                or nameof(BillingViewModel.IsReprinting):
+                if (!_viewModel.IsTendering && !_viewModel.IsFindingCustomer && !_viewModel.IsReprinting)
                     Dispatcher.BeginInvoke(FocusSearchBox);
                 break;
         }
@@ -109,7 +115,7 @@ public partial class MainBillingView : Window
     {
         // A pane with its own text box takes ordinary typing; navigation and function keys still
         // route, which is what drives the pane.
-        if (_viewModel.IsEditing || _viewModel.IsTendering || _viewModel.IsFindingCustomer)
+        if (_viewModel.IsEditing || _viewModel.IsTendering || _viewModel.IsFindingCustomer || _viewModel.IsReprinting)
             return !PaneTextEditingKeys.Contains(key);
 
         if (!SearchBox.IsKeyboardFocused || SearchBox.Text.Length == 0)
@@ -138,7 +144,9 @@ public partial class MainBillingView : Window
             (PosAction.RecallBill, "recall"),
             (PosAction.FindCustomer, "customer"),
             (PosAction.Tender, "pay"),
+            (PosAction.ReprintInvoice, "reprint"),
             (PosAction.NewBill, "new"),
+            (PosAction.CloseDay, "close day"),
         ];
 
         var parts = new List<string>(shown.Length);

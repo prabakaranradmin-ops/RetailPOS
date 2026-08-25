@@ -1,7 +1,12 @@
 namespace Pos.Core.Domain;
 
 /// <summary>An item master record. Read-only as far as the billing screen is concerned.</summary>
-public sealed class Item
+/// <remarks>
+/// A record rather than a class so a copy with one field changed — an imported item matched to the
+/// id it already has — is a `with` expression rather than a hand-written clone that quietly drops
+/// a field when a new one is added.
+/// </remarks>
+public sealed record Item
 {
     public long Id { get; init; }
     public required string Sku { get; init; }

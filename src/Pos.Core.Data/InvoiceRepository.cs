@@ -204,7 +204,50 @@ public sealed class InvoiceRepository : IInvoiceStore
         }
     }
 
-    public SettledInvoice? FindByInvoiceNo(string invoiceNo)
+    /// <summary>The last sale this lane rang up.</summary>
+    public SettledInvoice? FindLatest(string laneId)
+    {
+        if (string.IsNullOrWhiteSpace(laneId))
+            return null;
+
+        return FindByInvoiceNo(ScalarInvoiceNo(
+            "SELECT invoice_no FROM invoices WHERE lane_id = $key AND status = $settled ORDER BY id DESC LIMIT 1;",
+            laneId.Trim()));
+    }
+
+    /// <summary>
+    /// The most recent sale to a customer. Found by mobile number, because a customer asking for a
+    /// duplicate has their phone rather than the invoice number.
+    /// </summary>
+    public SettledInvoice? FindLatestForMobile(string mobileNo)
+    {
+        if (string.IsNullOrWhiteSpace(mobileNo))
+            return null;
+
+        return FindByInvoiceNo(ScalarInvoiceNo(
+            """
+            SELECT i.invoice_no
+            FROM invoices i
+            JOIN customers c ON c.id = i.customer_id
+            WHERE c.mobile_no = $key AND i.status = $settled
+            ORDER BY i.id DESC LIMIT 1;
+            """,
+            mobileNo.Trim()));
+    }
+
+    private string? ScalarInvoiceNo(string sql, string key)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$key", key);
+        command.Parameters.AddWithValue("$settled", (int)InvoiceStatus.Settled);
+
+        var value = command.ExecuteScalar();
+        return value is null or DBNull ? null : (string)value;
+    }
+
+    public SettledInvoice? FindByInvoiceNo(string? invoiceNo)
     {
         if (string.IsNullOrWhiteSpace(invoiceNo))
             return null;

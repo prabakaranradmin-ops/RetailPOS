@@ -17,6 +17,7 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 4 | Loyalty, multi-tender, hold/recall, invoicing | Complete, gate passing |
 | 3 | Printer, cash drawer, scanner, scale | Services and tests complete; hardware-in-the-loop pending devices |
 | 5 | Multi-lane, offline resilience, hardening | Complete, gate passing |
+| — | Pilot readiness: import, day-end, backup, reprint | Complete, gate passing |
 | 6 | Pilot | Not started |
 
 Phase order and gates are defined in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
@@ -118,16 +119,63 @@ Neither file is silently ignored when malformed. A cashier discovering mid-queue
 nothing is worse than a clear failure at startup, and a lane running under the wrong lane id would
 mint invoice numbers that collide with another till's.
 
+## Loading a catalogue
+
+A lane cannot sell anything until its item master is loaded. The importer takes a CSV with these
+columns, in any order and any case:
+
+```
+sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed
+DAL001,8901234567890,"Toor Dal, Premium, 1kg",0713,Pcs,189.00,189.00,5,false
+SUG001,,Sugar Loose,1701,Kg,45.00,45.00,5,true
+```
+
+Nothing is written unless the whole file is clean, and every problem is reported at once — a
+rejected import leaves the catalogue exactly as it was. Alongside the obvious checks it refuses a
+selling price above MRP, a barcode whose EAN or UPC check digit does not add up, and a `unit` that
+contradicts `is_weighed`. Codes of a non-standard length have no check digit to test and are
+accepted as-is. Use `--update` for a re-import, which is nearly always a price revision.
+
+## Closing the day
+
+`Shift+F12` at the till, or `pos close-day`. The Z-report leads with the cash figure, because the
+first thing anyone does with one is count the drawer against it, and it prints its own
+reconciliation checks so a day that does not add up says so on its face. Closing takes a verified
+backup as part of the same operation.
+
+A sale belongs to exactly one Z-report: invoices are stamped with the close that reported them
+rather than being picked up by a time range, so closing twice is harmless and an old report stays
+reproducible.
+
+## Deploying to a lane
+
+```
+.\publish.ps1
+```
+
+Runs the tests, then produces two self-contained single-file executables in `artifacts\lane` that
+need nothing installed on the target machine — not even the .NET runtime. Copy the folder to the
+lane, then:
+
+```
+pos import-items --file catalogue.csv
+pos test-hardware
+Pos.App.exe
+```
+
 ## Checking the hardware
 
 Peripherals are driven by a separate tool rather than from the billing screen, because checking one
 means printing test pages and firing drawers:
 
 ```
+pos import-items --file catalogue.csv  # load the catalogue; --update for a price revision
+pos close-day                          # Z-report, close the day, take a backup
+pos backup-db [--keep N]               # verified snapshot, does not block billing
+pos check-db [--quick] [--vacuum]      # check the lane's database for damage
 pos test-hardware                      # every configured peripheral
 pos test-hardware --printer --drawer   # just these
 pos receipt-preview --width 32         # render a sample receipt, no hardware needed
-pos check-db [--quick] [--vacuum]      # check the lane's database for damage
 pos list-ports                         # what serial ports this machine can see
 ```
 

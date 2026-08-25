@@ -131,6 +131,24 @@ anyone running a repair tool.
 damage real files — a page of zeroes mid-file, a truncation, a wrecked header, a text file renamed
 to `.db` — and assert the check catches each. `pos check-db` runs the same check on a lane.
 
+**Pilot readiness** — passing
+- [x] Catalogue import: parsing, every validation rule, all-or-nothing commit, re-import — `ItemImportTests`
+- [x] Day-end close: the figures, the reconciliations, boundaries, round trip, the printed report — `DayCloseTests`
+- [x] Backup: written, verified, restorable, non-blocking, pruned — `DatabaseBackupTests`
+- [x] Reprint and close from the keyboard — `ReprintAndCloseDayTests`
+
+**On the import tests.** Most of them are about what the importer *refuses*, because import is the
+one moment where a single bad cell misprices a product for as long as the store sells it and
+nobody notices until a customer or an auditor does. Worth knowing: the check-digit rule caught
+fabricated barcodes in this suite's own first draft, which is exactly the failure it exists to
+catch on a real catalogue.
+
+**On the day-close tests.** The property everything turns on is that a sale appears on exactly one
+Z-report, ever — asserted directly, along with closing twice being harmless. The report's three
+reconciliations (gross less discount, taxable plus tax, tenders less change) are each asserted
+against net sales, because a Z-report that does not add up is the one a shopkeeper has to
+reconstruct by hand.
+
 ## Reporting
 
 At the end of each phase, produce a short pass/fail summary before marking the phase complete in `IMPLEMENTATION_PLAN.md`.

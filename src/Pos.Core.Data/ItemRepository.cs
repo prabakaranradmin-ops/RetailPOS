@@ -7,7 +7,7 @@ namespace Pos.Core.Data;
 /// Item master reads for the billing screen. Every method here sits on the critical path between
 /// a keystroke and a line appearing in the grid, so the queries are written to hit an index.
 /// </summary>
-public sealed class ItemRepository
+public sealed class ItemRepository : IItemStore
 {
     /// <summary>
     /// Ceiling on rows returned to the search list. The cashier picks from a short list; fetching
@@ -227,6 +227,58 @@ public sealed class ItemRepository
             {
                 BindInsert(command, item);
                 command.ExecuteScalar();
+            }
+
+            transaction.Commit();
+        }
+
+        _database.Analyze();
+    }
+
+    /// <summary>
+    /// Inserts, or updates the item already holding that SKU, as one transaction. This is what a
+    /// re-import runs through, and a re-import is nearly always a price change.
+    /// </summary>
+    public void UpsertRange(IEnumerable<Item> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        using (var connection = _database.OpenConnection())
+        {
+            using var transaction = connection.BeginTransaction(deferred: false);
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+
+            command.CommandText = """
+                INSERT INTO items
+                  (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active)
+                VALUES
+                  ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active)
+                ON CONFLICT (sku) DO UPDATE SET
+                  barcode = excluded.barcode,
+                  hsn_code = excluded.hsn_code,
+                  name = excluded.name,
+                  mrp = excluded.mrp,
+                  sell_price = excluded.sell_price,
+                  gst_rate = excluded.gst_rate,
+                  is_tax_inclusive = excluded.is_tax_inclusive,
+                  unit_type = excluded.unit_type,
+                  is_active = excluded.is_active;
+                """;
+
+            foreach (var name in new[]
+                     {
+                         "$sku", "$barcode", "$hsn", "$name", "$mrp",
+                         "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active",
+                     })
+            {
+                command.Parameters.Add(new SqliteParameter(name, null));
+            }
+
+            foreach (var item in items)
+            {
+                BindInsert(command, item);
+                command.ExecuteNonQuery();
             }
 
             transaction.Commit();

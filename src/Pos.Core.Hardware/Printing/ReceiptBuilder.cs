@@ -252,7 +252,12 @@ public sealed class ReceiptBuilder
             switch (directive)
             {
                 case Directive.Line line:
-                    text.AppendLine(line.Text.TrimEnd());
+                    // Scaled text was laid out against a line half as wide, so its indent has to be
+                    // scaled back up or a centred heading looks left-shifted in the preview when it
+                    // is correctly centred on paper. The characters themselves still show at single
+                    // width — a preview cannot render double-width type — so a scaled line reads
+                    // narrower here than it prints.
+                    text.AppendLine(Rescale(line.Text, line.WidthMultiplier).TrimEnd());
                     break;
 
                 case Directive.Feed feed:
@@ -270,6 +275,17 @@ public sealed class ReceiptBuilder
         }
 
         return text.ToString();
+    }
+
+    /// <summary>Widens a scaled line's indent so the preview shows where it actually starts.</summary>
+    private static string Rescale(string text, int widthMultiplier)
+    {
+        if (widthMultiplier <= 1)
+            return text;
+
+        var indent = text.Length - text.TrimStart(' ').Length;
+
+        return indent == 0 ? text : new string(' ', indent * widthMultiplier) + text[indent..];
     }
 
     // ---- Layout helpers ----------------------------------------------------------------------

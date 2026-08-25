@@ -203,6 +203,57 @@ Decisions taken:
   moving. A reading is called stable only once it has repeated unchanged. This is a substitute for
   a field the protocol does not carry and is worth confirming against the actual scale at pilot.
 
+## Pilot readiness — **complete** *(added 2026-08-26, approved)*
+
+Not in the SRS. The SRS specifies the billing transaction thoroughly and the operational surround
+around it not at all, so a lane built strictly to it could not open in the morning, trade, and
+close in the evening. These four are the minimum for it to do so.
+
+- **Catalogue import** — `pos import-items --file <path>`. A store arrives with thousands of SKUs
+  in a spreadsheet; without this the pilot lane has an empty catalogue and cannot ring up anything.
+- **Day-end close** — `Shift+F12` at the till, or `pos close-day`. At close the cashier counts the
+  drawer against a figure, and there was no way to ask the till for that figure.
+- **Backup** — `pos backup-db`, and automatically as part of every close. `pos check-db` already
+  told the operator to restore from a backup that nothing created.
+- **Reprint** — `Ctrl+P`. `CheckoutService.Reprint` existed and was tested but was unreachable: no
+  action, no binding, no way to find a past invoice.
+
+Decisions taken:
+- **Import is all or nothing, and reports every problem at once.** A partly loaded catalogue is
+  worse than a rejected one: the missing items cannot be sold, nobody knows which they are, and
+  the fix requires working out what landed. A shopkeeper correcting a spreadsheet wants the whole
+  list of faults, not the first line that failed.
+- **The importer refuses more than it was asked to.** Beyond the specified rules it also rejects a
+  selling price above MRP (illegal), a barcode whose EAN/UPC check digit does not add up (a
+  transposed digit matches a different product), and a `unit` that contradicts `is_weighed` (the
+  two say the same thing, so disagreement means one is wrong and there is no way to know which).
+  Codes of a non-standard length have no check digit to test and are passed through.
+- **`--update` exists because a re-import is nearly always a price change.** Insert-only is the
+  default so a duplicate SKU on a first load is caught as the mistake it is.
+- **Invoices are attached to the close that reported them**, rather than a close being defined by a
+  time range. Every time boundary is wrong somewhere — a sale rung up at 23:59:58 and committed at
+  00:00:01, a lane trading past midnight, a clock corrected between two sales. Stamping each
+  invoice makes a Z-report exactly reproducible years later and makes closing twice harmless.
+- **The Z-report leads with the cash figure, large.** The first thing anyone does with one is count
+  the drawer against it. It also prints its own reconciliation checks rather than assuming them, so
+  a day that does not add up says so on its face.
+- **A backup is verified before it is called one.** A copy nobody has checked is a copy nobody
+  knows they can restore, and that is discovered at the moment it is needed. `VACUUM INTO` is used
+  rather than a file copy: it does not block anyone billing and produces a clean database rather
+  than possibly catching a half-written page.
+- **`Shift+F12` closes the day; plain `F12` takes payment.** Deliberately awkward and deliberately
+  two presses, because a close cannot be undone and the key sits beside the one used all day.
+- **Closing is refused while a bill is on screen.** That bill has not been paid for, and closing
+  around it would leave takings that do not match the drawer.
+- **The close commits before it prints or backs up**, like checkout. A printer out of paper must
+  not stop a day being closed — the report reprints from the saved figures — but a failed backup is
+  reported loudly, because the day's books are exactly what a lost file costs.
+- **Returns and refunds are out of scope for pilot V1**, by decision. They carry real GST
+  consequences (credit notes, reversing tax on a settled invoice) and will be specified separately.
+- Added `IItemStore` and moved catalogue import into the domain layer, so it can apply domain rules
+  — GST slabs, barcode check digits, MRP — without the data layer depending on the hardware layer
+  where the barcode rules live.
+
 ## Phase 6 — Pilot
 - Deploy to one lane at a pilot store, run in parallel with existing billing if applicable
 - Monitor for GST calculation discrepancies, hardware reliability, keyboard workflow friction

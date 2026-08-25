@@ -38,4 +38,10 @@ public enum PosAction
 
     /// <summary>Attach a customer to the bill, by mobile number.</summary>
     FindCustomer,
+
+    /// <summary>Print a duplicate of a past invoice.</summary>
+    ReprintInvoice,
+
+    /// <summary>Close the day and print the Z-report.</summary>
+    CloseDay,
 }

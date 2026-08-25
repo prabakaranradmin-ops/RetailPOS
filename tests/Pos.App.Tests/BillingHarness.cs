@@ -3,6 +3,8 @@ using Pos.App.Input;
 using Pos.App.ViewModels;
 using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Printing;
+using Pos.Core.Hardware.Printing;
 using Pos.Core.Loyalty;
 using Pos.TestSupport;
 
@@ -41,7 +43,20 @@ public sealed class BillingHarness : IDisposable
         Customers = new CustomerRepository(_temp.Database);
         HeldBills = new HeldBillRepository(_temp.Database);
 
-        Checkout = new CheckoutService(Invoices, Customers, Drawer, loyaltyRules);
+        Printer = new LoopbackPrinterService();
+        Receipts = new ReceiptComposer(Store);
+        Backups = new RecordingBackupService();
+
+        Checkout = new CheckoutService(
+            Invoices, Customers, Drawer, loyaltyRules, TimeProvider.System, Printer, Receipts);
+
+        DayCloses = new DayCloseRepository(_temp.Database, HeldBills);
+
+        DayClose = new DayCloseService(
+            DayCloses,
+            new ZReportComposer(Store),
+            Printer,
+            Backups);
 
         ViewModel = new BillingViewModel(
             new InvoiceEngine(OutletStateCode),
@@ -53,7 +68,9 @@ public sealed class BillingHarness : IDisposable
             Scheduler,
             Clock,
             TimeSpan.FromMilliseconds(DebounceMs),
-            TimeSpan.FromMilliseconds(30));
+            TimeSpan.FromMilliseconds(30),
+            invoices: Invoices,
+            dayClose: DayClose);
 
         Router = new KeyboardRouter(Keymap.Default, ViewModel);
     }
@@ -71,6 +88,22 @@ public sealed class BillingHarness : IDisposable
     public HeldBillRepository HeldBills { get; }
 
     public CheckoutService Checkout { get; }
+
+    public LoopbackPrinterService Printer { get; }
+
+    public ReceiptComposer Receipts { get; }
+
+    public DayCloseRepository DayCloses { get; }
+
+    public DayCloseService DayClose { get; }
+
+    public RecordingBackupService Backups { get; }
+
+    public static readonly StoreProfile Store = new()
+    {
+        Name = "Sri Lakshmi Stores",
+        Gstin = "33AABCS1429B1ZX",
+    };
 
     /// <summary>Registers a customer so tests can attach one without going through the pane.</summary>
     public Customer AddCustomer(string mobile, int loyaltyBalance = 0, string? name = null, string? stateCode = OutletStateCode) =>

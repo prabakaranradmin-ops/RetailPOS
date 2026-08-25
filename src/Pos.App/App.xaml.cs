@@ -33,6 +33,8 @@ public partial class App : Application
         database.EnsureMigrated();
 
         var customers = new CustomerRepository(database);
+        var invoices = new InvoiceRepository(database);
+        var heldBills = new HeldBillRepository(database);
 
         // Built from the lane's settings. A peripheral that is not configured yields the honest
         // "none" implementation, so a lane with no printer or no drawer still bills.
@@ -40,7 +42,7 @@ public partial class App : Application
         var drawer = PeripheralFactory.CreateDrawer(settings.Hardware, printer);
 
         var checkout = new CheckoutService(
-            new InvoiceRepository(database),
+            invoices,
             customers,
             drawer,
             settings.LoyaltyRules,
@@ -48,17 +50,25 @@ public partial class App : Application
             printer,
             new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars));
 
+        var dayClose = new DayCloseService(
+            new DayCloseRepository(database, heldBills),
+            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars),
+            printer,
+            new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups"))));
+
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode),
             new ItemRepository(database),
-            new HeldBillRepository(database),
+            heldBills,
             customers,
             checkout,
             settings.LaneId,
             new DispatcherDelayScheduler(Dispatcher),
             new SystemClock(),
             settings.SearchDebounce,
-            settings.ScannerMaxKeystrokeGap);
+            settings.ScannerMaxKeystrokeGap,
+            invoices: invoices,
+            dayClose: dayClose);
 
         MainWindow = new MainBillingView(viewModel, keymap, settings);
         MainWindow.Show();

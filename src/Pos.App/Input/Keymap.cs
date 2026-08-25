@@ -47,6 +47,12 @@ public sealed class Keymap
         [new(Key.F7)] = PosAction.FindCustomer,
         [new(Key.F12)] = PosAction.Tender,
 
+        [new(Key.P, ModifierKeys.Control)] = PosAction.ReprintInvoice,
+
+        // Deliberately awkward. Closing the day cannot be undone, and it is not something to reach
+        // by accident while the queue is still moving.
+        [new(Key.F12, ModifierKeys.Shift)] = PosAction.CloseDay,
+
         [new(Key.N, ModifierKeys.Control)] = PosAction.NewBill,
     });
 

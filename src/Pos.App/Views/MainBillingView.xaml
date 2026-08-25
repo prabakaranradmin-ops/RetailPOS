@@ -303,6 +303,29 @@
       </Border>
     </Border>
 
+    <!-- Reprint a past invoice. -->
+    <Border Grid.Row="0" Grid.RowSpan="4"
+            Background="#E6101418"
+            Visibility="{Binding IsReprinting, Converter={StaticResource BoolToVisibility}}">
+      <Border Width="600" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{StaticResource SurfaceRaised}" CornerRadius="8" Padding="24"
+              BorderBrush="{StaticResource Line}" BorderThickness="1">
+        <StackPanel>
+          <TextBlock Text="Reprint a bill" FontSize="22" FontWeight="Bold" />
+          <TextBlock Foreground="{StaticResource InkMuted}" FontSize="13" Margin="0,8,0,0"
+                     TextWrapping="Wrap"
+                     Text="Leave blank for the last bill on this lane, or type an invoice number or the customer's mobile number." />
+          <TextBox x:Name="ReprintBox"
+                   Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
+                   FontSize="24" Padding="8,6" Margin="0,12,0,0"
+                   Background="{StaticResource Surface}"
+                   Foreground="{StaticResource Ink}"
+                   CaretBrush="{StaticResource Accent}"
+                   BorderBrush="{StaticResource Line}" />
+        </StackPanel>
+      </Border>
+    </Border>
+
     <!-- Recall list, over the whole screen while choosing a parked bill (SRS 2.5). -->
     <Border Grid.Row="0" Grid.RowSpan="4"
             Background="#E6101418"

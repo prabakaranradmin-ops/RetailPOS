@@ -4,6 +4,7 @@ using Pos.App.Input;
 using Pos.Core.Data;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Drawer;
+using Pos.Core.Hardware.Printing;
 
 namespace Pos.App.ViewModels;
 
@@ -19,6 +20,9 @@ public enum BillingMode
 
     /// <summary>Looking a customer up by mobile number.</summary>
     Customer = 3,
+
+    /// <summary>Finding a past invoice to print again.</summary>
+    Reprint = 4,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -64,8 +68,12 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private string? _recalledFromToken;
     private CheckoutResult? _lastSale;
 
+    private readonly IInvoiceStore? _invoices;
+    private readonly DayCloseService? _dayClose;
+
     private bool _pendingNewBillConfirmation;
     private bool _pendingCustomerCreate;
+    private bool _pendingDayClose;
     private bool _disposed;
 
     public BillingViewModel(
@@ -79,7 +87,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         IClock clock,
         TimeSpan? debounceWindow = null,
         TimeSpan? maxKeystrokeGap = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        IInvoiceStore? invoices = null,
+        DayCloseService? dayClose = null)
     {
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(items);
@@ -90,6 +100,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(clock);
 
+        _invoices = invoices;
+        _dayClose = dayClose;
         _bill = bill;
         _items = items;
         _heldBills = heldBills;
@@ -203,6 +215,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             Raise(nameof(IsRecalling));
             Raise(nameof(IsTendering));
             Raise(nameof(IsFindingCustomer));
+            Raise(nameof(IsReprinting));
         }
     }
 
@@ -211,6 +224,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public bool IsTendering => _mode == BillingMode.Tender;
 
     public bool IsFindingCustomer => _mode == BillingMode.Customer;
+
+    public bool IsReprinting => _mode == BillingMode.Reprint;
 
     public EditableColumn? EditingColumn
     {
@@ -340,6 +355,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Customer:
                 CommitCustomerLookup();
                 return;
+
+            case BillingMode.Reprint:
+                CommitReprint();
+                return;
         }
 
         if (IsEditing)
@@ -367,6 +386,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
                 return;
 
             case BillingMode.Customer:
+            case BillingMode.Reprint:
                 Mode = BillingMode.Billing;
                 EditBuffer = string.Empty;
                 StatusMessage = string.Empty;
@@ -542,6 +562,84 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Mode = BillingMode.Customer;
         EditBuffer = string.Empty;
         StatusMessage = "Type the customer's mobile number, then commit.";
+    }
+
+    /// <summary>Prints a duplicate of a past invoice.</summary>
+    public void ReprintInvoice()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (_invoices is null)
+        {
+            StatusMessage = "Reprinting is not available on this lane.";
+            return;
+        }
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        Mode = BillingMode.Reprint;
+        EditBuffer = string.Empty;
+        StatusMessage = "Commit for the last bill, or type an invoice number or mobile number.";
+    }
+
+    /// <summary>
+    /// Closes the day and prints the Z-report. Asks twice, because a close cannot be undone and the
+    /// key is right beside the one that takes payment.
+    /// </summary>
+    public void CloseDay()
+    {
+        ClearPendingNewBill();
+        _pendingCustomerCreate = false;
+        CancelEdit();
+
+        if (_dayClose is null)
+        {
+            StatusMessage = "Day-end close is not available on this lane.";
+            return;
+        }
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        if (!_bill.IsEmpty)
+        {
+            StatusMessage = "Finish, park or discard the bill on screen before closing the day.";
+            return;
+        }
+
+        if (!_pendingDayClose)
+        {
+            var preview = _dayClose.Preview(_laneId);
+
+            _pendingDayClose = true;
+            StatusMessage = preview.TookNothing
+                ? "Nothing has been sold since the last close. Press again to close anyway."
+                : $"{preview.InvoiceCount} invoice(s), {preview.NetSales:0.00} net, {preview.CashExpected:0.00} expected in the drawer. Press again to close.";
+
+            return;
+        }
+
+        _pendingDayClose = false;
+
+        var result = _dayClose.Close(_laneId);
+        var message = $"Day closed. Report {result.Day.Id}: {result.Day.InvoiceCount} invoice(s), {result.Day.NetSales:0.00} net, {result.Day.CashExpected:0.00} expected in the drawer.";
+
+        if (!result.Print.Succeeded && result.Print.Status == PrintStatus.Failed)
+            message += " The report did not print — reprint it once the printer is fixed.";
+
+        if (!result.Backup.Succeeded)
+            message += $" BACKUP FAILED: {result.Backup.Detail}";
+
+        RefreshHeldBills();
+        StatusMessage = message;
     }
 
     // ---- Search internals --------------------------------------------------------------------
@@ -1045,6 +1143,44 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         StatusMessage = $"{CustomerLabel} attached. {customer.LoyaltyBalance} points.";
     }
 
+    /// <summary>
+    /// Finds the invoice to reprint. An empty box means the last bill, which is what "reprint"
+    /// nearly always means; otherwise the text is tried as an invoice number and then as a mobile
+    /// number, because a customer asking for a duplicate has their phone rather than the number.
+    /// </summary>
+    private void CommitReprint()
+    {
+        if (_invoices is null)
+            return;
+
+        var typed = EditBuffer.Trim();
+
+        var invoice = typed.Length == 0
+            ? _invoices.FindLatest(_laneId)
+            : _invoices.FindByInvoiceNo(typed) ?? _invoices.FindLatestForMobile(typed);
+
+        if (invoice is null)
+        {
+            StatusMessage = typed.Length == 0
+                ? "This lane has not billed anything yet."
+                : $"No invoice found for '{typed}'.";
+
+            return;
+        }
+
+        var outcome = _checkout.Reprint(invoice);
+
+        EditBuffer = string.Empty;
+        Mode = BillingMode.Billing;
+
+        StatusMessage = outcome.Status switch
+        {
+            PrintStatus.Printed => $"{invoice.InvoiceNo} reprinted.",
+            PrintStatus.NoPrinterConfigured => $"Found {invoice.InvoiceNo}, but this lane has no printer.",
+            _ => $"{invoice.InvoiceNo} did not print: {outcome.Detail}",
+        };
+    }
+
     // ---- Parked bill internals ---------------------------------------------------------------
 
     private void RefreshHeldBills()
@@ -1122,6 +1258,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         _pendingNewBillConfirmation = false;
         _pendingCustomerCreate = false;
+        _pendingDayClose = false;
     }
 
     private void RefreshTotals()
