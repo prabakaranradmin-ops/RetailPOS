@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>Pos.Core.Tests</RootNamespace>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Pos.App.Tests</RootNamespace>
+    <UseWPF>true</UseWPF>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
@@ -13,9 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Pos.Core.Tax\Pos.Core.Tax.csproj" />
-    <ProjectReference Include="..\..\src\Pos.Core.Domain\Pos.Core.Domain.csproj" />
-    <ProjectReference Include="..\..\src\Pos.Core.Data\Pos.Core.Data.csproj" />
+    <ProjectReference Include="..\..\src\Pos.App\Pos.App.csproj" />
     <ProjectReference Include="..\Pos.TestSupport\Pos.TestSupport.csproj" />
   </ItemGroup>
 

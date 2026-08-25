@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Pos.App</RootNamespace>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />
+    <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />
+    <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
+  </ItemGroup>
+
+</Project>

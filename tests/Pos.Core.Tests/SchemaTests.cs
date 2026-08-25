@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Pos.Core.Data;
+using Pos.TestSupport;
 using Xunit;
 
 namespace Pos.Core.Tests;
@@ -201,7 +203,7 @@ public class SchemaTests
         using var temp = new TempDatabase();
         using var connection = temp.Database.OpenConnection();
 
-        var expected = decimal.Parse(value);
+        var expected = decimal.Parse(value, CultureInfo.InvariantCulture);
 
         using (var insert = connection.CreateCommand())
         {

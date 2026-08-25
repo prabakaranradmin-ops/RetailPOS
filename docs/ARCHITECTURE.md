@@ -113,3 +113,31 @@ that so nobody later "tidies" a money column into a numeric type.
 
 Reopen this if a future requirement puts several lanes on one shared database — that is the one
 thing that would change the answer.
+
+### 7.2 Item search — two fragile things that NFR-01 depends on
+
+Search is the one query on the critical path between a keystroke and a line appearing, and the
+naive shape of it misses NFR-01's 100ms budget by more than twice over. Both fixes are the kind
+that look like tidying-up to remove, so they are recorded here.
+
+**The SKU and name branches run as separate queries.** Written as one statement with
+`WHERE sku LIKE 'abc%' OR name LIKE '%abc%'`, the planner can serve only one of the two from an
+index and falls back to fetching every row to evaluate the other. Each branch needs a different
+index, so each gets its own query and the results are merged in memory, priority order preserved.
+Merging a few dozen rows costs nothing.
+
+**The SKU prefix is a range, not a `LIKE`.** Supplying `ESCAPE` to `LIKE` disables SQLite's
+LIKE-prefix optimisation, so `sku LIKE 'abc%' ESCAPE '\'` can never become a range seek. The query
+uses `sku >= lo AND sku < hi` for the seek and keeps the `LIKE` only to re-check exactness on the
+handful of rows the range returns. A range comparison uses the column's collation, which is why
+migration 002 declares `sku ... COLLATE NOCASE` — without it the seek is case-sensitive and a
+cashier typing lowercase finds nothing.
+
+**The database needs statistics.** With no `sqlite_stat1`, SQLite assumes an equality test beats a
+range and serves the SKU search from the `is_active` index — which matches nearly every row —
+fetching each one to read its SKU. That measured 225ms over a 100k catalogue. `ItemRepository.AddRange`
+runs `ANALYZE` after an import, and `PosDatabase.Analyze()` exposes it for maintenance. With
+statistics present the same query is too fast to measure.
+
+Measured figures for all of this live in `TESTING_STRATEGY.md` under the Phase 2 gate, and
+`LookupLatencyTests` fails the build if any of it regresses.

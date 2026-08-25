@@ -56,4 +56,23 @@ public sealed class PosDatabase
         using var connection = OpenConnection();
         Migrator.Migrate(connection);
     }
+
+    /// <summary>
+    /// Refreshes the query planner's statistics. Run this after loading or substantially changing
+    /// the item master.
+    /// </summary>
+    /// <remarks>
+    /// This is not optional tuning. With no statistics SQLite assumes an equality test is more
+    /// selective than a range, so it serves a SKU prefix search from the <c>is_active</c> index —
+    /// which matches nearly every row — and fetches each one to check its SKU. Measured over a
+    /// 100k-SKU catalogue that is 225ms, against NFR-01's 100ms budget. With statistics it picks
+    /// the unique SKU index and the same query is too fast to time.
+    /// </remarks>
+    public void Analyze()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "ANALYZE;";
+        command.ExecuteNonQuery();
+    }
 }

@@ -13,7 +13,7 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 |---|---|---|
 | 0 | Repo, local DB schema, migrations, CI | Complete, gate passing |
 | 1 | GST engine, invoice engine | Complete, gate passing |
-| 2 | Item search, line grid, keyboard flow | Not started |
+| 2 | Item search, line grid, keyboard flow | Complete, gate passing |
 | 3 | Printer, cash drawer, scanner, scale | Not started |
 | 4 | Loyalty, multi-tender, hold/recall | Not started |
 | 5 | Multi-lane numbering, hardening | Not started |
@@ -28,13 +28,20 @@ previous phase's gate passes.
 ```
 src/Pos.Core.Tax/        GST calculation — pure, stateless, exhaustively tested
 src/Pos.Core.Domain/     Invoice, line, item, customer model and the live bill
-src/Pos.Core.Data/       SQLite access and schema migrations
+src/Pos.Core.Data/       SQLite access, schema migrations, item search
 src/Pos.Core.Loyalty/    Points accrual and redemption            (Phase 4)
 src/Pos.Core.Hardware/   Scanner, printer, drawer, scale          (Phase 3)
-src/Pos.App/             WPF UI, MVVM, keyboard routing           (Phase 2)
-tests/Pos.Core.Tests/    Unit and integration tests
+src/Pos.App/             WPF UI, MVVM, keyboard routing
+tests/Pos.Core.Tests/    Tax, invoice, schema, search, latency
+tests/Pos.App.Tests/     Input classification, debounce, keymap, keyboard-only flow
+tests/Pos.TestSupport/   Shared fixtures (throwaway database, catalogue generator)
 docs/                    Requirements, architecture, plan, testing strategy
 ```
+
+![The billing screen](docs/billing-screen.png)
+
+Everything in that screenshot was done from the keyboard: three barcodes scanned, a quantity
+stepped up, and a ₹49 discount applied with F4.
 
 ## Build and test
 
@@ -46,6 +53,35 @@ dotnet test RetailPos.sln
 ```
 
 CI runs both on every push, on Windows.
+
+## Configuring a lane
+
+Everything a lane owns lives in `%LOCALAPPDATA%\RetailPOS`: the database, and two optional files
+that are created from defaults if absent.
+
+`settings.json` — lane identity and input timing:
+
+```json
+{
+  "laneId": "L1",
+  "outletStateCode": "33",
+  "searchDebounceMs": 150,
+  "scannerMaxKeystrokeGapMs": 30
+}
+```
+
+`keymap.json` — rebinds keys. List only what you want changed; anything absent keeps its default,
+and a gesture you rebind is taken away from whatever action held it:
+
+```json
+{
+  "bindings": { "F9": "HoldBill", "Ctrl+D": "DeleteLine" }
+}
+```
+
+Neither file is silently ignored when malformed. A cashier discovering mid-queue that a key does
+nothing is worse than a clear failure at startup, and a lane running under the wrong lane id would
+mint invoice numbers that collide with another till's.
 
 ## The two things to know before changing anything
 

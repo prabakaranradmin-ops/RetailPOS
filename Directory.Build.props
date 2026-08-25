@@ -4,6 +4,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Globalization stays on. WPF data binding needs real culture data (it resolves a specific
+      culture per binding and throws at startup without one), and an Indian retail invoice wants
+      the local digit grouping rather than invariant formatting. Code whose behaviour must not
+      depend on the machine's locale — parsing an edited cell, formatting for storage — names
+      CultureInfo.InvariantCulture explicitly instead.
+    -->
   </PropertyGroup>
 </Project>

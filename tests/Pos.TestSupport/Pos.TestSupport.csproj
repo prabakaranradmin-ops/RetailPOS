@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Pos.TestSupport</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Pos.Core.Data\Pos.Core.Data.csproj" />
+    <ProjectReference Include="..\..\src\Pos.Core.Domain\Pos.Core.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

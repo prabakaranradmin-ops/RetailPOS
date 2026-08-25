@@ -1,0 +1,65 @@
+<Application x:Class="Pos.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+
+    <!-- High contrast on a bright shop floor, and legible at arm's length. -->
+    <SolidColorBrush x:Key="Surface" Color="#FF101418" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF1A2027" />
+    <SolidColorBrush x:Key="Ink" Color="#FFF2F5F8" />
+    <SolidColorBrush x:Key="InkMuted" Color="#FF93A1B0" />
+    <SolidColorBrush x:Key="Accent" Color="#FF3FA9F5" />
+    <SolidColorBrush x:Key="Positive" Color="#FF4BD07A" />
+    <SolidColorBrush x:Key="Line" Color="#FF2A333D" />
+
+    <Style TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="FontFamily" Value="Segoe UI" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+
+    <!-- The stock header template paints itself light, which is illegible on this background. -->
+    <Style TargetType="DataGridColumnHeader">
+      <Setter Property="Background" Value="{StaticResource Surface}" />
+      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+
+    <Style TargetType="DataGridCell">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="DataGridCell">
+            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="{StaticResource Accent}" />
+          <Setter Property="Foreground" Value="#FF06121C" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Padding" Value="6,2" />
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="{StaticResource Accent}" />
+          <Setter Property="Foreground" Value="#FF06121C" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+  </Application.Resources>
+</Application>

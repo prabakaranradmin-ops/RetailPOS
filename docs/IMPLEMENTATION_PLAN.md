@@ -33,11 +33,46 @@ Decisions taken:
   a line. SRS §4's "accrual on net bill after any redemption" reads the same way. Confirm with the
   accountant before Phase 4 hardens it.
 
-## Phase 2 — Search, grid UI, keyboard flow — **not started**
+## Phase 2 — Search, grid UI, keyboard flow — **complete**
 - Search box with scanner-burst classification + debounced typed search
 - Invoice line grid with full keyboard navigation (row nav, cell edit, qty inc/dec)
 - Function-key routing for core actions (configurable keymap, not hardcoded to match any specific existing product's exact bindings)
-- **Gate:** Phase 2 tests (debounce/classification, keyboard-only flow, lookup latency)
+- **Gate:** Phase 2 tests — **passing** (`SearchDebouncerTests`, `ScannerInputClassifierTests`,
+  `KeyboardOnlyFlowTests`, `LookupLatencyTests`, `ItemSearchTests`, `KeymapTests`)
+
+Decisions taken:
+- **Search runs as two queries, not one.** Matching SKU and name in a single `OR` left the planner
+  able to serve only one of them from an index. Details in `ARCHITECTURE.md` §7.2 — that section
+  also records the two things that had to change for NFR-01 to hold, both of which are easy to
+  undo by accident.
+- **Migration 002 makes `sku` case-insensitive.** Needed so a prefix search can be an indexed range
+  scan; it also makes SKU uniqueness case-insensitive, which is what a till wants.
+- Scanner classification adds a configurable **minimum burst length** (default 4) on top of the
+  gap threshold in `ARCHITECTURE.md` §4. Without a floor, a one-character burst classifies as a
+  scan vacuously — it has no gaps that could be too slow — and so does Enter on an empty box.
+- A burst classified as a scan that matches no barcode **falls back to the ordinary search**
+  rather than reporting a failed scan. The classification is a timing heuristic, so being wrong
+  has to be cheap.
+- `PosAction.MoveUp`/`MoveDown`/`Commit`/`Cancel` are single actions whose meaning depends on
+  where the cashier is (result list, line grid, open editor, recall list). Keeping that context in
+  the view model rather than in the keymap is what stops the keymap needing a mode per pane.
+- Arrow keys walk the bill when the search box is quiet and the result list when it is open, so no
+  extra key is needed to move focus between the two.
+- **Ctrl+N on a non-empty bill asks for the key twice** before discarding. Not specified, but one
+  stray keypress silently throwing away a sale in progress is not acceptable at a till.
+- Increment/decrement steps by 1 for piece goods and 0.1 for weighed goods, both configurable.
+  Nudging loose sugar by a whole kilogram is never what the cashier meant.
+- Hold/recall is implemented **in memory** for this phase. `TESTING_STRATEGY.md` lists it as a
+  Phase 2 keyboard action while this plan lists the feature under Phase 4; the keyboard path is
+  therefore done and tested now, and Phase 4 only has to persist the parked bills to local storage.
+  The lines held are already deep copies, so that is a storage change and nothing more.
+- `InvariantGlobalization` was removed from `Directory.Build.props`. WPF data binding resolves a
+  specific culture per binding and throws at startup without real culture data, and an Indian
+  retail invoice wants local digit grouping. Code whose behaviour must not vary by machine locale
+  names `CultureInfo.InvariantCulture` explicitly instead.
+
+Not built in this phase, by design: tender and print are Phase 3/4, so they have no action, no
+binding and no stub. The keymap gains them when the features land.
 
 ## Phase 3 — Hardware integration
 - `PrinterService` (ESC/POS), `DrawerService` (kick pulse), `ScannerService` (HID), `ScaleService` (serial)

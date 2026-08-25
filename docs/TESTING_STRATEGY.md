@@ -32,11 +32,24 @@ At minimum, assert exact output for:
 - [x] Full GST test table above passes — `GstTestTableTests`
 - [x] InvoiceEngine unit tests: line add/remove/discount, invoice totals reconcile line-by-line — `InvoiceEngineTests`
 
-**Phase 2 — Search, grid, keyboard UI**
-- [ ] Debounce timing test (typed input doesn't fire query before window closes)
-- [ ] Scanner burst classification test (fast keystrokes + Enter routes to exact-match lookup)
-- [ ] Every core action (search, navigate grid, edit qty/discount, hold/recall, delete line) verified keyboard-only
-- [ ] Lookup latency benchmark at ~100k SKU catalog size
+**Phase 2 — Search, grid, keyboard UI** — passing
+- [x] Debounce timing test (typed input doesn't fire query before window closes) — `SearchDebouncerTests`
+- [x] Scanner burst classification test (fast keystrokes + Enter routes to exact-match lookup) — `ScannerInputClassifierTests`
+- [x] Every core action (search, navigate grid, edit qty/discount, hold/recall, delete line) verified keyboard-only — `KeyboardOnlyFlowTests`
+- [x] Lookup latency benchmark at ~100k SKU catalog size — `LookupLatencyTests`
+
+Measured at 100,000 SKUs, against NFR-01's 100ms:
+
+| Path | Measured |
+|---|---|
+| Barcode lookup (scanner) | 0.015 ms |
+| Scan to line appended on the bill | 0.019 ms |
+| Typed search | 5.8 ms |
+| Typed search matching nothing (worst case) | 9.8 ms |
+
+The keyboard-only tests drive the till through `KeyboardRouter` with the shipped keymap rather
+than calling view model methods, so an action that still works but has lost its binding fails the
+gate.
 
 **Phase 3 — Hardware integration**
 - [ ] Hardware-in-the-loop test per peripheral: printer (receipt renders correctly), drawer (kick fires on cash tender), scanner (HID input classified correctly), scale (reading captured correctly)

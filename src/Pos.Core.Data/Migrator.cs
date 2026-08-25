@@ -13,6 +13,7 @@ public static class Migrator
     private static readonly string[] MigrationFiles =
     [
         "001_initial_schema.sql",
+        "002_case_insensitive_sku.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

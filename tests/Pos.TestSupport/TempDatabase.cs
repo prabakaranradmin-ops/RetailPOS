@@ -1,6 +1,7 @@
+using Microsoft.Data.Sqlite;
 using Pos.Core.Data;
 
-namespace Pos.Core.Tests;
+namespace Pos.TestSupport;
 
 /// <summary>
 /// A throwaway database file for one test, deleted when the test finishes. A real file rather
@@ -9,6 +10,7 @@ namespace Pos.Core.Tests;
 public sealed class TempDatabase : IDisposable
 {
     private readonly string _directory;
+    private ItemRepository? _items;
 
     public TempDatabase(bool migrate = true)
     {
@@ -23,9 +25,11 @@ public sealed class TempDatabase : IDisposable
 
     public PosDatabase Database { get; }
 
+    public ItemRepository Items => _items ??= new ItemRepository(Database);
+
     public void Dispose()
     {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SqliteConnection.ClearAllPools();
 
         try
         {
