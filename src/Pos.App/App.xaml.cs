@@ -3,9 +3,10 @@ using System.Windows;
 using Pos.App.Input;
 using Pos.App.ViewModels;
 using Pos.App.Views;
+using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
-using Pos.Core.Hardware;
+using Pos.Core.Domain.Printing;
 
 namespace Pos.App;
 
@@ -33,15 +34,19 @@ public partial class App : Application
 
         var customers = new CustomerRepository(database);
 
-        // Phase 3 replaces this with the ESC/POS driver. Until then the lane simply has no drawer,
-        // which is a state the checkout already handles rather than a stub that pretends.
-        var drawer = new NoDrawerService();
+        // Built from the lane's settings. A peripheral that is not configured yields the honest
+        // "none" implementation, so a lane with no printer or no drawer still bills.
+        var printer = PeripheralFactory.CreatePrinter(settings.Hardware);
+        var drawer = PeripheralFactory.CreateDrawer(settings.Hardware, printer);
 
         var checkout = new CheckoutService(
             new InvoiceRepository(database),
             customers,
             drawer,
-            settings.LoyaltyRules);
+            settings.LoyaltyRules,
+            TimeProvider.System,
+            printer,
+            new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars));
 
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode),

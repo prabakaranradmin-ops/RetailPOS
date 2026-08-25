@@ -15,7 +15,7 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 1 | GST engine, invoice engine | Complete, gate passing |
 | 2 | Item search, line grid, keyboard flow | Complete, gate passing |
 | 4 | Loyalty, multi-tender, hold/recall, invoicing | Complete, gate passing |
-| 3 | Printer, cash drawer, scanner, scale | Not started — needs physical devices |
+| 3 | Printer, cash drawer, scanner, scale | Services and tests complete; hardware-in-the-loop pending devices |
 | 5 | Multi-lane numbering, hardening | Not started |
 | 6 | Pilot | Not started |
 
@@ -33,14 +33,16 @@ against a fake; Phase 3 supplies the drivers behind them.
 ```
 src/Pos.Core.Tax/        GST calculation — pure, stateless, exhaustively tested
 src/Pos.Core.Domain/     Invoice, line, item, customer model and the live bill
-src/Pos.Core.Data/       SQLite access, migrations, item search, invoice and held-bill storage
-src/Pos.Core.Loyalty/    Points accrual and redemption
-src/Pos.Core.Hardware/   Peripheral interfaces (drawer today; the rest arrive with Phase 3)
-src/Pos.App/             WPF UI, MVVM, keyboard routing
-tests/Pos.Core.Tests/    Tax, invoice, loyalty, tender, checkout, schema, search, latency
-tests/Pos.App.Tests/     Input classification, debounce, keymap, keyboard-only flow, tender flow
-tests/Pos.TestSupport/   Shared fixtures (throwaway database, catalogue generator, fake drawer)
-docs/                    Requirements, architecture, plan, testing strategy
+src/Pos.Core.Data/          SQLite access, migrations, item search, invoice and held-bill storage
+src/Pos.Core.Loyalty/       Points accrual and redemption
+src/Pos.Core.Hardware/      ESC/POS, receipt layout, scale protocol, barcodes, serial, drivers
+src/Pos.Core.Configuration/ Lane settings, and what they build into
+src/Pos.App/                WPF UI, MVVM, keyboard routing
+src/Pos.Diagnostics/        The `pos` command — peripheral checks and receipt preview
+tests/Pos.Core.Tests/       Tax, invoice, loyalty, tender, checkout, hardware protocols, latency
+tests/Pos.App.Tests/        Input classification, debounce, keymap, keyboard-only and tender flows
+tests/Pos.TestSupport/      Shared fixtures (throwaway database, catalogue generator, fake drawer)
+docs/                       Requirements, architecture, plan, testing strategy
 ```
 
 ![The billing screen](docs/billing-screen.png)
@@ -94,9 +96,43 @@ and a gesture you rebind is taken away from whatever action held it:
 }
 ```
 
+`settings.json` also carries the store's details for the receipt header and the lane's peripherals:
+
+```json
+{
+  "store": { "name": "Sri Lakshmi Stores", "gstin": "33AABCS1429B1ZX" },
+  "hardware": {
+    "printerName": "POS-80",
+    "printerPaperWidthChars": 48,
+    "drawerConnection": "Printer",
+    "scalePort": "COM3"
+  }
+}
+```
+
+A peripheral left unset is not an error — the lane simply does not have one, and billing carries on
+without it. `printerOutputFile` writes receipts to a file instead of a printer, for a lane being
+set up before its hardware arrives.
+
 Neither file is silently ignored when malformed. A cashier discovering mid-queue that a key does
 nothing is worse than a clear failure at startup, and a lane running under the wrong lane id would
 mint invoice numbers that collide with another till's.
+
+## Checking the hardware
+
+Peripherals are driven by a separate tool rather than from the billing screen, because checking one
+means printing test pages and firing drawers:
+
+```
+pos test-hardware                      # every configured peripheral
+pos test-hardware --printer --drawer   # just these
+pos receipt-preview --width 32         # render a sample receipt, no hardware needed
+pos list-ports                         # what serial ports this machine can see
+```
+
+The printer and drawer checks show what should happen, do it, then ask the operator to confirm what
+physically happened — no software can see paper leave a printer. It exits non-zero if a configured
+peripheral fails, so it can gate a rollout.
 
 ## The two things to know before changing anything
 
@@ -115,3 +151,9 @@ lane id baked in, which is what lets several lanes run with nothing coordinating
 never touch a line's price, taxable value or GST split. Anything that would make a redemption
 change the tax on an invoice is a bug, and the tests assert it directly by pricing the same bill
 both ways.
+
+**A peripheral can never cost a sale.** The invoice is written to disk before anything is printed
+or kicked. A printer out of paper, a drawer that will not open, a loyalty balance that fails to
+write back — each is reported to the cashier and none is allowed to throw out of a completed sale.
+Nothing in the hardware layer throws for a device fault; it returns a result and the caller
+decides.

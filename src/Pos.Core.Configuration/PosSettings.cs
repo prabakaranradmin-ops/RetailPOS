@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Pos.Core.Loyalty;
 
-namespace Pos.App;
+namespace Pos.Core.Configuration;
 
 /// <summary>
 /// Per-installation settings. These are properties of the lane and the outlet, not of the build,
@@ -46,6 +46,14 @@ public sealed class PosSettings
     /// <summary>Spend needed to earn one point, on the net bill after any redemption.</summary>
     [JsonPropertyName("loyaltyRupeesPerPointEarned")]
     public decimal LoyaltyRupeesPerPointEarned { get; set; } = 50m;
+
+    /// <summary>What goes at the top of the receipt.</summary>
+    [JsonPropertyName("store")]
+    public StoreProfileSettings Store { get; set; } = new();
+
+    /// <summary>Which peripherals this lane has, and how they are attached.</summary>
+    [JsonPropertyName("hardware")]
+    public HardwareSettings Hardware { get; set; } = new();
 
     public TimeSpan SearchDebounce => TimeSpan.FromMilliseconds(SearchDebounceMs);
 
@@ -100,6 +108,17 @@ public sealed class PosSettings
             throw new InvalidOperationException($"The settings file at '{path}' has an unworkable loyalty scheme: {ex.Message}", ex);
         }
 
+        // Likewise for the peripherals. A lane told to kick a drawer on a serial port it does not
+        // name should say so at startup, not the first time a cashier takes cash.
+        try
+        {
+            settings.Hardware.Validate();
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException($"The settings file at '{path}' has an unworkable hardware setup: {ex.Message}", ex);
+        }
+
         return settings;
     }
 
@@ -118,5 +137,9 @@ public sealed class PosSettings
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
+
+        // Enums read and write as their names. A shopkeeper editing this file should see
+        // "drawerConnection": "Printer", not a 1 they have to look up.
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: true) },
     };
 }

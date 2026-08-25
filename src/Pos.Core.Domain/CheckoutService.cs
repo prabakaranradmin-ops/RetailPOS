@@ -1,4 +1,6 @@
-using Pos.Core.Hardware;
+using Pos.Core.Domain.Printing;
+using Pos.Core.Hardware.Drawer;
+using Pos.Core.Hardware.Printing;
 using Pos.Core.Loyalty;
 
 namespace Pos.Core.Domain;
@@ -14,13 +16,15 @@ namespace Pos.Core.Domain;
 /// <param name="Drawer">
 /// Whether the drawer opened. Reported, never fatal — see <see cref="CheckoutService"/>.
 /// </param>
+/// <param name="Print">Whether the receipt printed. Reported on the same terms as the drawer.</param>
 public sealed record CheckoutResult(
     SettledInvoice Invoice,
     decimal ChangeDue,
     int PointsRedeemed,
     int PointsEarned,
     int? NewLoyaltyBalance,
-    DrawerKickResult Drawer);
+    DrawerKickResult Drawer,
+    PrintOutcome Print);
 
 /// <summary>
 /// Completes a sale: takes the tendered payments, applies loyalty, writes the invoice down and
@@ -37,13 +41,17 @@ public sealed class CheckoutService(
     ICustomerStore customers,
     IDrawerService drawer,
     LoyaltyRules? loyaltyRules = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    IPrinterService? printer = null,
+    ReceiptComposer? receipts = null)
 {
     private readonly IInvoiceStore _invoices = invoices ?? throw new ArgumentNullException(nameof(invoices));
     private readonly ICustomerStore _customers = customers ?? throw new ArgumentNullException(nameof(customers));
     private readonly IDrawerService _drawer = drawer ?? throw new ArgumentNullException(nameof(drawer));
     private readonly LoyaltyRules _loyaltyRules = loyaltyRules ?? LoyaltyRules.Default;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly IPrinterService _printer = printer ?? new NoPrinterService();
+    private readonly ReceiptComposer? _receipts = receipts;
 
     public LoyaltyRules LoyaltyRules => _loyaltyRules;
 
@@ -114,9 +122,38 @@ public sealed class CheckoutService(
             customer.LoyaltyBalance = newBalance.Value;
         }
 
+        var printResult = PrintReceipt(invoice);
         var drawerResult = ShouldOpenDrawer(basket) ? _drawer.Kick() : DrawerKickResult.NoDrawerAttached;
 
-        return new CheckoutResult(invoice, basket.ChangeDue, pointsRedeemed, pointsEarned, newBalance, drawerResult);
+        return new CheckoutResult(invoice, basket.ChangeDue, pointsRedeemed, pointsEarned, newBalance, drawerResult, printResult);
+    }
+
+    /// <summary>
+    /// Prints the receipt for an invoice already on disk. Used for the reprint the cashier asks for
+    /// when the paper jams, which is why it is public and why it marks the copy as a reprint.
+    /// </summary>
+    public PrintOutcome Reprint(SettledInvoice invoice)
+    {
+        ArgumentNullException.ThrowIfNull(invoice);
+        return PrintReceipt(invoice, isReprint: true);
+    }
+
+    private PrintOutcome PrintReceipt(SettledInvoice invoice, bool isReprint = false)
+    {
+        if (_receipts is null || !_printer.IsConfigured)
+            return PrintOutcome.NotConfigured();
+
+        try
+        {
+            return _printer.Print(_receipts.Compose(invoice, isReprint).ToEscPos());
+        }
+        catch (Exception ex)
+        {
+            // Composing a receipt should not be able to fail, but the invoice is already saved and
+            // paid for. Whatever went wrong here, it is a message to the cashier and not an
+            // exception thrown out of a completed sale.
+            return PrintOutcome.Failed($"The receipt could not be produced: {ex.Message}");
+        }
     }
 
     /// <summary>

@@ -122,10 +122,51 @@ Decisions taken:
   peripherals get their interfaces in Phase 3 alongside their drivers; there is no value in stubs
   for features that do not exist yet.
 
-## Phase 3 — Hardware integration — **runs after Phase 4; needs physical devices**
+## Phase 3 — Hardware integration — **services and tests complete; hardware-in-the-loop pending devices**
 - `PrinterService` (ESC/POS), `DrawerService` (kick pulse), `ScannerService` (HID), `ScaleService` (serial)
 - Graceful degradation when a peripheral is missing/disconnected
-- **Gate:** Phase 3 tests (hardware-in-the-loop per peripheral, disconnect fallback)
+- **Gate:** Phase 3 tests — automated portion **passing**; the hardware-in-the-loop checklist item
+  stays open until it is run on a lane with devices attached. See `TESTING_STRATEGY.md`.
+
+Everything above the wire is built and tested: the command bytes, the receipt layout, the scale
+protocol, the barcode check digits, the failure handling, and the checkout-to-print-and-kick path.
+What remains is confirming that a real printer prints and a real drawer opens, which is done with
+`pos test-hardware` on the lane.
+
+Decisions taken:
+- **Layout lives in the hardware layer, content lives in the domain.** `ReceiptBuilder` knows about
+  columns, wrapping and paper width; `ReceiptComposer` knows what belongs on a GST invoice. A
+  printer driver has no business knowing what an HSN code is, and the split means the content can
+  be read as text in a test rather than decoded from a byte array.
+- **`ReceiptBuilder` renders to plain text as well as to ESC/POS.** Receipt faults are layout
+  faults, and those are visible as text and invisible as bytes. The tests assert layout against the
+  text form and command bytes against `EscPos` directly, so each is checked in whichever form makes
+  a failure obvious. `pos receipt-preview` prints the same text.
+- **Narrow paper stacks a row instead of shredding the name.** At 58mm the figures do not fit
+  beside a readable description, so the name takes the full width and the figures go beneath it.
+  Found by looking at real output, not by a test: the width assertions all passed while the receipt
+  was rendering item names four characters at a time.
+- **A barcode's check digit is verified.** Scanners verify it themselves, but a code typed in from
+  a smudged label does not, and a transposed pair matches a different product. Codes with no check
+  digit to test — internal codes, other symbologies — are passed through rather than refused.
+- **Printing follows the same rule as the drawer**: the invoice is saved first, and a printer that
+  is out of paper is reported rather than costing a sale that has already been paid for.
+- **An overflowed scanner buffer is discarded, not published.** Found by a test: line noise long
+  enough to overflow was having its tail delivered as if it were a barcode.
+- **`ISerialPort` wraps `System.IO.Ports`** so frame parsing and disconnect handling can be tested
+  by feeding bytes in. `SerialPort` is sealed and needs a real port.
+- **A peripheral that is not configured yields a "none" implementation, never null**, so nothing
+  downstream null-checks its way through a sale. A lane with no printer or no scale still bills.
+- Added `Pos.Core.Configuration` — a departure from the structure in `CLAUDE.md`. Lane settings are
+  now needed by both the till and the diagnostics tool, and the alternative was the console app
+  referencing a WPF executable to read a JSON file.
+- Added `Pos.Diagnostics`, built as `pos`. Peripheral checks print test pages and fire drawers, so
+  they belong in a separate tool rather than inside the billing screen where a cashier can reach
+  them mid-sale.
+
+Left for when the devices are on site: only the confirmation itself. The drivers are written and
+the transports (`RawSpoolPrinterService`, `SystemSerialPort`) are deliberately thin, because
+attaching a device is the only real test of them.
 
 ## Phase 5 — Multi-lane & hardening
 - Lane-prefixed local invoice numbering

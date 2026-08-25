@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Pos.Diagnostics</RootNamespace>
+    <!-- Invoked as `pos test-hardware`. -->
+    <AssemblyName>pos</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pos.Core.Configuration\Pos.Core.Configuration.csproj" />
+    <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />
+    <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
+  </ItemGroup>
+
+</Project>

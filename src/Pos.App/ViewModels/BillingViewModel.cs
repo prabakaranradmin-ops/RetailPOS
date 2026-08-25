@@ -3,7 +3,7 @@ using System.Globalization;
 using Pos.App.Input;
 using Pos.Core.Data;
 using Pos.Core.Domain;
-using Pos.Core.Hardware;
+using Pos.Core.Hardware.Drawer;
 
 namespace Pos.App.ViewModels;
 

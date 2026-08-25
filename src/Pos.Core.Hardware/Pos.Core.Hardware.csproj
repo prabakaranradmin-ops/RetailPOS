@@ -5,4 +5,17 @@
     <RootNamespace>Pos.Core.Hardware</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Line wrapping and truncation are internal because nothing outside the receipt layout should
+      call them, but they are where the layout bugs live and are worth testing directly rather than
+      only through the receipts they happen to appear in.
+    -->
+    <InternalsVisibleTo Include="Pos.Core.Tests" />
+  </ItemGroup>
+
 </Project>

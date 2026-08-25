@@ -1,4 +1,4 @@
-namespace Pos.Core.Hardware;
+namespace Pos.Core.Hardware.Drawer;
 
 public enum DrawerKickResult
 {
@@ -16,20 +16,24 @@ public enum DrawerKickResult
 /// Releases the cash drawer. SRS 2.4 fires this on cash tender confirmation.
 /// </summary>
 /// <remarks>
-/// The real implementation arrives in Phase 3, behind this interface: the pulse is a standard
-/// ESC/POS command sent either through the printer's passthrough port or straight down a serial
-/// line (ARCHITECTURE.md section 5).
+/// The pulse is a standard ESC/POS command, not a vendor extension, and reaches the drawer one of
+/// two ways (ARCHITECTURE.md section 5): through the receipt printer's RJ11 passthrough port, which
+/// is how nearly every counter is wired, or straight down a serial line for a drawer with its own
+/// controller.
 /// <para>
 /// <see cref="Kick"/> reports failure rather than throwing, and settlement treats the result as
-/// information rather than as a condition of the sale. A drawer that will not open is a problem
-/// for the shop to deal with; it is not a reason to refuse a customer's money or to lose an
-/// invoice that has already been tendered.
+/// information rather than as a condition of the sale. A drawer that will not open is a problem for
+/// the shop to deal with; it is not a reason to refuse a customer's money or to lose an invoice
+/// that has already been tendered.
 /// </para>
 /// </remarks>
 public interface IDrawerService
 {
     /// <summary>False when no drawer is configured, so callers can skip the prompt entirely.</summary>
     bool IsConfigured { get; }
+
+    /// <summary>Identifies the drawer in diagnostics and error messages.</summary>
+    string Name { get; }
 
     DrawerKickResult Kick();
 }
@@ -41,6 +45,8 @@ public interface IDrawerService
 public sealed class NoDrawerService : IDrawerService
 {
     public bool IsConfigured => false;
+
+    public string Name => "none";
 
     public DrawerKickResult Kick() => DrawerKickResult.NoDrawerAttached;
 }

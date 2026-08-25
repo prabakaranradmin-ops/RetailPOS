@@ -51,9 +51,35 @@ The keyboard-only tests drive the till through `KeyboardRouter` with the shipped
 than calling view model methods, so an action that still works but has lost its binding fails the
 gate.
 
-**Phase 3 — Hardware integration**
-- [ ] Hardware-in-the-loop test per peripheral: printer (receipt renders correctly), drawer (kick fires on cash tender), scanner (HID input classified correctly), scale (reading captured correctly)
-- [ ] Fallback behavior test: what happens if a peripheral is disconnected mid-transaction
+**Phase 3 — Hardware integration** — automated portion passing; hardware-in-the-loop **pending physical verification**
+
+Automated, and passing:
+- [x] ESC/POS command bytes asserted literally — `EscPosTests`
+- [x] Receipt layout at both paper widths, including wrapping and column alignment — `ReceiptBuilderTests`
+- [x] Receipt content: GST fields, rate-wise tax summary, payments, change, loyalty, reprint marking — `ReceiptTests`
+- [x] Scale frame parsing, checksum validation, reassembly across reads, tare, stability gating — `ScaleProtocolTests`
+- [x] Barcode check digits for EAN-13, EAN-8 and UPC-A, including transposed digits — `BarcodeTests`
+- [x] Scanner reassembly and misread flagging, on both the serial and keyboard-wedge paths — `ScannerServiceTests`
+- [x] Drawer kick through the printer's passthrough port and over serial — `DrawerServiceTests`
+- [x] Checkout to print and kick, wired as a real counter is — `ReceiptTests`
+- [x] Fallback behaviour when a peripheral is missing or fails mid-transaction — `ReceiptTests`,
+      `DrawerServiceTests`, `ScaleProtocolTests`, `CheckoutTests`
+- [x] What a lane's settings build into — `ConfigurationTests`
+
+Still requiring physical devices, and **not** claimed as passing:
+- [ ] **Hardware-in-the-loop, per peripheral**: printer (paper comes out and matches), drawer
+      (it physically opens), scanner (a real device's bursts read correctly), scale (a real
+      device's stream parses and settles)
+
+Run these with `pos test-hardware` on the lane, with the devices attached. The tool prints what
+*should* come out before it prints, fires each peripheral, and asks the operator to confirm what
+physically happened — because no software can see paper leave a printer or a drawer slide open.
+It exits non-zero if any configured peripheral fails, so it can gate a rollout.
+
+The reason this split exists: everything above the wire — the command bytes, the layout, the frame
+parsing, the failure handling — is deterministic and worth testing exhaustively without a device.
+What is left needs eyes on the counter, and simulating it as passing would be worse than leaving
+it open.
 
 **Phase 4 — Loyalty, multi-tender, hold/recall** — passing *(run before Phase 3; see the note in `IMPLEMENTATION_PLAN.md`)*
 - [x] LoyaltyEngine tests: redemption cap enforcement, balance never negative, accrual on net bill after redemption — `LoyaltyEngineTests`

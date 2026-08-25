@@ -1,4 +1,4 @@
-using Pos.Core.Hardware;
+using Pos.Core.Hardware.Drawer;
 
 namespace Pos.TestSupport;
 
@@ -11,6 +11,8 @@ public sealed class RecordingDrawerService(bool isConfigured = true, DrawerKickR
     : IDrawerService
 {
     public bool IsConfigured { get; set; } = isConfigured;
+
+    public string Name => "recording drawer";
 
     public DrawerKickResult NextResult { get; set; } = result;
 

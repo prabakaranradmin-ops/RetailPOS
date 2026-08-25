@@ -2,7 +2,7 @@ using System.Windows.Input;
 using Pos.App.Input;
 using Pos.App.ViewModels;
 using Pos.Core.Domain;
-using Pos.Core.Hardware;
+using Pos.Core.Hardware.Drawer;
 using Pos.Core.Loyalty;
 using Pos.TestSupport;
 using Xunit;

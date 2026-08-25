@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Pos.App.Input;
 using Pos.App.ViewModels;
+using Pos.Core.Configuration;
 
 namespace Pos.App.Views;
 

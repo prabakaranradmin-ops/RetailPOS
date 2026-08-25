@@ -1,6 +1,6 @@
 using Pos.Core.Data;
 using Pos.Core.Domain;
-using Pos.Core.Hardware;
+using Pos.Core.Hardware.Drawer;
 using Pos.Core.Loyalty;
 using Pos.TestSupport;
 using Xunit;
