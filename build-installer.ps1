@@ -27,7 +27,15 @@
 [CmdletBinding()]
 param(
     [string] $Compiler,
-    [switch] $SkipPublish
+    [switch] $SkipPublish,
+
+    # Overrides the version taken from the git tag. For building an installer of something that is
+    # not a tagged release; the name says what it is.
+    [string] $Version,
+
+    # Builds even though the working tree has uncommitted changes. What comes out is then not the
+    # tagged release it claims to be, so it is refused unless asked for by name.
+    [switch] $AllowDirty
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +44,51 @@ Set-StrictMode -Version Latest
 $here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $script = Join-Path $here 'deploy\installer\RetailPOS.iss'
 $output = Join-Path $here 'artifacts\installer'
+
+# --------------------------------------------------------------------------------------------
+# What version is this?
+#
+# Taken from the tag rather than written down anywhere, because a version written down is a version
+# that goes stale. It did: the installer carried v1.1.0 code while telling Add/Remove Programs it
+# was 1.0.0, and anyone auditing which build a lane was running would have been given a confident
+# wrong answer.
+# --------------------------------------------------------------------------------------------
+
+if (-not $Version) {
+    $tag = & git -C $here describe --tags --abbrev=0 2>$null
+
+    if ($LASTEXITCODE -ne 0 -or -not $tag) {
+        throw "No git tag found to take a version from. Tag the release, or pass -Version."
+    }
+
+    $Version = $tag -replace '^v', ''
+
+    # A tag one commit behind is a different build from the tag, whatever it is called.
+    $exact = & git -C $here describe --tags --exact-match 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "HEAD is not the tagged commit ($tag). Tag this commit, or pass -Version to say what this build is."
+    }
+
+    $dirty = & git -C $here status --porcelain
+
+    if ($dirty -and -not $AllowDirty) {
+        throw "The working tree has uncommitted changes, so this would not be $tag. Commit them, or pass -AllowDirty."
+    }
+
+    if ($dirty) {
+        Write-Warning "Building $Version from a dirty working tree. This is not the tagged release."
+    }
+}
+
+# Windows file versions are digits and dots only, so a tag like 1.1.0-RC2 needs a numeric twin.
+if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)') {
+    throw "Version '$Version' does not start with a number like 1.2.3."
+}
+
+$numeric = $Matches[0]
+
+Write-Host "Version: $Version (file version $numeric)" -ForegroundColor Cyan
 
 if (-not $Compiler) {
     $Compiler = @(
@@ -69,13 +122,27 @@ if (Test-Path $output) { Remove-Item $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
 Write-Host "Building the installer with $Compiler..." -ForegroundColor Cyan
-& $Compiler $script /Q
+& $Compiler $script "/DAppVersion=$Version" "/DAppVersionNumeric=$numeric" /Q
 
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
 
 $setup = Get-ChildItem $output -Filter *.exe | Select-Object -First 1
 
 if (-not $setup) { throw 'Inno Setup reported success but produced no installer.' }
+
+# Read back what was actually stamped, rather than trusting that passing it in worked. This is the
+# check that would have caught the hard-coded version, and it costs nothing.
+$stamped = $setup.VersionInfo.FileVersion
+
+if (-not $stamped -or -not $stamped.StartsWith($numeric)) {
+    throw "The installer says its version is '$stamped', but this build is $numeric. Something did not take."
+}
+
+if ($setup.Name -notlike "*$Version*") {
+    throw "The installer is named '$($setup.Name)', which does not carry the version $Version."
+}
+
+Write-Host "  stamped version checked: $stamped" -ForegroundColor DarkGray
 
 Write-Host ''
 Write-Host "Built $($setup.Name)" -ForegroundColor Green

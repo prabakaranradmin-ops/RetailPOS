@@ -8,8 +8,24 @@
 ; Built by build-installer.ps1, which publishes first so the payload is never stale.
 
 #define AppName        "RetailPOS"
-#define AppVersion     "1.0.0"
 #define AppPublisher   "MaaranSoft"
+
+; Passed in by build-installer.ps1, which takes it from the git tag. It was written here as a
+; literal once, and the literal went stale the moment the next release was cut: the installer
+; carried v1.1.0 code while telling Add/Remove Programs it was 1.0.0, so anyone auditing which
+; build a lane was running got a confident wrong answer.
+;
+; The fallback is deliberately not a plausible version number. A build made by running ISCC by hand
+; should announce itself as a hand build rather than impersonate a release.
+#ifndef AppVersion
+  #define AppVersion "0.0.0-handbuilt"
+#endif
+
+; Windows will only accept digits and dots in a file version, so a tag like 1.1.0-RC2 needs a
+; numeric twin. The display version above is what a person reads; this is what the file carries.
+#ifndef AppVersionNumeric
+  #define AppVersionNumeric "0.0.0"
+#endif
 #define TillExe        "Pos.App.exe"
 #define ToolExe        "pos.exe"
 #define Payload        "..\..\artifacts\lane"
@@ -20,7 +36,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppVersionNumeric}
 
 ; Per-user by default, and deliberately so — see the note in build-installer.ps1. The lane's
 ; database and settings live under the *running* user's LocalAppData, and an installer elevated as
