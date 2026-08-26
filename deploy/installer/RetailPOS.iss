@@ -1,0 +1,109 @@
+; RetailPOS installer.
+;
+; Produces a single setup.exe carrying everything a lane needs. The two executables inside it are
+; already self-contained — the .NET runtime is bundled into each — so the target machine needs
+; nothing installed beforehand. This exists for the things a copied folder cannot do: a shortcut a
+; cashier can find, the till coming back by itself after a reboot, and a clean uninstall.
+;
+; Built by build-installer.ps1, which publishes first so the payload is never stale.
+
+#define AppName        "RetailPOS"
+#define AppVersion     "1.0.0"
+#define AppPublisher   "MaaranSoft"
+#define TillExe        "Pos.App.exe"
+#define ToolExe        "pos.exe"
+#define Payload        "..\..\artifacts\lane"
+
+[Setup]
+AppId={{75A3C612-99E2-4A24-8A82-1A5C7E990FB1}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
+VersionInfoVersion={#AppVersion}
+
+; Per-user by default, and deliberately so — see the note in build-installer.ps1. The lane's
+; database and settings live under the *running* user's LocalAppData, and an installer elevated as
+; somebody else would put them in the wrong profile. Choosing "all users" in the dialog is still
+; allowed for anyone who knows they want it.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+AllowNoIcons=yes
+
+OutputDir=..\..\artifacts\installer
+OutputBaseFilename={#AppName}-Setup-{#AppVersion}
+
+; No SetupIconFile: that wants a .ico to embed, and the only icon we have is inside a 174MB
+; executable. The installed shortcuts and the uninstall entry take their icon from the executable
+; itself, which is where it already lives.
+UninstallDisplayIcon={app}\{#TillExe}
+UninstallDisplayName={#AppName} {#AppVersion}
+
+; The payload is two 174MB executables that compress well. Solid compression across both of them
+; takes the setup from roughly 350MB to something that fits on a memory stick and copies in a
+; minute rather than ten.
+Compression=lzma2/max
+SolidCompression=yes
+LZMANumBlockThreads=4
+
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+WizardStyle=modern
+InfoAfterFile=after-install.txt
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Put a shortcut on the desktop"; GroupDescription: "Shortcuts:"
+Name: "startupicon"; Description: "Open the till automatically when this machine starts"; GroupDescription: "Shortcuts:"
+
+[Files]
+Source: "{#Payload}\{#TillExe}";                 DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\{#ToolExe}";                 DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\settings.pilot-tamil.json";  DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\settings.json";              DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\catalog_template.csv";       DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\SETTINGS.md";                DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\CATALOGUE_FORMAT.md";        DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\HARDWARE_SIGNOFF.md";        DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\PILOT_RUNBOOK.md";           DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\{#AppName} Till";        Filename: "{app}\{#TillExe}"
+Name: "{group}\Operator runbook";       Filename: "{app}\PILOT_RUNBOOK.md"
+Name: "{group}\{#AppName} commands";    Filename: "{cmd}"; Parameters: "/K cd /d ""{app}"" && echo Run: pos.exe --help"; IconFilename: "{app}\{#ToolExe}"
+Name: "{group}\Uninstall {#AppName}";   Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName} Till";  Filename: "{app}\{#TillExe}"; Tasks: desktopicon
+Name: "{userstartup}\{#AppName} Till";  Filename: "{app}\{#TillExe}"; Tasks: startupicon
+
+[Code]
+{
+  Puts a settings file in place on a lane that has none, so the shop is one edit away from trading
+  rather than hunting for a template.
+
+  It never overwrites. Re-installing over a trading lane must not touch the shop's identity, its
+  printer name, or anything else somebody got right on the bench — and the same folder holds the
+  database, so this code deliberately creates the folder and one file and nothing else.
+}
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LaneDir, Target, Source: String;
+begin
+  if CurStep <> ssPostInstall then
+    Exit;
+
+  LaneDir := ExpandConstant('{localappdata}\RetailPOS');
+  Target := LaneDir + '\settings.json';
+  Source := ExpandConstant('{app}\settings.pilot-tamil.json');
+
+  if not DirExists(LaneDir) then
+    ForceDirectories(LaneDir);
+
+  if not FileExists(Target) then
+    FileCopy(Source, Target, True);
+end;

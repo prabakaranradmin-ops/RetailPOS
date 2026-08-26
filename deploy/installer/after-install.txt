@@ -1,0 +1,55 @@
+RetailPOS is installed. Three things before the shop can trade.
+
+
+1. FILL IN THE SETTINGS
+
+   A settings file has been put at:
+
+       %LOCALAPPDATA%\RetailPOS\settings.json
+
+   It is the Tamil pilot template: prefix RM, single till, 80mm paper. Open it in
+   Notepad and replace every FILL IN, then delete the two _comment lines at the top.
+
+   Take the shop name, GSTIN and FSSAI number from the shop's own certificates -
+   not from an old printed bill. One wrong character prints on every invoice the
+   shop ever issues, and nothing in the software can catch it.
+
+   Put the printer name in exactly as Windows shows it under Printers & Scanners.
+
+   Save it as UTF-8. In Notepad: File > Save As > Encoding > UTF-8 with BOM.
+   Saving it any other way turns a Tamil shop name into nonsense on every bill.
+
+   The till will not open until this is done. It names any field you missed.
+
+   (If this lane was already trading, your existing settings were left alone.)
+
+
+2. CHECK THE HARDWARE
+
+   Open "RetailPOS commands" from the Start Menu, then:
+
+       pos.exe receipt-preview --png preview.png
+       pos.exe test-hardware
+
+   Look at preview.png before printing anything. If any Tamil shows as ? or as
+   strange Latin letters, stop - the lane cannot draw it, and the preview says why.
+
+   HARDWARE_SIGNOFF.md in the install folder is the sheet to work through.
+
+
+3. LOAD THE CATALOGUE
+
+       pos.exe import-items --file catalogue.csv --dry-run
+       pos.exe import-items --file catalogue.csv
+
+   Always dry-run first. If it reports problems, nothing was imported and the
+   catalogue is exactly as it was. catalog_template.csv shows the format.
+
+
+Then open the till from the desktop shortcut.
+
+PILOT_RUNBOOK.md is the day-to-day guide: opening, the keys, closing the day,
+and what to do when something goes wrong.
+
+Uninstalling removes the program and leaves the lane's database, settings and
+backups alone. They are the shop's books.

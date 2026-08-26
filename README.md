@@ -228,6 +228,30 @@ installed, not even the .NET runtime.
 The script refuses to package a `settings.json` that points the printer at a file or carries a real
 store name, so a development rig cannot reach a store by accident.
 
+## Building the installer
+
+```
+.\build-installer.ps1
+```
+
+Publishes first, then wraps the payload in `artifacts\installer\RetailPOS-Setup-1.0.0.exe` — about
+98MB from a 347MB payload. Needs Inno Setup 6 on the build machine; nothing on the target machine.
+
+The installer exists for the things a copied folder cannot do: a shortcut a cashier can find, the
+till reopening by itself after a reboot, a settings file put in place, and a clean uninstall. It
+installs **per user**, deliberately. A lane keeps its database and settings under the *running*
+user's LocalAppData, so a per-machine install elevated as somebody else would put the settings in
+the wrong profile entirely — and the till would open on a lane with no settings while a perfectly
+good `settings.json` sat in another user's folder. Installing per user makes that impossible, and
+needs no admin rights.
+
+It seeds `%LOCALAPPDATA%\RetailPOS\settings.json` from the Tamil pilot template, and **never
+overwrites one that is already there** — reinstalling over a trading lane must not wipe the shop's
+identity or its printer name. Uninstalling leaves the database, settings and backups alone. They
+are the shop's books.
+
+## Deploying by hand
+
 Copy the folder to the lane, then:
 
 ```
