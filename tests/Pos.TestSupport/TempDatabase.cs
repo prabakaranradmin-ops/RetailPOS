@@ -27,9 +27,20 @@ public sealed class TempDatabase : IDisposable
 
     public ItemRepository Items => _items ??= new ItemRepository(Database);
 
+    /// <summary>
+    /// Releases this database's pooled handles so the file can be deleted, and nobody else's.
+    /// </summary>
+    /// <remarks>
+    /// <c>ClearAllPools</c> would be simpler and is what this used to call, but it is process-wide:
+    /// every test finishing would yank the pooled connections out from under every test still
+    /// running beside it. That was harmless while few tests touched a database at once and became
+    /// an intermittent failure as soon as more did — a test failing because of what a different
+    /// test was doing, which is the worst kind to be handed on a red build.
+    /// </remarks>
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        using (var connection = new SqliteConnection(Database.ConnectionString))
+            SqliteConnection.ClearPool(connection);
 
         try
         {

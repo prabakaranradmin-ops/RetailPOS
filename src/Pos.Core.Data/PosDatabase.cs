@@ -41,6 +41,17 @@ public sealed class PosDatabase
 
     public string DatabasePath { get; }
 
+    /// <summary>
+    /// How connections to this database are opened.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so a caller can release <em>this</em> database's pooled handles, with
+    /// <c>SqliteConnection.ClearPool</c>, rather than every database in the process. The difference
+    /// only matters where several are open at once, which on a lane never happens and in a test run
+    /// always does.
+    /// </remarks>
+    public string ConnectionString => _connectionString;
+
     /// <summary>Opens a connection with the pragmas this schema depends on already applied.</summary>
     public SqliteConnection OpenConnection()
     {
