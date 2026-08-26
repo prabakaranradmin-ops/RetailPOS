@@ -48,7 +48,8 @@ public sealed class BillingHarness : IDisposable
         Backups = new RecordingBackupService();
 
         Checkout = new CheckoutService(
-            Invoices, Customers, Drawer, loyaltyRules, TimeProvider.System, Printer, Receipts);
+            Invoices, Customers, Drawer, loyaltyRules, TimeProvider.System, Printer, Receipts,
+            cashier: () => ViewModel?.CashierName);
 
         DayCloses = new DayCloseRepository(_temp.Database, HeldBills);
 
@@ -119,7 +120,7 @@ public sealed class BillingHarness : IDisposable
 
     public VirtualScheduler Scheduler { get; }
 
-    public BillingViewModel ViewModel { get; }
+    public BillingViewModel ViewModel { get; } = null!;
 
     public KeyboardRouter Router { get; }
 

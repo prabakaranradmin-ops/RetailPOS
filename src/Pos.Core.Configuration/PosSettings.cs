@@ -47,6 +47,19 @@ public sealed class PosSettings
     [JsonPropertyName("loyaltyRupeesPerPointEarned")]
     public decimal LoyaltyRupeesPerPointEarned { get; set; } = 50m;
 
+    /// <summary>
+    /// Who is on this till by default. Recorded against every sale so a Z-report can attribute
+    /// takings, and a drawer difference can be traced to a shift.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a name in a file rather than a login. A pilot lane with one operator should not
+    /// have to sign in, and a shared shop password is worse than no password at all — it looks like
+    /// access control and attributes nothing. Where shifts change, the cashier sets their name at
+    /// the till and it lasts until somebody changes it again.
+    /// </remarks>
+    [JsonPropertyName("defaultCashierName")]
+    public string? DefaultCashierName { get; set; }
+
     /// <summary>What goes at the top of the receipt.</summary>
     [JsonPropertyName("store")]
     public StoreProfileSettings Store { get; set; } = new();

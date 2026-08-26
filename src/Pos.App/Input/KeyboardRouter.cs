@@ -25,6 +25,8 @@ public interface IBillingActions
     void FindCustomer();
     void ReprintInvoice();
     void CloseDay();
+    void VoidInvoice();
+    void SetCashier();
 }
 
 /// <summary>
@@ -85,6 +87,8 @@ public sealed class KeyboardRouter
             case PosAction.FindCustomer: _target.FindCustomer(); break;
             case PosAction.ReprintInvoice: _target.ReprintInvoice(); break;
             case PosAction.CloseDay: _target.CloseDay(); break;
+            case PosAction.VoidInvoice: _target.VoidInvoice(); break;
+            case PosAction.SetCashier: _target.SetCashier(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a
             // debug run beats a key that silently does nothing at the till.

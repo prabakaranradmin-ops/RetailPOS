@@ -10,6 +10,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       Line wrapping and truncation are internal because nothing outside the receipt layout should
       call them, but they are where the layout bugs live and are worth testing directly rather than

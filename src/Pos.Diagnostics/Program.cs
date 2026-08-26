@@ -2,7 +2,9 @@ using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain.Import;
 using Pos.Core.Domain.Printing;
+using Pos.Core.Domain;
 using Pos.Core.Hardware.Printing;
+using Pos.Core.Logging;
 using Pos.Diagnostics;
 
 // `pos` — the lane's diagnostic tool. Separate from the till on purpose: checking a peripheral
@@ -35,6 +37,11 @@ catch (InvalidOperationException ex)
 
 Console.WriteLine($"RetailPOS diagnostics — lane {settings.LaneId}");
 Console.WriteLine($"Settings: {(File.Exists(settingsPath) ? settingsPath : "defaults (no settings file found)")}");
+
+// The tool writes to the same log as the till, so a lane's history reads as one story rather than
+// two — a restore or a void shows up alongside the sales around it.
+using var log = new FileLog(Path.Combine(dataDirectory, "logs"));
+log.Info("tool", $"pos {string.Join(' ', args)}");
 
 var checks = new HardwareChecks(settings, Console.Out, Console.In);
 var window = ParseWindow(args) ?? TimeSpan.FromSeconds(10);
@@ -201,6 +208,132 @@ switch (command)
         }
 
         return backup.Succeeded ? 0 : 1;
+    }
+
+    case "restore-db":
+    {
+        var snapshot = ParseStringOption(args, "--from");
+
+        if (snapshot is null)
+        {
+            Console.Error.WriteLine("restore-db needs --from <snapshot path>.");
+            Console.Error.WriteLine($"Snapshots live in {Path.Combine(dataDirectory, "backups")}.");
+            return 2;
+        }
+
+        var livePath = Path.Combine(dataDirectory, "pos.db");
+        var restore = new DatabaseRestore(livePath);
+
+        Console.WriteLine();
+        Console.WriteLine($"Restoring   {livePath}");
+        Console.WriteLine($"       from {snapshot}");
+
+        var inspection = restore.Inspect(snapshot);
+
+        if (!inspection.IsHealthy)
+        {
+            Console.Error.WriteLine($"  The snapshot is not usable: {inspection}");
+            Console.Error.WriteLine("  Nothing was changed. Try an older snapshot.");
+            return 1;
+        }
+
+        Console.WriteLine("  Snapshot checked and sound.");
+
+        if (DatabaseBackup.TimestampOf(snapshot) is { } takenAt)
+            Console.WriteLine($"  Taken {takenAt:dd MMM yyyy HH:mm}. Everything sold since then will be gone.");
+
+        if (!flags.Contains("--yes"))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  Close the till before restoring.");
+            Console.Write("  Restore now? [y/N] ");
+
+            var answer = Console.ReadLine();
+
+            if (answer is null || !answer.Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  Left alone.");
+                return 0;
+            }
+        }
+
+        var result = restore.Restore(snapshot, DateTimeOffset.Now);
+
+        Console.WriteLine($"  {result.Detail}");
+
+        if (result.MovedAsidePath is { } aside)
+            Console.WriteLine($"  The previous database was kept at {aside} — it is not deleted.");
+
+        return result.Succeeded ? 0 : 1;
+    }
+
+    case "void-invoice":
+    {
+        var number = ParseStringOption(args, "--invoice");
+
+        if (number is null)
+        {
+            Console.Error.WriteLine("void-invoice needs --invoice <number>.");
+            return 2;
+        }
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var invoices = new InvoiceRepository(database);
+        var existing = invoices.FindByInvoiceNo(number);
+
+        if (existing is null)
+        {
+            Console.Error.WriteLine($"There is no invoice numbered {number}.");
+            return 1;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {existing.InvoiceNo}  {existing.Sale.CreatedAt:dd MMM yyyy HH:mm}  {existing.GrandTotal:N2}");
+        Console.WriteLine($"  {existing.Sale.Lines.Count} line(s), {existing.Sale.Payments.Count} payment(s)");
+
+        if (existing.IsVoided)
+        {
+            Console.Error.WriteLine($"  Already voided at {existing.VoidedAt:dd MMM yyyy HH:mm}.");
+            return 1;
+        }
+
+        if (invoices.IsReported(number))
+        {
+            Console.Error.WriteLine("  This invoice has already appeared on a day-end report and cannot be voided.");
+            Console.Error.WriteLine("  A closed day is corrected with a credit note, not by changing a figure that has been filed.");
+            return 1;
+        }
+
+        if (!flags.Contains("--yes"))
+        {
+            Console.Write("  Void this sale? [y/N] ");
+            var answer = Console.ReadLine();
+
+            if (answer is null || !answer.Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  Left alone.");
+                return 0;
+            }
+        }
+
+        var checkout = new CheckoutService(
+            invoices,
+            new CustomerRepository(database),
+            PeripheralFactory.CreateDrawer(settings.Hardware, PeripheralFactory.CreatePrinter(settings.Hardware)),
+            settings.LoyaltyRules,
+            TimeProvider.System,
+            log: log);
+
+        var voided = checkout.VoidSale(number, ParseStringOption(args, "--reason"));
+
+        Console.WriteLine($"  {voided.Invoice.InvoiceNo} voided. It stays in the books, marked cancelled, and is left out of takings.");
+
+        if (voided.LoyaltyReversed)
+            Console.WriteLine($"  Loyalty points put back — balance is now {voided.NewLoyaltyBalance}.");
+
+        return 0;
     }
 
     case "check-db":
@@ -391,6 +524,17 @@ static void WriteHelp()
           pos backup-db [--keep N]
               Takes a verified snapshot into the lane's backups folder, keeping
               the most recent N (default 30). Does not block anyone billing.
+
+          pos void-invoice --invoice <number> [--reason <text>] [--yes]
+              Cancels a sale. The record stays and the number stays used; the
+              takings and the tax do not. Loyalty points are put back. Refused
+              once the invoice has been on a day-end report — a closed day is
+              corrected with a credit note.
+
+          pos restore-db --from <snapshot> [--yes]
+              Puts a snapshot back as the live database. Checks it first, and
+              renames the database it replaces rather than deleting it.
+              Everything sold since the snapshot was taken will be gone.
 
           pos check-db [--quick] [--vacuum]
               Checks the lane's database for damage. Run it before a trading

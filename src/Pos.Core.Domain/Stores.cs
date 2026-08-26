@@ -23,6 +23,20 @@ public interface IInvoiceStore
     /// duplicate has their phone, not the invoice number.
     /// </summary>
     SettledInvoice? FindLatestForMobile(string mobileNo);
+
+    /// <summary>
+    /// Cancels a sale in place. Nothing is deleted and the number stays consumed.
+    /// </summary>
+    /// <remarks>
+    /// Refuses an invoice that has already appeared on a Z-report. Once a day is closed its figures
+    /// have been reported, and quietly changing them afterwards alters a filed number — that
+    /// correction is a credit note, not a void. Also refuses an invoice already voided.
+    /// </remarks>
+    /// <returns>The cancelled invoice, or null if there was nothing by that number.</returns>
+    SettledInvoice? Void(string invoiceNo, DateTimeOffset voidedAt, string? reason);
+
+    /// <summary>True when the invoice has already been reported on a Z-report.</summary>
+    bool IsReported(string invoiceNo);
 }
 
 /// <summary>What happened when a snapshot was taken.</summary>

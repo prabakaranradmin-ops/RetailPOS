@@ -9,6 +9,7 @@
     <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
     <ProjectReference Include="..\Pos.Core.Loyalty\Pos.Core.Loyalty.csproj" />
     <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
+    <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
   </ItemGroup>
 
 </Project>

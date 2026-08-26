@@ -96,14 +96,32 @@ public partial class MainBillingView : Window
                 Dispatcher.BeginInvoke(() => Focus(ReprintBox));
                 break;
 
+            case nameof(BillingViewModel.IsVoiding) when _viewModel.IsVoiding:
+                Dispatcher.BeginInvoke(() => Focus(VoidBox));
+                break;
+
+            case nameof(BillingViewModel.IsSettingCashier) when _viewModel.IsSettingCashier:
+                Dispatcher.BeginInvoke(() => Focus(CashierBox));
+                break;
+
             case nameof(BillingViewModel.IsTendering)
                 or nameof(BillingViewModel.IsFindingCustomer)
-                or nameof(BillingViewModel.IsReprinting):
-                if (!_viewModel.IsTendering && !_viewModel.IsFindingCustomer && !_viewModel.IsReprinting)
+                or nameof(BillingViewModel.IsReprinting)
+                or nameof(BillingViewModel.IsVoiding)
+                or nameof(BillingViewModel.IsSettingCashier):
+                if (!InAPane())
                     Dispatcher.BeginInvoke(FocusSearchBox);
                 break;
         }
     }
+
+    /// <summary>True while a pane with its own text box is open over the billing screen.</summary>
+    private bool InAPane() =>
+        _viewModel.IsTendering
+        || _viewModel.IsFindingCustomer
+        || _viewModel.IsReprinting
+        || _viewModel.IsVoiding
+        || _viewModel.IsSettingCashier;
 
     private static void Focus(TextBox box)
     {
@@ -115,7 +133,7 @@ public partial class MainBillingView : Window
     {
         // A pane with its own text box takes ordinary typing; navigation and function keys still
         // route, which is what drives the pane.
-        if (_viewModel.IsEditing || _viewModel.IsTendering || _viewModel.IsFindingCustomer || _viewModel.IsReprinting)
+        if (_viewModel.IsEditing || InAPane())
             return !PaneTextEditingKeys.Contains(key);
 
         if (!SearchBox.IsKeyboardFocused || SearchBox.Text.Length == 0)

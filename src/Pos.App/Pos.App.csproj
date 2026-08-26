@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Pos.Core.Configuration\Pos.Core.Configuration.csproj" />
     <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />
     <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
+    <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
   </ItemGroup>
 
 </Project>

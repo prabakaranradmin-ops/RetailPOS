@@ -48,6 +48,11 @@ public sealed class Keymap
         [new(Key.F12)] = PosAction.Tender,
 
         [new(Key.P, ModifierKeys.Control)] = PosAction.ReprintInvoice,
+        [new(Key.U, ModifierKeys.Control)] = PosAction.SetCashier,
+
+        // Awkward on purpose, like closing the day. Voiding cancels a sale that has already been
+        // paid for, and it is not something to reach by accident.
+        [new(Key.V, ModifierKeys.Control | ModifierKeys.Shift)] = PosAction.VoidInvoice,
 
         // Deliberately awkward. Closing the day cannot be undone, and it is not something to reach
         // by accident while the queue is still moving.

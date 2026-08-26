@@ -72,9 +72,12 @@ edge. If it does, the paper width is wrong — `48` for 80mm, `32` for 58mm.
 
 1. **Start the till.** Run `Pos.App.exe`. If it will not start it will say why in one line; the
    usual cause is a mistyped `settings.json`.
-2. **Check the float.** Count what is in the drawer and write it down. The software does not track
+2. **Say who is on the till.** `Ctrl+U`, type your name. Every sale is recorded against it, and at
+   close the report splits takings by cashier — which is what makes a drawer difference answerable
+   rather than just noted. Do it again whenever the shift changes.
+3. **Check the float.** Count what is in the drawer and write it down. The software does not track
    the opening float — the Z-report tells you what was *taken*, and you add your float to it.
-3. **Scan one item and cancel it** (`Escape`). Confirms the scanner and the catalogue are both
+4. **Scan one item and cancel it** (`Escape`). Confirms the scanner and the catalogue are both
    alive before a customer is waiting.
 
 If the printer was off overnight, turn it on before the first sale. A sale still completes with a
@@ -98,7 +101,9 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `F6` | Bring a parked bill back |
 | `F12` | **Take payment** |
 | `Ctrl+P` | Reprint a bill |
+| `Ctrl+U` | Say who is on the till |
 | `Ctrl+N` | Start over (asks twice) |
+| `Ctrl+Shift+V` | **Void a settled sale** (asks twice) |
 | `Shift+F12` | **Close the day** (asks twice) |
 
 Taking payment: `F12`, choose the tender with `↑`/`↓`, type the amount, `Enter`. Leave the amount
@@ -115,6 +120,11 @@ blank to take the whole balance. Commit again when it is fully paid. Loyalty poi
   already saved.
 - **The printer jams** — the sale is already saved. Fix the paper, then `Ctrl+P` and `Enter` for a
   duplicate of the last bill.
+- **A sale was rung up wrong and already settled** — `Ctrl+Shift+V`, then `Enter` for the last bill
+  or type the invoice number. It shows what will go; press `Enter` again to do it. The bill stays
+  in the books marked cancelled, its number stays used, loyalty points go back, and the drawer
+  opens if there is cash to return. **Only works before the day is closed** — after that the
+  correction is a credit note, which this version does not do.
 
 ---
 
@@ -217,7 +227,8 @@ tax breakdown by slab is the shape a GST return wants.
 | Scale reads nothing or will not settle | `pos test-hardware --scale`. Check the COM port and that the scale is set to stream continuously. |
 | Nothing prints | `pos test-hardware --printer`. Sales are unaffected — reprint with `Ctrl+P` once fixed. |
 | Drawer will not open | `pos test-hardware --drawer`. If it is on the printer's port, a printer fault takes the drawer with it. |
-| "Database is damaged" | Stop. Copy `pos.db` somewhere safe, then restore the newest file from `backups`. Do not keep trading on it. |
+| "Database is damaged" | Stop trading. `pos restore-db --from backups\<newest file>`. It checks the snapshot first and renames the damaged database rather than deleting it. **Everything sold since that snapshot is gone** — have the Z-reports and receipts to hand. |
+| Something odd happened and nobody can explain it | The lane keeps a log in `logs\`, one file per day. It records startup, every sale with its tenders and cashier, peripheral failures, backups, and any crash. Send the day's file. |
 
 **Never edit `pos.db` by hand, and never delete anything in `backups`.**
 
@@ -228,7 +239,8 @@ tax breakdown by slab is the shape a GST return wants.
 Known and deliberate, so nobody wastes time looking:
 
 - **No returns or refunds.** Handle them in the store's own records for now. A proper GST credit
-  note flow is a separate piece of work.
+  note flow is a separate piece of work. Voiding is not a refund — it cancels a sale that has not
+  yet been reported on a Z-report, and it stops working once the day is closed.
 - **No opening float tracking.** Count it and write it down.
 - **No stock or inventory.** The catalogue is prices, not quantities.
 - **No report other than the Z-report.** No day-range or item-wise sales reports yet.
@@ -251,6 +263,7 @@ Print this and tick it.
 
 **Each morning**
 - [ ] Till starts
+- [ ] `Ctrl+U` — cashier name set
 - [ ] Opening float counted and written down
 - [ ] One item scanned and cancelled
 

@@ -23,6 +23,12 @@ public enum BillingMode
 
     /// <summary>Finding a past invoice to print again.</summary>
     Reprint = 4,
+
+    /// <summary>Finding a settled sale to cancel.</summary>
+    Void = 5,
+
+    /// <summary>Saying who is on the till.</summary>
+    Cashier = 6,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -71,6 +77,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private readonly IInvoiceStore? _invoices;
     private readonly DayCloseService? _dayClose;
 
+    private string? _cashierName;
+    private string? _pendingVoidInvoiceNo;
+
     private bool _pendingNewBillConfirmation;
     private bool _pendingCustomerCreate;
     private bool _pendingDayClose;
@@ -89,7 +98,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         TimeSpan? maxKeystrokeGap = null,
         Func<DateTimeOffset>? now = null,
         IInvoiceStore? invoices = null,
-        DayCloseService? dayClose = null)
+        DayCloseService? dayClose = null,
+        string? cashierName = null)
     {
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(items);
@@ -102,6 +112,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         _invoices = invoices;
         _dayClose = dayClose;
+        _cashierName = string.IsNullOrWhiteSpace(cashierName) ? null : cashierName.Trim();
         _bill = bill;
         _items = items;
         _heldBills = heldBills;
@@ -216,6 +227,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             Raise(nameof(IsTendering));
             Raise(nameof(IsFindingCustomer));
             Raise(nameof(IsReprinting));
+            Raise(nameof(IsVoiding));
+            Raise(nameof(IsSettingCashier));
         }
     }
 
@@ -226,6 +239,23 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public bool IsFindingCustomer => _mode == BillingMode.Customer;
 
     public bool IsReprinting => _mode == BillingMode.Reprint;
+
+    public bool IsVoiding => _mode == BillingMode.Void;
+
+    public bool IsSettingCashier => _mode == BillingMode.Cashier;
+
+    /// <summary>Who is on the till. Recorded against every sale they ring up.</summary>
+    public string? CashierName
+    {
+        get => _cashierName;
+        private set
+        {
+            if (Set(ref _cashierName, string.IsNullOrWhiteSpace(value) ? null : value.Trim()))
+                Raise(nameof(CashierLabel));
+        }
+    }
+
+    public string CashierLabel => _cashierName ?? "not set";
 
     public EditableColumn? EditingColumn
     {
@@ -359,6 +389,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Reprint:
                 CommitReprint();
                 return;
+
+            case BillingMode.Void:
+                CommitVoid();
+                return;
+
+            case BillingMode.Cashier:
+                CommitCashier();
+                return;
         }
 
         if (IsEditing)
@@ -387,6 +425,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
             case BillingMode.Customer:
             case BillingMode.Reprint:
+            case BillingMode.Void:
+            case BillingMode.Cashier:
+                _pendingVoidInvoiceNo = null;
                 Mode = BillingMode.Billing;
                 EditBuffer = string.Empty;
                 StatusMessage = string.Empty;
@@ -640,6 +681,47 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         RefreshHeldBills();
         StatusMessage = message;
+    }
+
+    /// <summary>Cancels a sale that has already been settled.</summary>
+    public void VoidInvoice()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (_invoices is null)
+        {
+            StatusMessage = "Voiding is not available on this lane.";
+            return;
+        }
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        _pendingVoidInvoiceNo = null;
+        Mode = BillingMode.Void;
+        EditBuffer = string.Empty;
+        StatusMessage = "Commit for the last bill, or type the invoice number to void.";
+    }
+
+    /// <summary>Sets who is on the till, at the start of a shift or when it changes.</summary>
+    public void SetCashier()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        Mode = BillingMode.Cashier;
+        EditBuffer = _cashierName ?? string.Empty;
+        StatusMessage = "Type the cashier's name. Every sale from here on is recorded against it.";
     }
 
     // ---- Search internals --------------------------------------------------------------------
@@ -1179,6 +1261,93 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             PrintStatus.NoPrinterConfigured => $"Found {invoice.InvoiceNo}, but this lane has no printer.",
             _ => $"{invoice.InvoiceNo} did not print: {outcome.Detail}",
         };
+    }
+
+    /// <summary>
+    /// Finds the sale to cancel, shows what it is, and asks again. Voiding undoes a sale the
+    /// customer has already paid for, so it is never one keypress away from happening.
+    /// </summary>
+    private void CommitVoid()
+    {
+        if (_invoices is null)
+            return;
+
+        var typed = EditBuffer.Trim();
+
+        // Second press on the same invoice: do it.
+        if (_pendingVoidInvoiceNo is { } confirmed && (typed.Length == 0 || typed == confirmed))
+        {
+            _pendingVoidInvoiceNo = null;
+
+            try
+            {
+                var result = _checkout.VoidSale(confirmed, reason: null);
+
+                var message = $"{result.Invoice.InvoiceNo} voided for {result.Invoice.GrandTotal:0.00}.";
+
+                if (result.LoyaltyReversed)
+                    message += $" Points put back, balance {result.NewLoyaltyBalance}.";
+
+                if (result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.Cash))
+                    message += " Return the cash from the drawer.";
+
+                EditBuffer = string.Empty;
+                Mode = BillingMode.Billing;
+                RefreshCustomer();
+                StatusMessage = message;
+            }
+            catch (InvalidOperationException ex)
+            {
+                EditBuffer = string.Empty;
+                StatusMessage = ex.Message;
+            }
+
+            return;
+        }
+
+        var invoice = typed.Length == 0
+            ? _invoices.FindLatest(_laneId)
+            : _invoices.FindByInvoiceNo(typed);
+
+        if (invoice is null)
+        {
+            StatusMessage = typed.Length == 0
+                ? "This lane has nothing to void."
+                : $"No invoice found for '{typed}'.";
+
+            return;
+        }
+
+        if (invoice.IsVoided)
+        {
+            StatusMessage = $"{invoice.InvoiceNo} was already voided.";
+            return;
+        }
+
+        if (_invoices.IsReported(invoice.InvoiceNo))
+        {
+            StatusMessage = $"{invoice.InvoiceNo} is on a day-end report already and cannot be voided.";
+            return;
+        }
+
+        _pendingVoidInvoiceNo = invoice.InvoiceNo;
+        EditBuffer = invoice.InvoiceNo;
+
+        StatusMessage = $"Void {invoice.InvoiceNo} for {invoice.GrandTotal:0.00}, " +
+            $"{invoice.Sale.Lines.Count} line(s)? Commit again to confirm.";
+    }
+
+    private void CommitCashier()
+    {
+        var typed = EditBuffer.Trim();
+
+        CashierName = typed;
+        EditBuffer = string.Empty;
+        Mode = BillingMode.Billing;
+
+        StatusMessage = typed.Length == 0
+            ? "Cashier cleared. Sales will not be attributed to anyone."
+            : $"{typed} is on the till.";
     }
 
     // ---- Parked bill internals ---------------------------------------------------------------

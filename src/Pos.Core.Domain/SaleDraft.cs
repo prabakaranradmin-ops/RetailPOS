@@ -17,6 +17,9 @@ namespace Pos.Core.Domain;
 /// The hold token this bill was parked under before it was settled, if it was parked at all.
 /// Kept so a reprint can be traced back to the parked bill.
 /// </param>
+/// <param name="CashierName">
+/// Who rang it up. Null when the lane has nobody set — a single-operator counter still bills.
+/// </param>
 public sealed record SaleDraft(
     string LaneId,
     DateTimeOffset CreatedAt,
@@ -27,13 +30,33 @@ public sealed record SaleDraft(
     decimal ChangeDue,
     int PointsRedeemed,
     int PointsEarned,
-    string? RecalledFromToken);
+    string? RecalledFromToken,
+    string? CashierName = null);
 
 /// <summary>A sale as it now exists in the database, with the number it was given.</summary>
-public sealed record SettledInvoice(long Id, string InvoiceNo, SaleDraft Sale)
+/// <param name="VoidedAt">When it was cancelled, or null if it still stands.</param>
+/// <param name="VoidReason">Why, in the cashier's words.</param>
+public sealed record SettledInvoice(
+    long Id,
+    string InvoiceNo,
+    SaleDraft Sale,
+    DateTimeOffset? VoidedAt = null,
+    string? VoidReason = null)
 {
     public decimal GrandTotal => Sale.Totals.GrandTotal;
+
+    /// <summary>True once the sale has been cancelled. The record stays; the takings do not.</summary>
+    public bool IsVoided => VoidedAt is not null;
 }
+
+/// <summary>What happened when a sale was voided.</summary>
+/// <param name="Invoice">The cancelled invoice, as it now reads.</param>
+/// <param name="LoyaltyReversed">
+/// True when the customer's points were put back — a voided sale must not leave points spent or
+/// earned on a sale that no longer exists.
+/// </param>
+/// <param name="NewLoyaltyBalance">Their balance afterwards, or null for a walk-in.</param>
+public sealed record VoidResult(SettledInvoice Invoice, bool LoyaltyReversed, int? NewLoyaltyBalance);
 
 /// <summary>A parked bill, restored in full.</summary>
 public sealed record HeldBill(

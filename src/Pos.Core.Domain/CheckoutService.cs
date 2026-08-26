@@ -1,6 +1,7 @@
 using Pos.Core.Domain.Printing;
 using Pos.Core.Hardware.Drawer;
 using Pos.Core.Hardware.Printing;
+using Pos.Core.Logging;
 using Pos.Core.Loyalty;
 
 namespace Pos.Core.Domain;
@@ -43,7 +44,9 @@ public sealed class CheckoutService(
     LoyaltyRules? loyaltyRules = null,
     TimeProvider? clock = null,
     IPrinterService? printer = null,
-    ReceiptComposer? receipts = null)
+    ReceiptComposer? receipts = null,
+    IPosLog? log = null,
+    Func<string?>? cashier = null)
 {
     private readonly IInvoiceStore _invoices = invoices ?? throw new ArgumentNullException(nameof(invoices));
     private readonly ICustomerStore _customers = customers ?? throw new ArgumentNullException(nameof(customers));
@@ -52,6 +55,10 @@ public sealed class CheckoutService(
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly IPrinterService _printer = printer ?? new NoPrinterService();
     private readonly ReceiptComposer? _receipts = receipts;
+    private readonly IPosLog _log = log ?? NullLog.Instance;
+
+    /// <summary>Who is on the till, read at the moment a sale completes rather than at startup.</summary>
+    private readonly Func<string?> _cashier = cashier ?? (() => null);
 
     public LoyaltyRules LoyaltyRules => _loyaltyRules;
 
@@ -108,10 +115,20 @@ public sealed class CheckoutService(
             basket.ChangeDue,
             pointsRedeemed,
             pointsEarned,
-            recalledFromToken);
+            recalledFromToken,
+            _cashier());
 
         // The sale is durable from here on. Nothing below may throw the invoice away.
         var invoice = _invoices.Save(sale);
+
+        _log.Info("sale", string.Join(
+            "  ",
+            invoice.InvoiceNo,
+            $"total {totals.GrandTotal:0.00}",
+            $"lines {totals.LineCount}",
+            $"tenders [{string.Join(", ", basket.Tenders.Select(t => $"{t.Type} {t.Amount:0.00}"))}]",
+            basket.ChangeDue > 0m ? $"change {basket.ChangeDue:0.00}" : "no change",
+            sale.CashierName is { Length: > 0 } who ? $"by {who}" : "cashier not recorded"));
 
         int? newBalance = null;
 
@@ -123,7 +140,14 @@ public sealed class CheckoutService(
         }
 
         var printResult = PrintReceipt(invoice);
+
+        if (printResult.Status == PrintStatus.Failed)
+            _log.Warn("printer", $"{invoice.InvoiceNo} did not print: {printResult.Detail}");
+
         var drawerResult = ShouldOpenDrawer(basket) ? _drawer.Kick() : DrawerKickResult.NoDrawerAttached;
+
+        if (drawerResult == DrawerKickResult.Failed)
+            _log.Warn("drawer", $"the drawer did not open on {invoice.InvoiceNo} ({_drawer.Name})");
 
         return new CheckoutResult(invoice, basket.ChangeDue, pointsRedeemed, pointsEarned, newBalance, drawerResult, printResult);
     }
@@ -136,6 +160,52 @@ public sealed class CheckoutService(
     {
         ArgumentNullException.ThrowIfNull(invoice);
         return PrintReceipt(invoice, isReprint: true);
+    }
+
+    /// <summary>
+    /// Cancels a sale: marks the invoice void, puts any loyalty points back, and opens the drawer
+    /// if there is cash to return.
+    /// </summary>
+    /// <remarks>
+    /// The order is the same as everywhere else — the record changes first, then the peripherals
+    /// and the balance follow. Putting the points back is not optional: a sale that no longer
+    /// exists must not have spent or earned anything, and a customer whose points were taken by a
+    /// mis-keyed bill will notice.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// If the invoice is already void, or has already been reported on a Z-report — a closed day is
+    /// corrected with a credit note, not by changing a figure that has been filed.
+    /// </exception>
+    public VoidResult VoidSale(string invoiceNo, string? reason = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(invoiceNo);
+
+        var voided = _invoices.Void(invoiceNo, _clock.GetLocalNow(), reason)
+            ?? throw new InvalidOperationException($"There is no invoice numbered {invoiceNo}.");
+
+        var reversed = false;
+        int? newBalance = null;
+
+        if (voided.Sale.Customer is { } customer && (voided.Sale.PointsRedeemed > 0 || voided.Sale.PointsEarned > 0))
+        {
+            // Undo the movement this sale caused: give back what it spent, take back what it
+            // earned. Clamped at zero, because a balance can never go negative however the points
+            // have moved since.
+            newBalance = Math.Max(0, customer.LoyaltyBalance + voided.Sale.PointsRedeemed - voided.Sale.PointsEarned);
+            _customers.UpdateLoyaltyBalance(customer.Id, newBalance.Value);
+            customer.LoyaltyBalance = newBalance.Value;
+            reversed = true;
+        }
+
+        // Cash taken on the original sale has to come back out of the drawer.
+        if (_drawer.IsConfigured && voided.Sale.Payments.Any(p => p.Type == TenderType.Cash))
+            _drawer.Kick();
+
+        _log.Info("void", $"{voided.InvoiceNo} voided for {voided.GrandTotal:0.00}" +
+            (reason is { Length: > 0 } ? $", reason: {reason}" : string.Empty) +
+            (reversed ? $", loyalty back to {newBalance}" : string.Empty));
+
+        return new VoidResult(voided, reversed, newBalance);
     }
 
     private PrintOutcome PrintReceipt(SettledInvoice invoice, bool isReprint = false)

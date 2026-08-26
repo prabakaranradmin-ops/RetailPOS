@@ -149,6 +149,22 @@ reconciliations (gross less discount, taxable plus tax, tenders less change) are
 against net sales, because a Z-report that does not add up is the one a shopkeeper has to
 reconstruct by hand.
 
+**Operational gaps** — passing
+- [x] Voiding: what it does, what it refuses, loyalty reversal, the day-end boundary, the Z-report — `VoidSaleTests`, `VoidAndCashierFlowTests`
+- [x] Logging: entries reach disk, stay on one line, roll by day and by size, prune, never throw — `FileLogTests`
+- [x] Restore: sound snapshot restored, damaged one refused, nothing ever deleted — `DatabaseRestoreTests`
+- [x] Cashier attribution end to end, including a shift change mid-day — `VoidAndCashierFlowTests`
+
+**On the void tests.** The one that matters most is that an invoice already on a Z-report cannot be
+voided — a closed day's figures have been filed, and changing them alters a number somebody has
+acted on. The others check that a void leaves the record and the number alone while removing the
+takings, that points go back, and that a voided sale is reported once and never again.
+
+**On the log tests.** Two are about what must not happen rather than what must: a write that fails
+is swallowed, because a lane that cannot log still has to sell things; and nothing is buffered,
+because a log still in memory when the power goes out is a log of exactly the moment nobody can
+explain.
+
 ## Reporting
 
 At the end of each phase, produce a short pass/fail summary before marking the phase complete in `IMPLEMENTATION_PLAN.md`.

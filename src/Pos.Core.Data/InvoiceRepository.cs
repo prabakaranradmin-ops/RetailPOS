@@ -92,11 +92,11 @@ public sealed class InvoiceRepository : IInvoiceStore
             INSERT INTO invoices
               (invoice_no, lane_id, created_at, customer_id, status, hold_token,
                subtotal_taxable, total_discount, total_cgst, total_sgst, total_igst, grand_total,
-               points_redeemed, points_earned, change_due)
+               points_redeemed, points_earned, change_due, cashier_name)
             VALUES
               ($invoiceNo, $lane, $createdAt, $customerId, $status, $holdToken,
                $taxable, $discount, $cgst, $sgst, $igst, $grandTotal,
-               $pointsRedeemed, $pointsEarned, $changeDue);
+               $pointsRedeemed, $pointsEarned, $changeDue, $cashier);
             SELECT last_insert_rowid();
             """;
 
@@ -116,6 +116,7 @@ public sealed class InvoiceRepository : IInvoiceStore
         command.Parameters.AddWithValue("$pointsRedeemed", sale.PointsRedeemed);
         command.Parameters.AddWithValue("$pointsEarned", sale.PointsEarned);
         command.Parameters.AddWithValue("$changeDue", sale.ChangeDue);
+        command.Parameters.AddWithValue("$cashier", (object?)sale.CashierName ?? DBNull.Value);
 
         return Convert.ToInt64(command.ExecuteScalar());
     }
@@ -235,6 +236,78 @@ public sealed class InvoiceRepository : IInvoiceStore
             mobileNo.Trim()));
     }
 
+    /// <summary>
+    /// Cancels a sale in place: the row stays, the number stays consumed, the status changes.
+    /// </summary>
+    /// <remarks>
+    /// Refused once the invoice has been reported on a Z-report. That day's figures have been
+    /// printed and filed, and changing them afterwards alters a number somebody has already acted
+    /// on — the correction for a closed day is a credit note, which is out of scope for now. Doing
+    /// the check and the update in one transaction stops a close landing in between.
+    /// </remarks>
+    public SettledInvoice? Void(string invoiceNo, DateTimeOffset voidedAt, string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceNo))
+            return null;
+
+        var number = invoiceNo.Trim();
+
+        using (var connection = _database.OpenConnection())
+        using (var transaction = connection.BeginTransaction(deferred: false))
+        {
+            using (var check = connection.CreateCommand())
+            {
+                check.Transaction = transaction;
+                check.CommandText = "SELECT status, day_close_id, voided_at FROM invoices WHERE invoice_no = $no;";
+                check.Parameters.AddWithValue("$no", number);
+
+                using var reader = check.ExecuteReader();
+
+                if (!reader.Read())
+                    return null;
+
+                if (!reader.IsDBNull(2))
+                    throw new InvalidOperationException($"{number} has already been voided.");
+
+                if (!reader.IsDBNull(1))
+                    throw new InvalidOperationException($"{number} has already been reported on a day-end report and cannot be voided. A closed day is corrected with a credit note.");
+            }
+
+            using (var update = connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = """
+                    UPDATE invoices
+                    SET status = $cancelled, voided_at = $voidedAt, void_reason = $reason
+                    WHERE invoice_no = $no;
+                    """;
+                update.Parameters.AddWithValue("$cancelled", (int)InvoiceStatus.Cancelled);
+                update.Parameters.AddWithValue("$voidedAt", voidedAt);
+                update.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
+                update.Parameters.AddWithValue("$no", number);
+                update.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        }
+
+        return FindByInvoiceNo(number);
+    }
+
+    public bool IsReported(string invoiceNo)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceNo))
+            return false;
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT day_close_id FROM invoices WHERE invoice_no = $no;";
+        command.Parameters.AddWithValue("$no", invoiceNo.Trim());
+
+        var value = command.ExecuteScalar();
+        return value is not null and not DBNull;
+    }
+
     private string? ScalarInvoiceNo(string sql, string key)
     {
         using var connection = _database.OpenConnection();
@@ -256,6 +329,8 @@ public sealed class InvoiceRepository : IInvoiceStore
 
         long invoiceId;
         SaleDraft sale;
+        DateTimeOffset? voidedAt;
+        string? voidReason;
 
         using (var command = connection.CreateCommand())
         {
@@ -263,7 +338,8 @@ public sealed class InvoiceRepository : IInvoiceStore
                 SELECT i.id, i.lane_id, i.created_at, i.hold_token,
                        i.subtotal_taxable, i.total_discount, i.total_cgst, i.total_sgst,
                        i.total_igst, i.grand_total, i.points_redeemed, i.points_earned, i.change_due,
-                       c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code
+                       c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code,
+                       i.cashier_name, i.voided_at, i.void_reason
                 FROM invoices i
                 LEFT JOIN customers c ON c.id = i.customer_id
                 WHERE i.invoice_no = $invoiceNo;
@@ -308,7 +384,11 @@ public sealed class InvoiceRepository : IInvoiceStore
                 reader.GetDecimal(12),
                 reader.GetInt32(10),
                 reader.GetInt32(11),
-                reader.IsDBNull(3) ? null : reader.GetString(3));
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(18) ? null : reader.GetString(18));
+
+            voidedAt = reader.IsDBNull(19) ? null : reader.GetDateTimeOffset(19);
+            voidReason = reader.IsDBNull(20) ? null : reader.GetString(20);
         }
 
         var lines = ReadLines(connection, invoiceId);
@@ -326,7 +406,7 @@ public sealed class InvoiceRepository : IInvoiceStore
             },
         };
 
-        return new SettledInvoice(invoiceId, invoiceNo.Trim(), restored);
+        return new SettledInvoice(invoiceId, invoiceNo.Trim(), restored, voidedAt, voidReason);
     }
 
     private static List<InvoiceLine> ReadLines(SqliteConnection connection, long invoiceId)

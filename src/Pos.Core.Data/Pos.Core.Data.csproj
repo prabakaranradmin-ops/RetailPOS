@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />
+    <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
   </ItemGroup>
 
   <ItemGroup>

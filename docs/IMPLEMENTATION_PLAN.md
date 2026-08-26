@@ -254,6 +254,49 @@ Decisions taken:
   — GST slabs, barcode check digits, MRP — without the data layer depending on the hardware layer
   where the barcode rules live.
 
+## Operational gaps — **complete** *(added 2026-08-26, approved)*
+
+Four things a pilot would have exposed, none of them in the SRS.
+
+- **Voiding.** `InvoiceStatus.Cancelled` was declared and never written — a mis-keyed sale had no
+  recourse in software at all. `Ctrl+Shift+V` at the till, or `pos void-invoice`.
+- **Logging.** There was none. A cashier saying "it did something strange" left no trail, because
+  the status line is gone the moment the next message replaces it.
+- **Restore.** `pos check-db` told the operator to restore from a backup, and there was no restore
+  command. `pos restore-db --from <snapshot>`.
+- **Cashier attribution.** Nobody knew who rang up a sale, so a short drawer was unattributable.
+
+Decisions taken:
+- **A void may only happen before the day is closed.** Once an invoice has appeared on a Z-report
+  its figures have been printed and filed, and changing them alters a number somebody has already
+  acted on. That correction is a credit note, which is out of scope. Enforced in the repository
+  inside the same transaction as the check, so a close cannot land in between.
+- **The invoice stays and the number stays used.** A number that vanished is harder to explain than
+  one that is visibly void, and a GST run has to be unbroken.
+- **Voided sales are stamped with the close that reported them**, exactly like settled ones. They
+  contribute nothing to takings but appear on that report's audit line — and stamping is what stops
+  the same void being counted again the next night.
+- **A void puts loyalty points back**, both spent and earned. A sale that no longer exists must not
+  have moved a balance, and a customer whose points went on a mis-keyed bill will notice.
+- **A void opens the drawer when the original took cash**, because that cash has to come back out.
+- **Restoring never deletes.** The snapshot is verified before anything is touched, the database it
+  replaces is renamed rather than removed, its write-ahead log moves with it so SQLite cannot
+  replay it onto the restored file, and the result is opened and read before success is reported.
+  If the copy fails after the move, the original is put back.
+- **Cashier is a name, not a login.** A pilot lane with one operator should not have to sign in, and
+  a shared shop password is worse than nothing — it looks like access control and attributes
+  nothing. Set with `Ctrl+U`, or defaulted in `settings.json`. Read at the moment a sale completes,
+  so a shift change part way through a bill attributes it to whoever finished it.
+- **The cashier breakdown is recomputed from the invoices a close stamped**, not stored twice. The
+  `day_close_id` link makes an old report's breakdown reproducible without another table.
+- **The log never throws and always flushes.** A lane that cannot write its log still has to sell
+  things; a log still in a buffer when the power goes out is a log of exactly the moment nobody can
+  explain.
+
+Deferred by decision: ad-hoc catalogue creation at the till. An open-price miscellaneous line was
+discussed and is **not** built — it is the one item on the list a pilot can work around, and the
+pilot will show how often it is actually needed.
+
 ## Phase 6 — Pilot — **package and dry run complete; on-site run pending**
 - Deploy to one lane at a pilot store, run in parallel with existing billing if applicable
 - Monitor for GST calculation discrepancies, hardware reliability, keyboard workflow friction

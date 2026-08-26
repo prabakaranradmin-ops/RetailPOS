@@ -59,14 +59,20 @@ public sealed class DayCloseRepository : IDayCloseStore
         using (var stamp = connection.CreateCommand())
         {
             stamp.Transaction = transaction;
+
+            // Voided invoices are stamped as well as settled ones. They contribute nothing to
+            // takings, but they appear on this report's audit line and must not appear again on
+            // tomorrow's — and stamping them is also what stops a void being attempted on an
+            // invoice whose day has already been reported.
             stamp.CommandText = """
                 UPDATE invoices
                 SET day_close_id = $id
-                WHERE lane_id = $lane AND day_close_id IS NULL AND status = $settled;
+                WHERE lane_id = $lane AND day_close_id IS NULL AND status IN ($settled, $cancelled);
                 """;
             stamp.Parameters.AddWithValue("$id", id);
             stamp.Parameters.AddWithValue("$lane", laneId);
             stamp.Parameters.AddWithValue("$settled", (int)InvoiceStatus.Settled);
+            stamp.Parameters.AddWithValue("$cancelled", (int)InvoiceStatus.Cancelled);
             stamp.ExecuteNonQuery();
         }
 
@@ -169,6 +175,62 @@ public sealed class DayCloseRepository : IDayCloseStore
                 tenders.Add(new TenderTotal((TenderType)reader.GetInt32(0), Round(reader.GetDouble(1)), reader.GetInt32(2)));
         }
 
+        // Voided sales are not takings and carry no tax liability, but a report that simply omits
+        // them cannot be reconciled against the invoice run — the numbers would have holes with no
+        // explanation. Count and value go on their own line.
+        var voidedCount = 0;
+        var voidedValue = 0m;
+
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT COUNT(*), COALESCE(SUM(CAST(grand_total AS REAL)), 0)
+                FROM invoices
+                WHERE lane_id = $lane AND day_close_id IS NULL AND status = $cancelled;
+                """;
+            command.Parameters.AddWithValue("$lane", laneId);
+            command.Parameters.AddWithValue("$cancelled", (int)InvoiceStatus.Cancelled);
+
+            using var reader = command.ExecuteReader();
+            reader.Read();
+
+            voidedCount = reader.GetInt32(0);
+            voidedValue = Round(reader.GetDouble(1));
+        }
+
+        var cashiers = new List<CashierTotal>();
+
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = $"""
+                SELECT COALESCE(i.cashier_name, ''),
+                       COUNT(*),
+                       SUM(CAST(i.grand_total AS REAL)),
+                       COALESCE(SUM((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p
+                                     WHERE p.invoice_id = i.id AND p.tender_type = $cash)), 0)
+                       - COALESCE(SUM(CAST(i.change_due AS REAL)), 0)
+                FROM invoices i
+                WHERE i.{unreported}
+                GROUP BY COALESCE(i.cashier_name, '')
+                ORDER BY COALESCE(i.cashier_name, '');
+                """;
+            Bind(command, laneId);
+            command.Parameters.AddWithValue("$cash", (int)TenderType.Cash);
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                cashiers.Add(new CashierTotal(
+                    reader.GetString(0) is { Length: > 0 } name ? name : null,
+                    reader.GetInt32(1),
+                    Round(reader.GetDouble(2)),
+                    Round(reader.GetDouble(3))));
+            }
+        }
+
         var slabs = new List<TaxSlabTotal>();
 
         using (var command = connection.CreateCommand())
@@ -225,7 +287,10 @@ public sealed class DayCloseRepository : IDayCloseStore
             PointsEarned: earned,
             Tenders: tenders,
             TaxSlabs: slabs,
-            HeldBillsOutstanding: CountHeldBills(laneId));
+            HeldBillsOutstanding: CountHeldBills(laneId),
+            VoidedCount: voidedCount,
+            VoidedValue: voidedValue,
+            Cashiers: cashiers);
 
         static void Bind(SqliteCommand command, string laneId)
         {
@@ -256,10 +321,12 @@ public sealed class DayCloseRepository : IDayCloseStore
         command.CommandText = """
             INSERT INTO day_closes
               (lane_id, closed_at, opened_at, invoice_count, gross_sales, total_discount, net_sales,
-               taxable_value, total_cgst, total_sgst, total_igst, cash_expected, points_redeemed, points_earned)
+               taxable_value, total_cgst, total_sgst, total_igst, cash_expected, points_redeemed,
+               points_earned, voided_count, voided_value)
             VALUES
               ($lane, $closedAt, $openedAt, $count, $gross, $discount, $net,
-               $taxable, $cgst, $sgst, $igst, $cash, $redeemed, $earned);
+               $taxable, $cgst, $sgst, $igst, $cash, $redeemed,
+               $earned, $voidedCount, $voidedValue);
             SELECT last_insert_rowid();
             """;
 
@@ -277,6 +344,8 @@ public sealed class DayCloseRepository : IDayCloseStore
         command.Parameters.AddWithValue("$cash", summary.CashExpected);
         command.Parameters.AddWithValue("$redeemed", summary.PointsRedeemed);
         command.Parameters.AddWithValue("$earned", summary.PointsEarned);
+        command.Parameters.AddWithValue("$voidedCount", summary.VoidedCount);
+        command.Parameters.AddWithValue("$voidedValue", summary.VoidedValue);
 
         return Convert.ToInt64(command.ExecuteScalar());
     }
@@ -330,7 +399,7 @@ public sealed class DayCloseRepository : IDayCloseStore
             command.CommandText = """
                 SELECT lane_id, closed_at, opened_at, invoice_count, gross_sales, total_discount,
                        net_sales, taxable_value, total_cgst, total_sgst, total_igst, cash_expected,
-                       points_redeemed, points_earned
+                       points_redeemed, points_earned, voided_count, voided_value
                 FROM day_closes WHERE id = $id;
                 """;
             command.Parameters.AddWithValue("$id", id);
@@ -362,7 +431,43 @@ public sealed class DayCloseRepository : IDayCloseStore
                 reader.GetInt32(13),
                 Tenders: [],
                 TaxSlabs: [],
-                HeldBillsOutstanding: 0);
+                HeldBillsOutstanding: 0,
+                VoidedCount: reader.GetInt32(14),
+                VoidedValue: reader.GetDecimal(15));
+        }
+
+        // Recomputed from the invoices this close stamped, rather than stored a second time. The
+        // link makes an old report's cashier breakdown reproducible without another table.
+        var cashiers = new List<CashierTotal>();
+
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT COALESCE(i.cashier_name, ''),
+                       COUNT(*),
+                       SUM(CAST(i.grand_total AS REAL)),
+                       COALESCE(SUM((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p
+                                     WHERE p.invoice_id = i.id AND p.tender_type = $cash)), 0)
+                       - COALESCE(SUM(CAST(i.change_due AS REAL)), 0)
+                FROM invoices i
+                WHERE i.day_close_id = $id AND i.status = $settled
+                GROUP BY COALESCE(i.cashier_name, '')
+                ORDER BY COALESCE(i.cashier_name, '');
+                """;
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$settled", (int)InvoiceStatus.Settled);
+            command.Parameters.AddWithValue("$cash", (int)TenderType.Cash);
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                cashiers.Add(new CashierTotal(
+                    reader.GetString(0) is { Length: > 0 } name ? name : null,
+                    reader.GetInt32(1),
+                    Round(reader.GetDouble(2)),
+                    Round(reader.GetDouble(3))));
+            }
         }
 
         var tenders = new List<TenderTotal>();
@@ -400,6 +505,7 @@ public sealed class DayCloseRepository : IDayCloseStore
         {
             Tenders = tenders,
             TaxSlabs = slabs,
+            Cashiers = cashiers,
             ChangeGiven = Money.ToPresentation(cash - summary.CashExpected),
         };
     }

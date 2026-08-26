@@ -12,6 +12,17 @@ public readonly record struct TaxSlabTotal(decimal GstRate, decimal TaxableValue
     public decimal Tax => Cgst + Sgst + Igst;
 }
 
+/// <param name="Name">Who was on the till, or null for sales rung up with nobody set.</param>
+/// <param name="InvoiceCount">How many sales they took.</param>
+/// <param name="NetSales">What those came to.</param>
+/// <param name="CashHeld">
+/// Cash they took less change they gave. What attributes a drawer difference to a shift.
+/// </param>
+public readonly record struct CashierTotal(string? Name, int InvoiceCount, decimal NetSales, decimal CashHeld)
+{
+    public string Label => Name ?? "(not recorded)";
+}
+
 /// <summary>
 /// A lane's Z-report: everything it took between one close and the next.
 /// </summary>
@@ -57,9 +68,21 @@ public sealed record DayCloseSummary(
     int PointsEarned,
     IReadOnlyList<TenderTotal> Tenders,
     IReadOnlyList<TaxSlabTotal> TaxSlabs,
-    int HeldBillsOutstanding)
+    int HeldBillsOutstanding,
+    int VoidedCount = 0,
+    decimal VoidedValue = 0m,
+    IReadOnlyList<CashierTotal>? Cashiers = null)
 {
     public decimal TotalTax => TotalCgst + TotalSgst + TotalIgst;
+
+    /// <summary>Who traded on this report. Empty when nobody was recorded.</summary>
+    public IReadOnlyList<CashierTotal> CashierTotals => Cashiers ?? [];
+
+    /// <summary>
+    /// True when more than one person is named, which is when a drawer difference becomes worth
+    /// attributing rather than just noting.
+    /// </summary>
+    public bool HasMultipleCashiers => CashierTotals.Count(c => c.Name is not null) > 1;
 
     /// <summary>True for a lane that closed without taking anything.</summary>
     public bool TookNothing => InvoiceCount == 0;

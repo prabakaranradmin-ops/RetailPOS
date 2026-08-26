@@ -101,11 +101,55 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
             report.Columns("Earned", day.PointsEarned.ToString(CultureInfo.InvariantCulture));
         }
 
+        WriteVoids(report, day);
+        WriteCashiers(report, day);
+
         WriteReconciliation(report, day);
         WriteHeldBills(report, day);
 
         report.Cut();
         return report;
+    }
+
+    /// <summary>
+    /// Voided sales, on their own line.
+    /// </summary>
+    /// <remarks>
+    /// They are not takings and carry no tax, so they are nowhere in the figures above. But a
+    /// report that simply omits them cannot be reconciled against the invoice run — the numbers
+    /// would have gaps with no explanation on the page. Printing the count and value is what lets
+    /// somebody tie the two views together.
+    /// </remarks>
+    private static void WriteVoids(ReceiptBuilder report, DayCloseSummary day)
+    {
+        if (day.VoidedCount == 0)
+            return;
+
+        report.Rule();
+        report.Text("Voided", bold: true);
+        report.Columns("Invoices voided", day.VoidedCount.ToString(CultureInfo.InvariantCulture));
+        report.Columns("Value voided", Amount(day.VoidedValue));
+        report.Text("Excluded from sales and tax above.");
+    }
+
+    /// <summary>
+    /// Who traded, and how much cash each of them holds. This is what turns "the drawer is 500
+    /// short" from an unanswerable question into a shift to ask about.
+    /// </summary>
+    private static void WriteCashiers(ReceiptBuilder report, DayCloseSummary day)
+    {
+        var cashiers = day.CashierTotals;
+
+        // With one person on the till all day this says nothing the rest of the report does not.
+        if (cashiers.Count <= 1)
+            return;
+
+        report.Rule();
+        report.Text("By cashier", bold: true);
+        report.Row("Name", new ColumnValue("Sales", 11), new ColumnValue("Cash", 11));
+
+        foreach (var cashier in cashiers)
+            report.Row(cashier.Label, new ColumnValue(Amount(cashier.NetSales), 11), new ColumnValue(Amount(cashier.CashHeld), 11));
     }
 
     /// <summary>
