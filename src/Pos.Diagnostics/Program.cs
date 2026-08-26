@@ -1,3 +1,5 @@
+using System.Text;
+using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain.Import;
@@ -402,6 +404,46 @@ switch (command)
         return report.IsHealthy ? 0 : 1;
     }
 
+    case "dashboard":
+    {
+        // Read-only, and on its own connection. SQLite in WAL mode lets this run while the till is
+        // billing, so a shopkeeper can look at the day's figures from the back room at four o'clock
+        // without a cashier noticing.
+        var days = Math.Clamp(ParseIntOption(args, "--days") ?? 30, 1, 3650);
+        var to = DateTimeOffset.Now;
+        var from = to.Date.AddDays(-(days - 1));
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var data = new DashboardQuery(database).Gather(
+            settings.LaneId,
+            new DateTimeOffset(from, to.Offset),
+            to,
+            Math.Clamp(ParseIntOption(args, "--top") ?? 10, 1, 100));
+
+        var outPath = ParseStringOption(args, "--out") ?? Path.Combine(dataDirectory, "dashboard.html");
+        outPath = Path.GetFullPath(outPath);
+
+        var directory = Path.GetDirectoryName(outPath);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllText(outPath, DashboardPage.Render(data, settings.Store.Name), new UTF8Encoding(true));
+
+        Console.WriteLine();
+        Console.WriteLine($"  Window        : {days} days to {to:dd MMM yyyy}");
+        Console.WriteLine($"  Bills         : {data.Range.Bills:N0}");
+        Console.WriteLine($"  Net sales     : {data.Range.NetSales:N2}");
+        Console.WriteLine($"  Read in       : {data.Elapsed.TotalMilliseconds:N0} ms");
+        Console.WriteLine();
+        Console.WriteLine($"Saved to {outPath}");
+
+        log.Info("tool", $"dashboard over {days} days: {data.Range.Bills} bills, read in {data.Elapsed.TotalMilliseconds:N0} ms");
+
+        return 0;
+    }
+
     case "receipt-preview":
     {
         // Renders the sample receipt as text without touching a printer, which is how the layout
@@ -573,6 +615,12 @@ static void WriteHelp()
               Checks the lane's peripherals. With no flags it checks all of them.
               The printer and drawer checks ask you to confirm what physically
               happened, because no software can see paper come out of a printer.
+
+          pos dashboard [--days N] [--top N] [--out <path>]
+              The shop's figures as one HTML page: takings, the hourly rush,
+              what sells, how customers paid, and GST by slab. Reads the books
+              without writing to them, so it can be run while the till is busy.
+              Defaults to the last 30 days.
 
           pos receipt-preview [--width N] [--png <path>]
               Renders a sample receipt as text. Touches no hardware, so it works

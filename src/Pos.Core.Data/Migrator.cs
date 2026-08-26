@@ -18,6 +18,7 @@ public static class Migrator
         "004_day_close.sql",
         "005_void_and_cashier.sql",
         "006_fiscal_year_sequences.sql",
+        "007_dashboard_indexes.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

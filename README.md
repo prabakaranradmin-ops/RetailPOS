@@ -203,6 +203,38 @@ them, so turning it off on a two-till shop means both issue the same numbers and
 `sequencePadding` and the prefix are set in `settings.json`, and they have to be right before the
 shop's first sale — a number cannot be changed once the bill is in a customer's hand.
 
+## The dashboard
+
+```
+pos dashboard [--days 30] [--top 10] [--out dashboard.html]
+```
+
+Writes one self-contained HTML page: takings against yesterday, the hourly rush, a daily trend with
+a seven-day mean, a weekday-against-time grid, what sells, how customers paid, GST by slab, what was
+discounted and voided, and the loyalty position. No scripts, no fonts, no network — it opens on a
+phone in the back room and can be sent to an accountant as one file.
+
+It reads the books and writes nothing, on its own connection. SQLite in WAL mode lets it run while
+the till is billing, so a shopkeeper can look at four o'clock's figures at four o'clock.
+
+**Nothing is ever pruned** — every bill and every line stays for as long as the shop keeps the file,
+because that is what makes them an audit trail. Measured on a 195MB database holding two years of a
+busy grocery (245,314 invoices, 981,769 lines):
+
+| | Fresh database | Two years of history |
+|---|---|---|
+| Saving an invoice | 3.59 ms | **4.21 ms** |
+| Barcode lookup | 0.028 ms | **0.029 ms** |
+
+The counter does not notice the history. The dashboard itself costs 259ms over 30 days, 617ms over
+90, and 2.6s over a full year — it is a report somebody runs on purpose, not something a customer
+waits at.
+
+**What it cannot show.** The books record what was sold and for how much, and nothing about what it
+cost or what shelf it came from. So there is no margin, no category split and no wastage: those need
+a cost price and a category on the catalogue, which this version does not carry. Returns are absent
+because this version does not do them.
+
 ## Closing the day
 
 `Shift+F12` at the till, or `pos close-day`. The Z-report leads with the cash figure, because the

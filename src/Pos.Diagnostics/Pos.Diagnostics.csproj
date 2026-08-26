@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
     <ProjectReference Include="..\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
     <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
+    <ProjectReference Include="..\Pos.Core.Analytics\Pos.Core.Analytics.csproj" />
   </ItemGroup>
 
 </Project>

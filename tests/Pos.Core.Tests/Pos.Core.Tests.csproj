@@ -20,6 +20,7 @@
     <ProjectReference Include="..\Pos.TestSupport\Pos.TestSupport.csproj" />
     <!-- Referenced so the crash tests can be sure the harness exists; nothing is called from it. -->
     <ProjectReference Include="..\Pos.CrashHarness\Pos.CrashHarness.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Pos.Core.Analytics\Pos.Core.Analytics.csproj" />
   </ItemGroup>
 
 </Project>

@@ -189,6 +189,28 @@ and a shopkeeper reads it as words — cannot be asserted by any of this. It was
 the bill and looking at it, and `pos receipt-preview --png` exists so the same check can be made on
 the lane before it opens.
 
+**Dashboard and retention** — passing
+- [x] Figures agree with the invoices to the paise, including 200 awkward thirds — `DashboardTests`
+- [x] GST by slab equals what the lines were actually charged — `DashboardTests`
+- [x] A voided bill counts only as a void, and reaches no other figure — `DashboardTests`
+- [x] Another lane's trading, and sales outside the window, are excluded — `DashboardTests`
+- [x] A shop that has not traded renders as an empty shop, not a gap — `DashboardTests`
+- [x] Hourly, daily and weekday shapes put a sale where it happened — `DashboardTests`
+- [x] The page is self-contained: no scripts, no network, and a shop name cannot inject markup — `DashboardTests`
+
+**On summing money.** Amounts are stored as text and SQLite has no decimal type, so the aggregates
+multiply by 100 and sum whole paise as integers. `SUM(CAST(x AS REAL))` drifts across hundreds of
+thousands of rows, and the figure it drifts on is the one a GST return is filed from. The test that
+pins this sums two hundred amounts of 33.33 and expects exactly 6,666.00.
+
+**On the claim that keeping everything is free.** Nothing is ever pruned, so the honest question is
+what that costs the counter. Measured against a 195MB database of two years' trading — 245,314
+invoices, 981,769 lines — an invoice save goes from 3.59ms to 4.21ms and a barcode lookup from
+0.028ms to 0.029ms. The dashboard is 259ms over 30 days and 2.6s over a year, which is a report
+somebody runs rather than something a customer waits at. Migration 007 is what holds that: without
+its partial index the aggregates degrade with the size of the history rather than the size of the
+window.
+
 **Operational gaps** — passing
 - [x] Voiding: what it does, what it refuses, loyalty reversal, the day-end boundary, the Z-report — `VoidSaleTests`, `VoidAndCashierFlowTests`
 - [x] Logging: entries reach disk, stay on one line, roll by day and by size, prune, never throw — `FileLogTests`
