@@ -50,6 +50,53 @@ result without using a roll of paper.
 A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
 than letting it reach a customer.
 
+## Worked example: the pilot lane
+
+The settled decisions for the first shop. Copy this over the template's corresponding blocks, then
+fill in the four identity fields from the shop's **own paperwork** — its GST certificate and FSSAI
+licence, not from a photograph of an old bill. A GSTIN with one character wrong is printed on every
+invoice the shop issues, and nothing in the software can catch it.
+
+```json
+{
+  "laneId": "L1",
+  "outletStateCode": "33",
+  "receiptLanguage": "Tamil",
+
+  "store": {
+    "name": "FILL IN - the shop name, in Tamil",
+    "addressLine1": "FILL IN",
+    "addressLine2": "FILL IN",
+    "gstin": "FILL IN - from the GST certificate",
+    "fssaiNumber": "FILL IN - from the FSSAI licence",
+    "customerCarePhone": "FILL IN",
+    "currencyPrefix": "Rs:"
+  },
+
+  "invoiceNumber": {
+    "storePrefix": "RM",
+    "includeLaneSegment": false,
+    "sequencePadding": 0
+  },
+
+  "hardware": {
+    "printerName": "FILL IN - exact name from Printers & Scanners",
+    "printerPaperWidthChars": 48,
+    "printerRasterMode": "Auto"
+  }
+}
+```
+
+Two of these are decisions rather than facts, and both are worth understanding before copying them:
+
+- **`includeLaneSegment: false`** gives `RM/26-27/11358` rather than `RM/26-27/L1-11358`. It is
+  correct for a shop with one till and **wrong the day a second till is added** — the two would
+  issue identical invoice numbers with nothing to notice. If a second counter is ever likely, turn
+  it on now; the shape of the number cannot be changed once bills have been issued under it.
+- **`printerRasterMode: "Auto"`** assumes the printer is on USB. A Tamil receipt is around 27KB
+  against 2KB in English, which is imperceptible over USB and about half a minute over a 9600-baud
+  serial line. Section 1b of `HARDWARE_SIGNOFF.md` measures it. Do not assume.
+
 ## Hardware
 
 Leave a peripheral blank and the lane simply does not have one — it still bills.

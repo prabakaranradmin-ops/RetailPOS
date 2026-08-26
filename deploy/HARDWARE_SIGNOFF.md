@@ -80,6 +80,38 @@ Font used (printed by `pos receipt-preview`): ____________________
 
 **Result:** PASS / FAIL / N/A  Notes: ________________________________________
 
+## 1b. How long a receipt takes
+
+**Do not skip this on a Tamil lane.** It is the one check that can fail on a counter that passed
+everything else.
+
+A Tamil receipt is not the same size as an English one. The Tamil is *drawn* and sent as an image —
+about **27KB against 2KB** for the same bill in English. Over USB that is imperceptible. Over a
+printer on a **serial port at 9600 baud** it is roughly **half a minute per bill**, which no queue
+will tolerate. Nobody can tell which they have by looking; it has to be timed.
+
+`pos test-hardware --printer` prints the job size and how long the handover took. Record both, and
+time the paper yourself with a phone — the software figure is the time to hand the job to the
+Windows spooler, not the time until the paper stops moving.
+
+| | Job size (bytes) | Handover (ms) | Paper stopped after (seconds) |
+|---|---|---|---|
+| This lane's receipt | | | |
+
+- [ ] The paper stops within **3 seconds** of pressing the key
+- [ ] The tool did not print its `SLOW:` warning
+- [ ] Print it three times in a row — the third is no slower than the first
+
+**If it is slow.** The cause is nearly always the connection, not the software. In order of
+preference: move the printer to USB; or set `"printerRasterMode": "Never"` and
+`"receiptLanguage": "English"`, which drops the receipt to about 2KB and prints instantly — at the
+cost of an English-only bill. Do not open a shop on a till that takes ten seconds to hand over a
+receipt.
+
+Connection (USB / serial / network): ____________  Baud, if serial: __________
+
+**Result:** PASS / FAIL  Notes: ________________________________________
+
 ## 2. Cash drawer
 
 - [ ] The drawer physically opened
@@ -143,6 +175,8 @@ With all four passing, ring one up on the till itself:
 - [ ] Receipt prints, drawer opens, change matches
 - [ ] `Ctrl+P` reprints the bill, marked as a reprint
 - [ ] `Shift+F12` twice closes the day and prints the Z-report
+- [ ] On a Tamil lane, the Z-report is in Tamil too — `நாள் இறுதி அறிக்கை (Z)` at the head, and
+      `பணப்பெட்டியில் இருக்க வேண்டிய தொகை` above the cash figure
 - [ ] Cash counted matches the report's **CASH IN DRAWER SHOULD BE**, plus the opening float
 - [ ] The report says it reconciles
 

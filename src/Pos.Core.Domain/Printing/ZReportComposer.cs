@@ -12,11 +12,30 @@ namespace Pos.Core.Domain.Printing;
 /// afterwards, or filed. The reconciliation lines are printed rather than assumed, so a report that
 /// does not add up says so on its face instead of waiting to be discovered on a return.
 /// </remarks>
-public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = ReceiptBuilder.Width80Mm)
+public sealed class ZReportComposer
 {
-    private readonly StoreProfile _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly StoreProfile _store;
 
-    public int PaperWidthChars { get; } = paperWidthChars;
+    public ZReportComposer(
+        StoreProfile store,
+        int paperWidthChars = ReceiptBuilder.Width80Mm,
+        ReceiptLanguage language = ReceiptLanguage.English)
+    {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        PaperWidthChars = paperWidthChars;
+        Language = language;
+        Labels = ReceiptLabels.For(language);
+    }
+
+    public int PaperWidthChars { get; }
+
+    public ReceiptLanguage Language { get; }
+
+    /// <summary>
+    /// The same phrasebook the receipt uses. A lane that printed its bills in Tamil and its day-end
+    /// report in English would be calling the same figures two different things.
+    /// </summary>
+    public ReceiptLabels Labels { get; }
 
     public ReceiptBuilder Compose(DayCloseSummary day, bool isReprint = false)
     {
@@ -27,25 +46,25 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
         report.Text(_store.Name, TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
 
         if (!string.IsNullOrWhiteSpace(_store.Gstin))
-            report.Text($"GSTIN: {_store.Gstin}", TextAlignment.Center);
+            report.Text($"GSTIN {_store.Gstin}", TextAlignment.Center);
 
         report.Blank();
-        report.Text("DAY-END REPORT (Z)", TextAlignment.Center, bold: true);
+        report.Text(Labels.DayEndReport, TextAlignment.Center, bold: true);
 
         if (isReprint)
-            report.Text("** REPRINT **", TextAlignment.Center, bold: true);
+            report.Text(Labels.Reprint, TextAlignment.Center, bold: true);
 
         report.Rule();
-        report.Columns("Lane", day.LaneId);
-        report.Columns("Closed", day.ClosedAt.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture));
-        report.Columns("First sale", day.OpenedAt?.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture) ?? "—");
-        report.Columns("Report no", day.Id > 0 ? day.Id.ToString(CultureInfo.InvariantCulture) : "not saved");
+        report.Columns(Labels.Lane, day.LaneId);
+        report.Columns(Labels.Closed, day.ClosedAt.ToString("dd-MM-yyyy HH:mm", CultureInfo.InvariantCulture));
+        report.Columns(Labels.FirstSale, day.OpenedAt?.ToString("dd-MM-yyyy HH:mm", CultureInfo.InvariantCulture) ?? "—");
+        report.Columns(Labels.ReportNumber, day.Id > 0 ? day.Id.ToString(CultureInfo.InvariantCulture) : "—");
         report.Rule();
 
         if (day.TookNothing)
         {
             report.Blank();
-            report.Text("NO SALES IN THIS PERIOD", TextAlignment.Center, bold: true);
+            report.Text(Labels.NoSalesInThisPeriod, TextAlignment.Center, bold: true);
             report.Blank();
             WriteHeldBills(report, day);
             report.Cut();
@@ -53,34 +72,34 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
         }
 
         // What has to be counted, first and large.
-        report.Text("CASH IN DRAWER SHOULD BE", TextAlignment.Center);
+        report.Text(Labels.CashInDrawerShouldBe, TextAlignment.Center);
         report.Text(Amount(day.CashExpected), TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
         report.Blank();
-        report.Columns("  Cash taken", Amount(day.TotalOf(TenderType.Cash)));
-        report.Columns("  Change given", Amount(day.ChangeGiven));
+        report.Columns($"  {Labels.CashTaken}", Amount(day.TotalOf(TenderType.Cash)));
+        report.Columns($"  {Labels.ChangeGiven}", Amount(day.ChangeGiven));
         report.Rule();
 
-        report.Text("Sales", bold: true);
-        report.Columns("Invoices", day.InvoiceCount.ToString(CultureInfo.InvariantCulture));
-        report.Columns("Gross sales", Amount(day.GrossSales));
-        report.Columns("Discounts", Amount(day.TotalDiscount));
-        report.Columns("Net sales", Amount(day.NetSales), bold: true);
+        report.Text(Labels.Sales, bold: true);
+        report.Columns(Labels.Invoices, day.InvoiceCount.ToString(CultureInfo.InvariantCulture));
+        report.Columns(Labels.GrossSales, Amount(day.GrossSales));
+        report.Columns(Labels.Discount, Amount(day.TotalDiscount));
+        report.Columns(Labels.NetSales, Amount(day.NetSales), bold: true);
         report.Rule();
 
-        report.Text("Tax", bold: true);
-        report.Columns("Taxable value", Amount(day.TaxableValue));
-        report.Columns("CGST", Amount(day.TotalCgst));
-        report.Columns("SGST", Amount(day.TotalSgst));
+        report.Text(Labels.Tax, bold: true);
+        report.Columns(Labels.TaxableValue, Amount(day.TaxableValue));
+        report.Columns(Labels.Cgst, Amount(day.TotalCgst));
+        report.Columns(Labels.Sgst, Amount(day.TotalSgst));
 
         if (day.TotalIgst > 0m)
-            report.Columns("IGST", Amount(day.TotalIgst));
+            report.Columns(Labels.Igst, Amount(day.TotalIgst));
 
-        report.Columns("Total tax", Amount(day.TotalTax));
+        report.Columns(Labels.TotalTax, Amount(day.TotalTax));
 
         if (day.TaxSlabs.Count > 0)
         {
             report.Blank();
-            report.Row("Slab", new ColumnValue("Taxable", 12), new ColumnValue("Tax", 10));
+            report.Row(Labels.TaxSummaryRate, new ColumnValue(Labels.TaxSummaryTaxable, 12), new ColumnValue(Labels.TaxSummaryTax, 10));
 
             foreach (var slab in day.TaxSlabs)
                 report.Row($"{Rate(slab.GstRate)}%", new ColumnValue(Amount(slab.TaxableValue), 12), new ColumnValue(Amount(slab.Tax), 10));
@@ -88,7 +107,7 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
 
         report.Rule();
 
-        report.Text("Tenders", bold: true);
+        report.Text(Labels.Tenders, bold: true);
 
         foreach (var tender in day.Tenders)
             report.Columns($"{Label(tender.Type)} ({tender.PaymentCount})", Amount(tender.Amount));
@@ -96,9 +115,9 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
         if (day.PointsRedeemed > 0 || day.PointsEarned > 0)
         {
             report.Rule();
-            report.Text("Reward points", bold: true);
-            report.Columns("Redeemed", day.PointsRedeemed.ToString(CultureInfo.InvariantCulture));
-            report.Columns("Earned", day.PointsEarned.ToString(CultureInfo.InvariantCulture));
+            report.Text(Labels.RewardPoints, bold: true);
+            report.Columns(Labels.Redeemed, day.PointsRedeemed.ToString(CultureInfo.InvariantCulture));
+            report.Columns(Labels.Earned, day.PointsEarned.ToString(CultureInfo.InvariantCulture));
         }
 
         WriteVoids(report, day);
@@ -120,23 +139,23 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
     /// would have gaps with no explanation on the page. Printing the count and value is what lets
     /// somebody tie the two views together.
     /// </remarks>
-    private static void WriteVoids(ReceiptBuilder report, DayCloseSummary day)
+    private void WriteVoids(ReceiptBuilder report, DayCloseSummary day)
     {
         if (day.VoidedCount == 0)
             return;
 
         report.Rule();
-        report.Text("Voided", bold: true);
-        report.Columns("Invoices voided", day.VoidedCount.ToString(CultureInfo.InvariantCulture));
-        report.Columns("Value voided", Amount(day.VoidedValue));
-        report.Text("Excluded from sales and tax above.");
+        report.Text(Labels.Voided, bold: true);
+        report.Columns(Labels.InvoicesVoided, day.VoidedCount.ToString(CultureInfo.InvariantCulture));
+        report.Columns(Labels.ValueVoided, Amount(day.VoidedValue));
+        report.Text(Labels.VoidsExcludedNote);
     }
 
     /// <summary>
     /// Who traded, and how much cash each of them holds. This is what turns "the drawer is 500
     /// short" from an unanswerable question into a shift to ask about.
     /// </summary>
-    private static void WriteCashiers(ReceiptBuilder report, DayCloseSummary day)
+    private void WriteCashiers(ReceiptBuilder report, DayCloseSummary day)
     {
         var cashiers = day.CashierTotals;
 
@@ -145,8 +164,8 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
             return;
 
         report.Rule();
-        report.Text("By cashier", bold: true);
-        report.Row("Name", new ColumnValue("Sales", 11), new ColumnValue("Cash", 11));
+        report.Text(Labels.ByCashier, bold: true);
+        report.Row(Labels.CashierName, new ColumnValue(Labels.Sales, 11), new ColumnValue(Labels.CashHeld, 11));
 
         foreach (var cashier in cashiers)
             report.Row(cashier.Label, new ColumnValue(Amount(cashier.NetSales), 11), new ColumnValue(Amount(cashier.CashHeld), 11));
@@ -156,7 +175,7 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
     /// The checks the report has to satisfy, printed rather than assumed. A day that does not
     /// reconcile is a day somebody has to look at, and the report is where they will look.
     /// </summary>
-    private static void WriteReconciliation(ReceiptBuilder report, DayCloseSummary day)
+    private void WriteReconciliation(ReceiptBuilder report, DayCloseSummary day)
     {
         report.Rule('=');
 
@@ -167,45 +186,45 @@ public sealed class ZReportComposer(StoreProfile store, int paperWidthChars = Re
 
         if (salesCheck && taxCheck && tenderCheck)
         {
-            report.Text("Reconciled: sales, tax and tenders all agree.", TextAlignment.Center);
+            report.Text(Labels.Reconciled, TextAlignment.Center);
             return;
         }
 
-        report.Text("*** DOES NOT RECONCILE ***", TextAlignment.Center, bold: true);
+        report.Text(Labels.DoesNotReconcile, TextAlignment.Center, bold: true);
 
         if (!salesCheck)
-            report.Columns("  gross less discount", Amount(day.GrossSales - day.TotalDiscount));
+            report.Columns($"  {Labels.GrossLessDiscount}", Amount(day.GrossSales - day.TotalDiscount));
 
         if (!taxCheck)
-            report.Columns("  taxable plus tax", Amount(day.TaxableValue + day.TotalTax));
+            report.Columns($"  {Labels.TaxablePlusTax}", Amount(day.TaxableValue + day.TotalTax));
 
         if (!tenderCheck)
-            report.Columns("  tenders less change", Amount(tendered));
+            report.Columns($"  {Labels.TendersLessChange}", Amount(tendered));
 
-        report.Columns("  net sales", Amount(day.NetSales));
+        report.Columns($"  {Labels.NetSales}", Amount(day.NetSales));
     }
 
-    private static void WriteHeldBills(ReceiptBuilder report, DayCloseSummary day)
+    private void WriteHeldBills(ReceiptBuilder report, DayCloseSummary day)
     {
         if (day.HeldBillsOutstanding == 0)
             return;
 
         report.Blank();
-        report.Text($"{day.HeldBillsOutstanding} bill(s) still parked", TextAlignment.Center, bold: true);
-        report.Text("These are not sales. Recall or discard them.", TextAlignment.Center);
+        report.Text($"{day.HeldBillsOutstanding} {Labels.BillsStillParked}", TextAlignment.Center, bold: true);
+        report.Text(Labels.ParkedBillsNote, TextAlignment.Center);
     }
 
     private static string Amount(decimal value) => value.ToString("N2", CultureInfo.InvariantCulture);
 
     private static string Rate(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 
-    private static string Label(TenderType type) => type switch
+    private string Label(TenderType type) => type switch
     {
-        TenderType.Cash => "Cash",
-        TenderType.Card => "Card",
-        TenderType.Upi => "UPI",
-        TenderType.StoreCredit => "Store credit",
-        TenderType.LoyaltyPoints => "Loyalty points",
+        TenderType.Cash => Labels.Cash,
+        TenderType.Card => Labels.Card,
+        TenderType.Upi => Labels.Upi,
+        TenderType.StoreCredit => Labels.Credit,
+        TenderType.LoyaltyPoints => Labels.LoyaltyPoints,
         _ => type.ToString(),
     };
 }

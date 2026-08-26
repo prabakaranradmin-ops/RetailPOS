@@ -66,6 +66,41 @@ public sealed record ReceiptLabels
     public required string PointsRedeemed { get; init; }
     public required string PointsEarnedThisBill { get; init; }
 
+    // The day-end report. It shares the tax and tender words above rather than carrying its own,
+    // so a lane cannot end up calling the same figure two different things on two documents.
+    public required string DayEndReport { get; init; }
+    public required string Closed { get; init; }
+    public required string FirstSale { get; init; }
+    public required string ReportNumber { get; init; }
+    public required string NoSalesInThisPeriod { get; init; }
+    public required string CashInDrawerShouldBe { get; init; }
+    public required string CashTaken { get; init; }
+    public required string ChangeGiven { get; init; }
+    public required string Sales { get; init; }
+    public required string Invoices { get; init; }
+    public required string GrossSales { get; init; }
+    public required string NetSales { get; init; }
+    public required string Tax { get; init; }
+    public required string TotalTax { get; init; }
+    public required string Tenders { get; init; }
+    public required string RewardPoints { get; init; }
+    public required string Redeemed { get; init; }
+    public required string Earned { get; init; }
+    public required string Voided { get; init; }
+    public required string InvoicesVoided { get; init; }
+    public required string ValueVoided { get; init; }
+    public required string VoidsExcludedNote { get; init; }
+    public required string ByCashier { get; init; }
+    public required string CashierName { get; init; }
+    public required string CashHeld { get; init; }
+    public required string Reconciled { get; init; }
+    public required string DoesNotReconcile { get; init; }
+    public required string GrossLessDiscount { get; init; }
+    public required string TaxablePlusTax { get; init; }
+    public required string TendersLessChange { get; init; }
+    public required string BillsStillParked { get; init; }
+    public required string ParkedBillsNote { get; init; }
+
     public static ReceiptLabels For(ReceiptLanguage language) => language switch
     {
         ReceiptLanguage.Tamil => TamilLabels,
@@ -114,6 +149,39 @@ public sealed record ReceiptLabels
         TotalPointsEarned = "Total points earned",
         PointsRedeemed = "Points redeemed",
         PointsEarnedThisBill = "Points earned",
+
+        DayEndReport = "DAY-END REPORT (Z)",
+        Closed = "Closed",
+        FirstSale = "First sale",
+        ReportNumber = "Report no",
+        NoSalesInThisPeriod = "NO SALES IN THIS PERIOD",
+        CashInDrawerShouldBe = "CASH IN DRAWER SHOULD BE",
+        CashTaken = "Cash taken",
+        ChangeGiven = "Change given",
+        Sales = "Sales",
+        Invoices = "Invoices",
+        GrossSales = "Gross sales",
+        NetSales = "Net sales",
+        Tax = "Tax",
+        TotalTax = "Total tax",
+        Tenders = "Tenders",
+        RewardPoints = "Reward points",
+        Redeemed = "Redeemed",
+        Earned = "Earned",
+        Voided = "Voided",
+        InvoicesVoided = "Invoices voided",
+        ValueVoided = "Value voided",
+        VoidsExcludedNote = "Excluded from sales and tax above.",
+        ByCashier = "By cashier",
+        CashierName = "Name",
+        CashHeld = "Cash",
+        Reconciled = "Reconciled: sales, tax and tenders all agree.",
+        DoesNotReconcile = "*** DOES NOT RECONCILE ***",
+        GrossLessDiscount = "gross less discount",
+        TaxablePlusTax = "taxable plus tax",
+        TendersLessChange = "tenders less change",
+        BillsStillParked = "bill(s) still parked",
+        ParkedBillsNote = "These are not sales. Recall or discard them.",
     };
 
     /// <summary>
@@ -163,5 +231,40 @@ public sealed record ReceiptLabels
         TotalPointsEarned = "இதுவரை பெற்ற மொத்த புள்ளிகள்",
         PointsRedeemed = "பயன்படுத்திய புள்ளிகள்",
         PointsEarnedThisBill = "இந்த பில்லில் பெற்ற புள்ளிகள்",
+
+        // The Z-report is the shopkeeper's own document rather than the customer's, so the wording
+        // is the plain shop Tamil somebody counting a drawer at closing time would use.
+        DayEndReport = "நாள் இறுதி அறிக்கை (Z)",
+        Closed = "முடித்த நேரம்",
+        FirstSale = "முதல் விற்பனை",
+        ReportNumber = "அறிக்கை எண்",
+        NoSalesInThisPeriod = "இந்த நேரத்தில் விற்பனை இல்லை",
+        CashInDrawerShouldBe = "பணப்பெட்டியில் இருக்க வேண்டிய தொகை",
+        CashTaken = "வந்த ரொக்கம்",
+        ChangeGiven = "கொடுத்த மீதம்",
+        Sales = "விற்பனை",
+        Invoices = "பில்கள்",
+        GrossSales = "மொத்த விற்பனை",
+        NetSales = "நிகர விற்பனை",
+        Tax = "வரி",
+        TotalTax = "மொத்த வரி",
+        Tenders = "பணம் செலுத்திய முறை",
+        RewardPoints = "புள்ளிகள்",
+        Redeemed = "பயன்படுத்தியது",
+        Earned = "பெற்றது",
+        Voided = "ரத்து செய்தவை",
+        InvoicesVoided = "ரத்து செய்த பில்கள்",
+        ValueVoided = "ரத்து செய்த தொகை",
+        VoidsExcludedNote = "மேலே உள்ள விற்பனை மற்றும் வரியில் சேர்க்கப்படவில்லை.",
+        ByCashier = "கேஷியர் வாரியாக",
+        CashierName = "பெயர்",
+        CashHeld = "ரொக்கம்",
+        Reconciled = "சரிபார்க்கப்பட்டது: விற்பனை, வரி, பணம் ஒத்துப்போகிறது.",
+        DoesNotReconcile = "*** ஒத்துப்போகவில்லை ***",
+        GrossLessDiscount = "மொத்த விற்பனை - தள்ளுபடி",
+        TaxablePlusTax = "வரிக்குரிய தொகை + வரி",
+        TendersLessChange = "வந்த பணம் - கொடுத்த மீதம்",
+        BillsStillParked = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
+        ParkedBillsNote = "இவை விற்பனை அல்ல. மீண்டும் எடுக்கவும் அல்லது நீக்கவும்.",
     };
 }

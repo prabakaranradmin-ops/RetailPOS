@@ -167,6 +167,7 @@ reconstruct by hand.
 - [x] The Tamil labels, the four-way tender block, the savings and points lines — `TamilReceiptTests`
 - [x] The same bill in both languages carrying the same figures — `TamilReceiptTests`
 - [x] Real font rendering: Tamil inks, shapes, scales and clips — `TamilRasterizationTests`
+- [x] The day-end report in both languages, and its figures unchanged between them — `DayCloseTests`
 
 **On the two rasteriser test doubles.** The layout tests use a rasteriser made of arithmetic —
 every character the same width — because layout is what can be asserted exactly, and with real

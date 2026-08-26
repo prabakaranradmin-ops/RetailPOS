@@ -81,7 +81,7 @@ public partial class App : Application
 
         var dayClose = new DayCloseService(
             new DayCloseRepository(database, heldBills),
-            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars),
+            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
             printer,
             new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log));
 

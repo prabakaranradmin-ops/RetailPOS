@@ -29,15 +29,22 @@ internal enum CheckResult
 /// drawer physically opened, so the checks that end in a physical outcome ask the operator and
 /// record the answer.
 /// </remarks>
-internal sealed class HardwareChecks(PosSettings settings, TextWriter output, TextReader input)
+internal sealed class HardwareChecks(PosSettings settings, TextWriter output, TextReader input, ITextRasterizer? rasterizer = null)
 {
     private readonly PosSettings _settings = settings;
+
+    /// <summary>
+    /// Built the same way the till builds it, rasteriser included. A check that printed through a
+    /// different path from the one a sale uses would be checking the wrong thing — on a Tamil lane
+    /// it would put '?' on the test page and pass anyway.
+    /// </summary>
+    private IPrinterService CreatePrinter() => PeripheralFactory.CreatePrinter(_settings.Hardware, rasterizer);
 
     public CheckResult Printer()
     {
         Heading("Printer");
 
-        var printer = PeripheralFactory.CreatePrinter(_settings.Hardware);
+        var printer = CreatePrinter();
         output.WriteLine($"  Configured as : {printer.Name}");
         output.WriteLine($"  Paper width   : {printer.PaperWidthChars} characters");
 
@@ -55,10 +62,19 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
         output.WriteLine();
         WriteIndented(receipt.ToPlainText());
 
+        var job = receipt.ToEscPos(raster: printer.Raster);
+
+        if (_settings.ReceiptLanguage != ReceiptLanguage.English && printer.Raster is null)
+            output.WriteLine("  WARNING: this lane prints Tamil labels but has no text renderer. They will print as '?'.");
+
+        output.WriteLine($"  Job size      : {job.Length:N0} bytes");
+
         if (!Confirm("Send this to the printer?"))
             return CheckResult.NotConfigured;
 
-        var outcome = printer.Print(receipt.ToEscPos(raster: printer.Raster));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var outcome = printer.Print(job);
+        clock.Stop();
 
         if (!outcome.Succeeded)
         {
@@ -66,18 +82,52 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
             return CheckResult.Failed;
         }
 
-        output.WriteLine($"  Sent {outcome.BytesWritten} bytes.");
+        ReportPrintSpeed(outcome.BytesWritten, clock.Elapsed);
 
         return Confirm("Did the receipt print, and does it match?")
             ? CheckResult.Passed
             : CheckResult.Failed;
     }
 
+    /// <summary>
+    /// How long the job took to hand over, and what that works out to per second.
+    /// </summary>
+    /// <remarks>
+    /// This matters because a drawn receipt is not the same size as a typed one. A Tamil bill on
+    /// 80mm paper is around 27KB against 2KB for the same bill in English, and on a printer
+    /// attached over a 9600-baud serial line 27KB is roughly half a minute — unusable at a counter.
+    /// Over USB it is imperceptible. Nobody can tell which they have without measuring it.
+    /// <para>
+    /// The figure is a lower bound, and says so. The spooler returns once it has accepted the job,
+    /// not once the paper has stopped moving, so the operator still has to watch the printer. What
+    /// this catches is the case where even the handover is slow, which means the wire is.
+    /// </para>
+    /// </remarks>
+    private void ReportPrintSpeed(int bytes, TimeSpan elapsed)
+    {
+        output.WriteLine($"  Sent {bytes:N0} bytes in {elapsed.TotalMilliseconds:N0} ms.");
+
+        if (elapsed.TotalSeconds > 0.01)
+            output.WriteLine($"  Handover rate : {bytes / elapsed.TotalSeconds / 1024:N0} KB/s");
+
+        output.WriteLine("  That is the time to hand the job to the spooler, not the time until the");
+        output.WriteLine("  paper stops. Time the paper yourself as well — see HARDWARE_SIGNOFF.md.");
+
+        if (elapsed.TotalSeconds >= 3)
+        {
+            output.WriteLine();
+            output.WriteLine("  SLOW: this took over three seconds before the paper even started.");
+            output.WriteLine("  A queue will feel that on every sale. If the printer is on a serial");
+            output.WriteLine("  port, that is the cause; a drawn receipt is ten times the data of a");
+            output.WriteLine("  typed one. Consider USB, or an English lane.");
+        }
+    }
+
     public CheckResult Drawer()
     {
         Heading("Cash drawer");
 
-        var printer = PeripheralFactory.CreatePrinter(_settings.Hardware);
+        var printer = CreatePrinter();
         var drawer = PeripheralFactory.CreateDrawer(_settings.Hardware, printer);
 
         output.WriteLine($"  Configured as : {drawer.Name}");

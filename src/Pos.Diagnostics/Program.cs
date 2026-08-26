@@ -49,7 +49,7 @@ log.Info("tool", $"pos {string.Join(' ', args)}");
 var rasterizer = CreateRasterizer(settings, log);
 using var rasterizerLifetime = rasterizer as IDisposable;
 
-var checks = new HardwareChecks(settings, Console.Out, Console.In);
+var checks = new HardwareChecks(settings, Console.Out, Console.In, rasterizer);
 var window = ParseWindow(args) ?? TimeSpan.FromSeconds(10);
 
 switch (command)
@@ -166,7 +166,7 @@ switch (command)
 
         var heldBills = new HeldBillRepository(database);
         var closes = new DayCloseRepository(database, heldBills);
-        var composer = new ZReportComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars);
+        var composer = new ZReportComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage);
 
         // Show it before committing to it. A Z-report cannot be taken back.
         var preview = closes.Preview(settings.LaneId, DateTimeOffset.Now);

@@ -1,6 +1,7 @@
 using Pos.Core.Data;
 using Pos.Core.Domain;
 using Pos.Core.Domain.Printing;
+using Pos.Core.Hardware.Printing;
 using Pos.Core.Loyalty;
 using Pos.TestSupport;
 using Xunit;
@@ -385,6 +386,120 @@ public class DayCloseTests(ITestOutputHelper output) : IDisposable
         var report = new ZReportComposer(Store).Compose(Closes.Close(Lane, DateTimeOffset.Now)).ToPlainText();
 
         Assert.Contains("NO SALES IN THIS PERIOD", report);
+    }
+
+    // ---- The report in Tamil ---------------------------------------------------------------------
+
+    /// <summary>Seeds, sells, and closes once — the catalogue cannot be seeded twice.</summary>
+    private DayCloseSummary ATradingDay()
+    {
+        SeedCatalogue();
+        Sell("8901234567890", handedOver: 500m);
+        Sell("8901234567920", TenderType.Card);
+
+        return Closes.Close(Lane, DateTimeOffset.Now);
+    }
+
+    private static string InTamil(DayCloseSummary day, bool isReprint = false) =>
+        new ZReportComposer(Store, ReceiptBuilder.Width80Mm, ReceiptLanguage.Tamil)
+            .Compose(day, isReprint)
+            .ToPlainText();
+
+    /// <summary>
+    /// A lane printing its bills in Tamil has to close its day in Tamil too. The figures are the
+    /// shopkeeper's own, and calling them one thing on the receipt and another on the report is how
+    /// a drawer difference becomes an argument.
+    /// </summary>
+    [Theory]
+    [InlineData("நாள் இறுதி அறிக்கை (Z)")]
+    [InlineData("பணப்பெட்டியில் இருக்க வேண்டிய தொகை")]
+    [InlineData("வந்த ரொக்கம்")]
+    [InlineData("கொடுத்த மீதம்")]
+    [InlineData("விற்பனை")]
+    [InlineData("பில்கள்")]
+    [InlineData("நிகர விற்பனை")]
+    [InlineData("மொத்த வரி")]
+    [InlineData("பணம் செலுத்திய முறை")]
+    public void TheDayEndReportPrintsInTamilOnATamilLane(string label)
+    {
+        var report = InTamil(ATradingDay());
+        output.WriteLine(report);
+
+        Assert.Contains(label, report);
+    }
+
+    [Fact]
+    public void TheTamilReportKeepsTheGstTermsAndTheFiguresUnchanged()
+    {
+        var day = ATradingDay();
+
+        var english = new ZReportComposer(Store).Compose(day).ToPlainText();
+        var tamil = InTamil(day);
+
+        // The tax names are what an inspector looks for, and the tender names match the receipt.
+        foreach (var unchanged in new[] { "CGST", "SGST", "Cash", "Card", "33AABCS1429B1ZX" })
+        {
+            Assert.Contains(unchanged, english);
+            Assert.Contains(unchanged, tamil);
+        }
+
+        // Every figure on the report is the same figure in both.
+        foreach (var figure in new[] { day.CashExpected, day.NetSales, day.GrossSales, day.TotalTax })
+        {
+            Assert.Contains(figure.ToString("N2"), english);
+            Assert.Contains(figure.ToString("N2"), tamil);
+        }
+    }
+
+    [Fact]
+    public void TheTamilReportSaysWhenItReconcilesAndWhenNothingSold()
+    {
+        var day = ATradingDay();
+
+        Assert.Contains("சரிபார்க்கப்பட்டது", InTamil(day));
+        Assert.Contains("** REPRINT **", InTamil(day, isReprint: true));
+
+        // Closing again after everything has been reported takes nothing, which is the state a
+        // lane is in if somebody closes twice by accident.
+        Assert.Contains("இந்த நேரத்தில் விற்பனை இல்லை", InTamil(Closes.Close(Lane, DateTimeOffset.Now)));
+    }
+
+    [Theory]
+    [InlineData(48)]
+    [InlineData(32)]
+    public void TheTamilReportFitsThePaper(int width)
+    {
+        SeedCatalogue();
+        Sell("8901234567890", handedOver: 500m);
+
+        var day = Closes.Close(Lane, DateTimeOffset.Now);
+        var report = new ZReportComposer(Store, width, ReceiptLanguage.Tamil).Compose(day).ToPlainText();
+
+        foreach (var line in report.Split('\n'))
+            Assert.True(line.TrimEnd('\r').Length <= width, $"'{line}' is {line.TrimEnd('\r').Length} of {width} characters.");
+    }
+
+    /// <summary>
+    /// The Tamil on the report has to be drawn, exactly as it is on a receipt, or the day's figures
+    /// come out under a row of '?'.
+    /// </summary>
+    [Fact]
+    public void TheTamilReportIsDrawnRatherThanSentAsCharacters()
+    {
+        SeedCatalogue();
+        Sell("8901234567890", handedOver: 500m);
+
+        var day = Closes.Close(Lane, DateTimeOffset.Now);
+        var report = new ZReportComposer(Store, ReceiptBuilder.Width80Mm, ReceiptLanguage.Tamil).Compose(day);
+
+        var rasterizer = new RecordingTextRasterizer();
+        report.ToEscPos(raster: new RasterOptions(rasterizer, RasterOptions.Dots80Mm, RasterMode.Auto));
+
+        var drawn = rasterizer.Runs.Select(r => r.Text).ToList();
+
+        Assert.Contains("நாள் இறுதி அறிக்கை (Z)", drawn);
+        Assert.Contains("பணப்பெட்டியில் இருக்க வேண்டிய தொகை", drawn);
+        Assert.DoesNotContain("CGST", drawn);
     }
 
     [Theory]
