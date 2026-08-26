@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Pos.Core.Hardware.Printing;
@@ -155,21 +156,81 @@ public static class EscPos
         if (string.IsNullOrEmpty(text))
             return [];
 
-        encoding = encoding ?? DefaultEncoding;
-
-        return encoding.GetBytes(text);
+        return encoding is null
+            ? Encoding.ASCII.GetBytes(Transliterate(text))
+            : encoding.GetBytes(text);
     }
 
     /// <summary>Text followed by a line feed.</summary>
     public static byte[] Line(string? text, Encoding? encoding = null) => [.. Text(text, encoding), Lf];
 
     /// <summary>
-    /// Latin-1 with a substitution fallback. Built into the framework, close enough to the code
-    /// page most printers boot into, and never throws on an unmappable character.
+    /// Reduces text to plain ASCII, keeping as much meaning as the characters allow.
     /// </summary>
-    public static Encoding DefaultEncoding { get; } =
-        Encoding.GetEncoding(
-            "ISO-8859-1",
-            new EncoderReplacementFallback("?"),
-            new DecoderReplacementFallback("?"));
+    /// <remarks>
+    /// This exists so the printer's code page stops mattering. PC437, WPC1252 and Latin-1 all agree
+    /// exactly on bytes 0-127 and disagree above that, so a receipt built only from ASCII prints
+    /// identically whatever the printer happens to be set to — and a lane whose printer was
+    /// reconfigured by somebody else still produces correct receipts.
+    /// <para>
+    /// Accents are folded rather than lost, so "Café" prints as "Cafe" instead of "Caf?". The
+    /// rupee sign becomes "Rs." because thermal fonts do not carry a glyph for it. Indic and CJK
+    /// text has no ASCII equivalent at all and becomes '?', which is the honest outcome: the
+    /// receipt shows something is missing rather than the printer emitting whatever bytes fall out.
+    /// A store with product names in Tamil or Devanagari needs a printer with that font and a
+    /// code page to match, and that is a hardware decision, not something this can paper over.
+    /// </para>
+    /// </remarks>
+    public static string Transliterate(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        var result = new StringBuilder(text.Length);
+
+        // Decomposing separates a letter from its accent, so the accent can be dropped and the
+        // letter kept.
+        foreach (var character in text.Normalize(NormalizationForm.FormD))
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            if (character < 128)
+            {
+                result.Append(character);
+                continue;
+            }
+
+            result.Append(Substitutions.TryGetValue(character, out var replacement) ? replacement : "?");
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Characters worth spelling out rather than replacing with a question mark. Deliberately
+    /// short: these are the ones that turn up in Indian retail product names and in text pasted
+    /// out of a spreadsheet.
+    /// </summary>
+    private static readonly Dictionary<char, string> Substitutions = new()
+    {
+        ['₹'] = "Rs.",   // ₹
+        ['‘'] = "'",     // ‘
+        ['’'] = "'",     // ’
+        ['“'] = "\"",    // “
+        ['”'] = "\"",    // ”
+        ['–'] = "-",     // –
+        ['—'] = "-",     // —
+        ['…'] = "...",   // …
+        ['×'] = "x",     // ×
+        ['÷'] = "/",     // ÷
+        ['°'] = " deg",  // °
+        ['½'] = "1/2",   // ½
+        ['¼'] = "1/4",   // ¼
+        ['¾'] = "3/4",   // ¾
+        ['©'] = "(c)",   // ©
+        ['®'] = "(R)",   // ®
+        ['™'] = "(TM)",  // ™
+        [' '] = " ",     // non-breaking space
+    };
 }

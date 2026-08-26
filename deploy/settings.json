@@ -1,0 +1,40 @@
+{
+  "laneId": "L1",
+  "outletStateCode": "33",
+
+  "searchDebounceMs": 150,
+  "scannerMaxKeystrokeGapMs": 30,
+
+  "loyaltyRedemptionCapPercent": 30,
+  "loyaltyRupeesPerPoint": 0.5,
+  "loyaltyRupeesPerPointEarned": 50,
+
+  "store": {
+    "name": "CHANGE ME — Store Name",
+    "addressLine1": "",
+    "addressLine2": "",
+    "phone": "",
+    "gstin": "",
+    "footerMessage": "Thank you, please visit again",
+    "currencyPrefix": "Rs."
+  },
+
+  "hardware": {
+    "printerName": "",
+    "printerPaperWidthChars": 48,
+    "printerOutputFile": null,
+
+    "drawerConnection": "Printer",
+    "drawerPort": null,
+    "drawerPin": 0,
+    "drawerPulseOnMs": 60,
+    "drawerPulseOffMs": 120,
+
+    "scannerPort": null,
+    "scannerBaudRate": 9600,
+
+    "scalePort": "",
+    "scaleBaudRate": 9600,
+    "scaleProtocol": "Auto"
+  }
+}

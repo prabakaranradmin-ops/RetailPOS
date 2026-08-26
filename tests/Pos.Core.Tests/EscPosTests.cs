@@ -164,16 +164,61 @@ public class EscPosTests
     }
 
     /// <summary>
-    /// A thermal printer has no font for Indic scripts. Substituting a visible marker is the
-    /// honest outcome — the receipt shows something is missing rather than the printer emitting
-    /// whatever bytes fall out of an unmappable character.
+    /// The whole point of reducing to ASCII: PC437, WPC1252 and Latin-1 agree exactly on bytes
+    /// 0-127 and disagree above them, so a receipt built only from ASCII prints identically
+    /// whatever the printer is set to. A lane whose printer somebody else reconfigured still
+    /// produces correct receipts.
+    /// </summary>
+    [Theory]
+    [InlineData("Toor Dal 1kg")]
+    [InlineData("Café Latte")]
+    [InlineData("₹1,299.00")]
+    [InlineData("தேயிலை")]
+    [InlineData("Chocolate — 50% off … “special”")]
+    public void NothingAboveAsciiIsEverSentToThePrinter(string text)
+    {
+        Assert.All(EscPos.Text(text), b => Assert.True(b < 128, $"byte {b} is above ASCII"));
+    }
+
+    /// <summary>Accents are folded rather than lost, so a name stays readable.</summary>
+    [Theory]
+    [InlineData("Café", "Cafe")]
+    [InlineData("jalapeño", "jalapeno")]
+    [InlineData("Crème Brûlée", "Creme Brulee")]
+    public void AccentsAreFoldedNotDropped(string input, string expected)
+    {
+        Assert.Equal(expected, EscPos.Transliterate(input));
+    }
+
+    /// <summary>Thermal fonts have no rupee glyph, so it is spelled out.</summary>
+    [Fact]
+    public void TheRupeeSignIsSpelledOut()
+    {
+        Assert.Equal("Rs.1,299.00", EscPos.Transliterate("₹1,299.00"));
+    }
+
+    [Theory]
+    [InlineData("“quoted”", "\"quoted\"")]
+    [InlineData("it’s", "it's")]
+    [InlineData("50 — 60", "50 - 60")]
+    [InlineData("more…", "more...")]
+    [InlineData("2 × 500g", "2 x 500g")]
+    [InlineData("½ kg", "1/2 kg")]
+    public void SpreadsheetPunctuationIsReducedToSomethingPrintable(string input, string expected)
+    {
+        Assert.Equal(expected, EscPos.Transliterate(input));
+    }
+
+    /// <summary>
+    /// A thermal printer has no font for Indic scripts and there is no ASCII equivalent. A visible
+    /// marker is the honest outcome — the receipt shows something is missing rather than the
+    /// printer emitting whatever bytes fall out.
     /// </summary>
     [Fact]
-    public void CharactersTheCodePageCannotHoldBecomeAMarker()
+    public void ScriptsWithNoAsciiEquivalentBecomeAMarker()
     {
-        var bytes = EscPos.Text("தேயிலை");
-
-        Assert.All(bytes, b => Assert.Equal((byte)'?', b));
+        Assert.Equal("??????", EscPos.Transliterate("தேயிலை"));
+        Assert.All(EscPos.Text("தேயிலை"), b => Assert.Equal((byte)'?', b));
     }
 
     [Fact]
@@ -182,6 +227,27 @@ public class EscPosTests
         var exception = Record.Exception(() => EscPos.Text("₹100 · 日本語 · emoji 🎉"));
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void PlainAsciiPassesThroughUntouched()
+    {
+        const string text = "Toor Dal 1kg  189.00";
+
+        Assert.Equal(text, EscPos.Transliterate(text));
+        Assert.Equal(Encoding.ASCII.GetBytes(text), EscPos.Text(text));
+    }
+
+    /// <summary>
+    /// A site that has configured its printer's code page deliberately can still bypass the
+    /// reduction by supplying an encoding.
+    /// </summary>
+    [Fact]
+    public void AnExplicitEncodingBypassesTheReduction()
+    {
+        var latin1 = Encoding.GetEncoding("ISO-8859-1", new EncoderReplacementFallback("?"), new DecoderReplacementFallback("?"));
+
+        Assert.Equal(new byte[] { 0xE9 }, EscPos.Text("é", latin1));
     }
 
     [Fact]

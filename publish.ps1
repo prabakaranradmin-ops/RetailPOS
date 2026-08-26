@@ -74,14 +74,47 @@ Get-ChildItem $Output -File |
     Where-Object { $_.Extension -notin '.exe', '.pdb' } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
+# Symbols are kept — they are what turns a stack trace from a real lane into a line number — but
+# out of the way, so the folder somebody opens has four things in it rather than fourteen.
+$symbols = Join-Path $Output 'symbols'
+$pdbs = Get-ChildItem $Output -Filter *.pdb -File
+
+if ($pdbs) {
+    New-Item -ItemType Directory -Force -Path $symbols | Out-Null
+    $pdbs | Move-Item -Destination $symbols -Force
+}
+
+# What the lane needs besides the binaries: something to configure, something to fill in, and
+# something to follow.
+Write-Host 'Adding the templates and the runbook...' -ForegroundColor Cyan
+
+$package = @(
+    @{ From = Join-Path $root 'deploy\settings.json';           To = 'settings.json' },
+    @{ From = Join-Path $root 'deploy\SETTINGS.md';             To = 'SETTINGS.md' },
+    @{ From = Join-Path $root 'deploy\catalog_template.csv';    To = 'catalog_template.csv' },
+    @{ From = Join-Path $root 'deploy\CATALOGUE_FORMAT.md';     To = 'CATALOGUE_FORMAT.md' },
+    @{ From = Join-Path $root 'docs\PILOT_RUNBOOK.md';          To = 'PILOT_RUNBOOK.md' }
+)
+
+foreach ($file in $package) {
+    if (-not (Test-Path $file.From)) { throw "Missing from the package: $($file.From)" }
+    Copy-Item $file.From (Join-Path $Output $file.To) -Force
+}
+
 Write-Host ''
 Write-Host "Published to $Output" -ForegroundColor Green
+Write-Host ''
 
-Get-ChildItem $Output -Filter *.exe |
-    ForEach-Object { Write-Host ('  {0,-20} {1,8:N1} MB' -f $_.Name, ($_.Length / 1MB)) }
+Get-ChildItem $Output -File | Sort-Object Length -Descending | ForEach-Object {
+    $size = if ($_.Length -ge 1MB) { '{0,8:N1} MB' -f ($_.Length / 1MB) } else { '{0,8:N1} KB' -f ($_.Length / 1KB) }
+    Write-Host ('  {0,-24} {1}' -f $_.Name, $size)
+}
 
 Write-Host ''
-Write-Host 'Copy this folder to the lane, then:' -ForegroundColor Cyan
-Write-Host '  pos import-items --file catalogue.csv'
-Write-Host '  pos test-hardware'
-Write-Host '  Pos.App.exe'
+Write-Host 'On the lane:' -ForegroundColor Cyan
+Write-Host '  1. Copy settings.json to %LOCALAPPDATA%\RetailPOS\ and edit it (see SETTINGS.md)'
+Write-Host '  2. pos test-hardware'
+Write-Host '  3. pos import-items --file catalogue.csv --dry-run, then without --dry-run'
+Write-Host '  4. Pos.App.exe'
+Write-Host ''
+Write-Host 'PILOT_RUNBOOK.md is the day-to-day guide for whoever runs the till.'
