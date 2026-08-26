@@ -24,7 +24,15 @@
       <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
       <Setter Property="BorderThickness" Value="0,0,1,1" />
-      <Setter Property="Padding" Value="8,6" />
+
+      <!--
+        6px, not 8. The line grid carries thirteen columns and several of them are sized by their
+        header rather than their values ("CGST %" is wider than "2.5"), so horizontal padding here
+        is multiplied thirteen times over. At 8px the row no longer fitted a 1920px till and the
+        Total column — the one figure on a line that nobody should have to scroll to see — fell off
+        the right-hand edge.
+      -->
+      <Setter Property="Padding" Value="6,6" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -32,7 +40,7 @@
 
     <Style TargetType="DataGridCell">
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="Padding" Value="6,0" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="DataGridCell">

@@ -90,82 +90,110 @@
                 FontSize="15"
                 RowHeight="30"
                 ItemsSource="{Binding Lines}"
+                ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 SelectedIndex="{Binding SelectedLineIndex, Mode=TwoWay}">
         <!--
-          The item name takes the slack and never drops below a readable width; every other
-          column is sized to its content. If the till is on a narrow screen the grid scrolls
-          sideways rather than squeezing the name down to two characters.
+          Every column is Auto, so the grid measures its own headers and cells rather than
+          trusting a width somebody guessed.
+
+          This is not a style preference. Hand-picked widths were clipping figures: a quantity of
+          1.25 rendered as ".25" because the cell was a few pixels short and the text is
+          right-aligned, so it overflowed and was cut on the left. A price that reads wrong on a
+          till is worse than a column that shifts by a few pixels when the widest value changes,
+          and no amount of picking better numbers makes the whole class of fault go away.
+
+          The item name is Auto too, bounded rather than starred. A * column claims the leftover
+          width before the Auto columns have finished measuring, so when the row content turned
+          out wider than the headers the name kept its over-generous share and the grid took the
+          difference out of the last two columns instead — Tax and Total were squeezed to slivers.
+          Bounding the name means the widths always sum to what the columns actually need, and if
+          that exceeds the screen the grid scrolls sideways rather than crushing anything.
         -->
         <DataGrid.Columns>
-          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" MinWidth="200" />
-          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="86" />
-          <DataGridTextColumn Header="Barcode / Batch" Binding="{Binding BarcodeOrBatch}" Width="156" />
-          <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="64"
+          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="Auto" MinWidth="200" MaxWidth="380" />
+          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="Auto" />
+          <DataGridTextColumn Header="Barcode / Batch" Binding="{Binding BarcodeOrBatch}" Width="Auto" />
+          <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="72" />
-          <DataGridTextColumn Header="MRP" Binding="{Binding Mrp, StringFormat={}{0:N2}}" Width="86"
+          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="Auto" />
+          <DataGridTextColumn Header="MRP" Binding="{Binding Mrp, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Rate" Binding="{Binding UnitRateExclTax, StringFormat={}{0:N2}}" Width="86"
+          <DataGridTextColumn Header="Rate" Binding="{Binding UnitRateExclTax, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="76"
+          <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="CGST %" Binding="{Binding CgstRate, StringFormat={}{0:0.##}}" Width="86"
+          <DataGridTextColumn Header="CGST %" Binding="{Binding CgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="SGST %" Binding="{Binding SgstRate, StringFormat={}{0:0.##}}" Width="86"
+          <DataGridTextColumn Header="SGST %" Binding="{Binding SgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="IGST %" Binding="{Binding IgstRate, StringFormat={}{0:0.##}}" Width="86"
+          <DataGridTextColumn Header="IGST %" Binding="{Binding IgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Tax" Binding="{Binding TaxAmount, StringFormat={}{0:N2}}" Width="86"
+          <DataGridTextColumn Header="Tax" Binding="{Binding TaxAmount, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="106"
+          <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
         </DataGrid.Columns>
       </DataGrid>
 
       <Border Grid.Column="1" Margin="12,0,0,0" Padding="16"
               Background="{StaticResource SurfaceRaised}" CornerRadius="6">
-        <StackPanel>
-          <TextBlock Text="Taxable" Foreground="{StaticResource InkMuted}" FontSize="12" />
-          <TextBlock Text="{Binding Totals.SubtotalTaxable, StringFormat={}{0:N2}}" FontSize="18" />
+        <!--
+          Docked, not stacked. This panel sits beside a grid that gets shorter whenever the search
+          results open under the scan box, and as one tall StackPanel it overran the bottom edge in
+          that state — the cashier's name was cut in half. Docking the figures to the top and the
+          customer and cashier to the bottom means both blocks always get their space and the
+          slack falls in the middle, where there is nothing to lose.
+        -->
+        <DockPanel LastChildFill="True">
+          <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="Taxable" Foreground="{StaticResource InkMuted}" FontSize="12" />
+            <TextBlock Text="{Binding Totals.SubtotalTaxable, StringFormat={}{0:N2}}" FontSize="18" />
 
-          <TextBlock Text="Discount" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-          <TextBlock Text="{Binding Totals.TotalDiscount, StringFormat={}{0:N2}}" FontSize="18" />
+            <TextBlock Text="Discount" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
+            <TextBlock Text="{Binding Totals.TotalDiscount, StringFormat={}{0:N2}}" FontSize="18" />
 
-          <TextBlock Text="CGST / SGST / IGST" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="{Binding Totals.TotalCgst, StringFormat={}{0:N2}}" FontSize="18" />
-            <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-            <TextBlock Text="{Binding Totals.TotalSgst, StringFormat={}{0:N2}}" FontSize="18" />
-            <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-            <TextBlock Text="{Binding Totals.TotalIgst, StringFormat={}{0:N2}}" FontSize="18" />
+            <TextBlock Text="CGST / SGST / IGST" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Totals.TotalCgst, StringFormat={}{0:N2}}" FontSize="18" />
+              <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
+              <TextBlock Text="{Binding Totals.TotalSgst, StringFormat={}{0:N2}}" FontSize="18" />
+              <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
+              <TextBlock Text="{Binding Totals.TotalIgst, StringFormat={}{0:N2}}" FontSize="18" />
+            </StackPanel>
+
+            <Separator Margin="0,16" Background="{StaticResource Line}" />
           </StackPanel>
 
-          <Separator Margin="0,16" Background="{StaticResource Line}" />
+          <StackPanel DockPanel.Dock="Bottom">
+            <Separator Margin="0,16" Background="{StaticResource Line}" />
+
+            <TextBlock Text="Customer" Foreground="{StaticResource InkMuted}" FontSize="12" />
+            <TextBlock Text="{Binding CustomerLabel}" FontSize="18" />
+            <TextBlock Foreground="{StaticResource Accent}" FontSize="13"
+                       Visibility="{Binding HasCustomer, Converter={StaticResource BoolToVisibility}}"
+                       Text="{Binding LoyaltyBalance, StringFormat={}{0} points}" />
+
+            <TextBlock Text="Cashier" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
+            <TextBlock Text="{Binding CashierLabel}" FontSize="15" />
+          </StackPanel>
 
           <!-- NFR-02: the grand total is the one figure that must read across the counter. -->
-          <TextBlock Text="TOTAL" Foreground="{StaticResource InkMuted}" FontSize="14" />
-          <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
-                     Foreground="{StaticResource Positive}"
-                     FontSize="68"
-                     FontWeight="Bold"
-                     TextAlignment="Right" />
+          <StackPanel VerticalAlignment="Top">
+            <TextBlock Text="TOTAL" Foreground="{StaticResource InkMuted}" FontSize="14" />
+            <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
+                       Foreground="{StaticResource Positive}"
+                       FontSize="68"
+                       FontWeight="Bold"
+                       TextAlignment="Right"
+                       LineHeight="74"
+                       LineStackingStrategy="BlockLineHeight" />
 
-          <TextBlock Text="{Binding Totals.LineCount, StringFormat={}{0} lines}"
-                     Foreground="{StaticResource InkMuted}"
-                     FontSize="13"
-                     TextAlignment="Right" />
-
-          <Separator Margin="0,16" Background="{StaticResource Line}" />
-
-          <TextBlock Text="Customer" Foreground="{StaticResource InkMuted}" FontSize="12" />
-          <TextBlock Text="{Binding CustomerLabel}" FontSize="18" />
-          <TextBlock Foreground="{StaticResource Accent}" FontSize="13"
-                     Visibility="{Binding HasCustomer, Converter={StaticResource BoolToVisibility}}"
-                     Text="{Binding LoyaltyBalance, StringFormat={}{0} points}" />
-
-          <TextBlock Text="Cashier" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-          <TextBlock Text="{Binding CashierLabel}" FontSize="15" />
-        </StackPanel>
+            <TextBlock Text="{Binding Totals.LineCount, StringFormat={}{0} lines}"
+                       Foreground="{StaticResource InkMuted}"
+                       FontSize="13"
+                       TextAlignment="Right" />
+          </StackPanel>
+        </DockPanel>
       </Border>
     </Grid>
 
