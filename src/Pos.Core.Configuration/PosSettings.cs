@@ -148,6 +148,10 @@ public sealed class PosSettings
         TextEncodingCheck.ThrowIfMangled(settings.Store.AddressLine2, "the second address line", path);
         TextEncodingCheck.ThrowIfMangled(settings.Store.FooterMessage, "the footer message", path);
 
+        // A template that was copied but not finished. This is checked before the prefix below,
+        // because "CHANGEME" is a structurally valid prefix and would otherwise sail through.
+        PlaceholderCheck.ThrowIfAnyRemain(settings, path);
+
         // An unusable invoice prefix has to stop the lane starting. Discovering it at the first
         // sale would mean the shop's first bill of the day carries a number nobody can file.
         try

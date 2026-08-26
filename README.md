@@ -15,13 +15,16 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 1 | GST engine, invoice engine | Complete, gate passing |
 | 2 | Item search, line grid, keyboard flow | Complete, gate passing |
 | 4 | Loyalty, multi-tender, hold/recall, invoicing | Complete, gate passing |
-| 3 | Printer, cash drawer, scanner, scale | Services and tests complete; hardware-in-the-loop pending devices |
+| 3 | Printer, cash drawer, scanner, scale | Complete, gate passing — verified on real devices |
 | 5 | Multi-lane, offline resilience, hardening | Complete, gate passing |
 | — | Pilot readiness: import, day-end, backup, reprint | Complete, gate passing |
-| 6 | Pilot | Package and dry run complete; on-site run pending |
+| — | Tamil receipts, fiscal-year numbering | Complete, gate passing |
+| 6 | Pilot | Package and bench sign-off complete; on-site run pending |
 
-Two things are deliberately still open: the Phase 3 hardware-in-the-loop checks, which need the
-devices on a counter, and the pilot itself. Everything else has a passing gate.
+Every gate passes. The Phase 3 hardware-in-the-loop checks were signed off at the bench against
+`v1.0.0-RC3` on an Epson TM-T82, a CAS scale on COM3, an RJ11 drawer and a barcode scanner; the
+figures are in [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md). What is left is the pilot
+itself — a shop, trading.
 
 Start at [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md) if you are the one taking this to a store.
 

@@ -51,7 +51,7 @@ The keyboard-only tests drive the till through `KeyboardRouter` with the shipped
 than calling view model methods, so an action that still works but has lost its binding fails the
 gate.
 
-**Phase 3 — Hardware integration** — automated portion passing; hardware-in-the-loop **pending physical verification**
+**Phase 3 — Hardware integration** — passing, hardware-in-the-loop included
 
 Automated, and passing:
 - [x] ESC/POS command bytes asserted literally — `EscPosTests`
@@ -66,28 +66,35 @@ Automated, and passing:
       `DrawerServiceTests`, `ScaleProtocolTests`, `CheckoutTests`
 - [x] What a lane's settings build into — `ConfigurationTests`
 
-Still requiring physical devices, and **not** claimed as passing:
-- [ ] **Hardware-in-the-loop, per peripheral**: printer (paper comes out and matches), drawer
-      (it physically opens), scanner (a real device's bursts read correctly), scale (a real
-      device's stream parses and settles)
+Verified on real devices at the bench, against `v1.0.0-RC3` (`b374724`):
+- [x] **Printer** — paper out, matches the preview, cut below the last line. Epson TM-T82 over USB.
+- [x] **Cash drawer** — RJ11 kick through the printer's passthrough port, fired on settlement.
+- [x] **Scanner** — EAN-13 and internal SKUs, read straight onto the line.
+- [x] **Scale** — CAS stream on COM3 at 9600 8-N-1, settled to Stable with no dropped frames.
+- [x] **Tamil rendering (1a)** — Nirmala UI, crisp and legible on thermal paper, no `?` and no mojibake.
+- [x] **Print speed (1b)** — 26.8KB job, 42ms to hand to the spooler, ~1.2s to paper stop.
+- [x] **A real sale** — standard and weighed lines, split tender, `RM/26-27/1`, then a day close
+      printing the Tamil Z-report with matching reconciliation.
+
+**On the 1b figure.** It is the one number here with no automated equivalent and the one that could
+have failed on a bench where everything else passed. A Tamil receipt is roughly 27KB against 2KB
+in English because the labels are drawn rather than typed; at 1.2 seconds over USB that is
+imperceptible at a counter, where the same job over a 9600-baud serial line would have been about
+half a minute and unusable. Measured rather than assumed, because nothing about the connection is
+visible from the software.
 
 Run these with `pos test-hardware` on the lane, with the devices attached. The tool prints what
-*should* come out before it prints, fires each peripheral, and asks the operator to confirm what
-physically happened — because no software can see paper leave a printer or a drawer slide open.
-It exits non-zero if any configured peripheral fails, so it can gate a rollout.
+*should* come out before it prints, fires each peripheral, reports the job size and handover time,
+and asks the operator to confirm what physically happened — because no software can see paper leave
+a printer or a drawer slide open. It exits non-zero if any configured peripheral fails, so it can
+gate a rollout.
 
-**How this item gets closed.** `deploy/HARDWARE_SIGNOFF.md` ships in the lane package as a sheet to
-work through at the bench: what to check on each peripheral, what a failure looks like, and a place
-to record the weight used, the codes scanned, and the protocol the scale turned out to be speaking.
-When it is complete and all four read PASS, tick this box and keep the sheet as the evidence.
-
-Until then it stays open. The automated suite covers the bytes on the wire, not the paper in the
-tray, and ticking this on the strength of those tests would be recording something nobody has seen.
-
-The reason this split exists: everything above the wire — the command bytes, the layout, the frame
-parsing, the failure handling — is deterministic and worth testing exhaustively without a device.
-What is left needs eyes on the counter, and simulating it as passing would be worse than leaving
-it open.
+`deploy/HARDWARE_SIGNOFF.md` is the sheet this was worked through on, and the completed sheet is
+the evidence for this box being ticked. The reason the split existed at all: everything above the
+wire — the command bytes, the layout, the frame parsing, the failure handling — is deterministic
+and was tested exhaustively without a device. What was left needed eyes on the counter, and
+ticking it on the strength of the automated tests would have been recording something nobody had
+seen.
 
 **Phase 4 — Loyalty, multi-tender, hold/recall** — passing *(run before Phase 3; see the note in `IMPLEMENTATION_PLAN.md`)*
 - [x] LoyaltyEngine tests: redemption cap enforcement, balance never negative, accrual on net bill after redemption — `LoyaltyEngineTests`
