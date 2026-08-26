@@ -132,11 +132,13 @@ public sealed class InvoiceRepository : IInvoiceStore
             INSERT INTO invoice_lines
               (invoice_id, line_no, item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no,
                unit_type, mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount,
-               is_inter_state, taxable_value, cgst_amount, sgst_amount, igst_amount, line_total)
+               is_inter_state, taxable_value, cgst_amount, sgst_amount, igst_amount, line_total,
+               category_snapshot, cost_snapshot)
             VALUES
               ($invoiceId, $lineNo, $itemId, $name, $hsn, $barcode, $batch,
                $unitType, $mrp, $unitPrice, $taxInclusive, $gstRate, $quantity, $discount,
-               $interState, $taxable, $cgst, $sgst, $igst, $lineTotal);
+               $interState, $taxable, $cgst, $sgst, $igst, $lineTotal,
+               $category, $cost);
             """;
 
         foreach (var name in new[]
@@ -144,6 +146,7 @@ public sealed class InvoiceRepository : IInvoiceStore
                      "$invoiceId", "$lineNo", "$itemId", "$name", "$hsn", "$barcode", "$batch",
                      "$unitType", "$mrp", "$unitPrice", "$taxInclusive", "$gstRate", "$quantity",
                      "$discount", "$interState", "$taxable", "$cgst", "$sgst", "$igst", "$lineTotal",
+                     "$category", "$cost",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -169,6 +172,8 @@ public sealed class InvoiceRepository : IInvoiceStore
             command.Parameters["$quantity"].Value = line.Quantity;
             command.Parameters["$discount"].Value = line.Discount;
             command.Parameters["$interState"].Value = line.IsInterState ? 1 : 0;
+            command.Parameters["$category"].Value = (object?)line.CategorySnapshot ?? DBNull.Value;
+            command.Parameters["$cost"].Value = (object?)line.CostSnapshot ?? DBNull.Value;
 
             // The computed figures are stored alongside the inputs rather than re-derived on read.
             // A reprint years from now must show the tax that was actually charged, even if the
@@ -417,7 +422,8 @@ public sealed class InvoiceRepository : IInvoiceStore
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no, unit_type,
-                   mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state
+                   mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state,
+                   category_snapshot, cost_snapshot
             FROM invoice_lines
             WHERE invoice_id = $invoiceId
             ORDER BY line_no;
@@ -447,7 +453,9 @@ public sealed class InvoiceRepository : IInvoiceStore
         gstRate: reader.GetDecimal(9),
         quantity: reader.GetDecimal(10),
         discount: reader.GetDecimal(11),
-        isInterState: reader.GetInt32(12) != 0);
+        isInterState: reader.GetInt32(12) != 0,
+        categorySnapshot: reader.FieldCount > 13 && !reader.IsDBNull(13) ? reader.GetString(13) : null,
+        costSnapshot: reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetDecimal(14) : null);
 
     private static List<Tender> ReadPayments(SqliteConnection connection, long invoiceId)
     {

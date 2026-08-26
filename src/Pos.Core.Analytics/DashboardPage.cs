@@ -126,6 +126,135 @@ public static class DashboardPage
         }
 
         p.Append("</tbody></table></div></div>");
+
+        WriteCategories(p, d);
+        WriteMargins(p, d);
+    }
+
+    private static void WriteCategories(StringBuilder p, DashboardData d)
+    {
+        p.Append("<div class=\"panel\"><h3>Where the takings came from</h3>");
+
+        if (d.Categories.Count == 0)
+        {
+            p.Append("<p class=\"empty\">No sales in this window.</p></div>");
+            return;
+        }
+
+        var uncategorised = d.Categories.FirstOrDefault(c => c.Category == "Uncategorised");
+        var total = d.Categories.Sum(c => c.NetSales);
+
+        p.Append(Donut([.. d.Categories.Select(c => new TenderSlice(c.Category, c.Lines, c.NetSales))]));
+        p.Append("<table class=\"plain\">");
+
+        foreach (var (slice, index) in d.Categories.Select((c, i) => (c, i)))
+        {
+            p.Append($"<tr><td><span class=\"swatch\" style=\"background:{Slice(index)}\"></span>{Escape(slice.Category)}</td>");
+            p.Append($"<td class=\"n\">{Percent(slice.NetSales, total)}</td>");
+            p.Append($"<td class=\"n\">{Money(slice.NetSales)}</td></tr>");
+        }
+
+        p.Append("</table>");
+
+        if (uncategorised is not null && uncategorised.NetSales > 0m)
+        {
+            p.Append($"<p class=\"note\">{Percent(uncategorised.NetSales, total)} of the takings are from items with no "
+                   + "department set. Add a <code>category</code> column to the catalogue and re-import with "
+                   + "<code>--update</code> to break that open.</p>");
+        }
+
+        p.Append("</div>");
+    }
+
+    private static void WriteMargins(StringBuilder p, DashboardData d)
+    {
+        var m = d.Margins;
+
+        p.Append("<div class=\"panel\"><h3>Margin against how fast it moves</h3>");
+
+        if (m.Priced.Count == 0)
+        {
+            p.Append("<p class=\"empty\">Nothing sold in this window carried a cost price, so there is no margin to "
+                   + "show. Add a <code>cost_price</code> column to the catalogue and re-import with "
+                   + "<code>--update</code>; items sold from then on will appear here.</p></div>");
+            return;
+        }
+
+        p.Append("<p class=\"note\">Split at this shop's own middle — half its items sell faster than the vertical "
+               + "line, half earn more than the horizontal one. A fixed line would say more about the line than "
+               + "about the shop.</p>");
+
+        p.Append(Quadrant(m));
+
+        p.Append("<div class=\"quadkey\">");
+        QuadrantKey(p, "Stars", "sell fast, earn well", "keep them in stock");
+        QuadrantKey(p, "Volume drivers", "sell fast, earn little", "what brings people in");
+        QuadrantKey(p, "Hidden gems", "earn well, sell slowly", "worth better shelf space");
+        QuadrantKey(p, "Dead weight", "slow and thin", "candidates for clearance");
+        p.Append("</div>");
+
+        if (m.UnpricedSales > 0m)
+        {
+            p.Append($"<p class=\"note warn\">This picture covers <strong>{m.Coverage.ToString("0.#", India)}%</strong> of the "
+                   + $"window's takings. {Money(m.UnpricedSales)} came from {m.UnpricedItems} item(s) with no cost price "
+                   + "recorded at the time of sale, and they are not plotted — an item with no cost would otherwise "
+                   + "appear to keep everything it sells for.</p>");
+        }
+
+        p.Append("</div>");
+    }
+
+    private static void QuadrantKey(StringBuilder p, string name, string what, string why)
+    {
+        p.Append($"<div><b>{Escape(name)}</b><span>{Escape(what)}</span><span class=\"why\">{Escape(why)}</span></div>");
+    }
+
+    /// <summary>The four-box matrix, split at the shop's own medians.</summary>
+    private static string Quadrant(MarginPicture m)
+    {
+        const int width = 520;
+        const int height = 300;
+        const int pad = 42;
+
+        var maxQuantity = Math.Max(1d, (double)m.Priced.Max(i => i.Quantity));
+        var margins = m.Priced.Select(i => (double)i.MarginPercent).ToList();
+        var lowMargin = Math.Min(0d, margins.Min());
+        var highMargin = Math.Max(1d, margins.Max());
+
+        double X(double quantity) => pad + (quantity / maxQuantity * (width - pad - 12));
+        double Y(double margin) => height - pad - ((margin - lowMargin) / (highMargin - lowMargin) * (height - pad - 12));
+
+        var biggest = (double)m.Priced.Max(i => i.NetSales);
+        var svg = new StringBuilder($"<svg class=\"quad\" viewBox=\"0 0 {width} {height}\" role=\"img\">");
+
+        var midX = F(X((double)m.MedianQuantity));
+        var midY = F(Y((double)m.MedianMargin));
+
+        svg.Append($"<line class=\"split\" x1=\"{midX}\" y1=\"12\" x2=\"{midX}\" y2=\"{height - pad}\" />");
+        svg.Append($"<line class=\"split\" x1=\"{pad}\" y1=\"{midY}\" x2=\"{width - 12}\" y2=\"{midY}\" />");
+
+        foreach (var item in m.Priced)
+        {
+            // Area by takings, so a big seller reads as big. Radius is the square root of it, or a
+            // line ten times another's revenue would look a hundred times the size.
+            var radius = 4 + (Math.Sqrt((double)item.NetSales / biggest) * 12);
+            var cx = F(X((double)item.Quantity));
+            var cy = F(Y((double)item.MarginPercent));
+
+            svg.Append($"<circle class=\"dot\" cx=\"{cx}\" cy=\"{cy}\" r=\"{F(radius)}\">");
+            svg.Append($"<title>{Escape($"{item.Name} — {item.Quantity:0.###} sold, {item.MarginPercent:0.#}% margin, {Money(item.NetSales)} taken, {Money(item.Profit)} kept")}</title>");
+            svg.Append("</circle>");
+        }
+
+        svg.Append($"<line class=\"axis\" x1=\"{pad}\" y1=\"{height - pad}\" x2=\"{width - 12}\" y2=\"{height - pad}\" />");
+        svg.Append($"<line class=\"axis\" x1=\"{pad}\" y1=\"12\" x2=\"{pad}\" y2=\"{height - pad}\" />");
+        svg.Append($"<text class=\"tick\" x=\"{width - 12}\" y=\"{height - pad + 18}\" text-anchor=\"end\">units sold &rarr;</text>");
+        svg.Append($"<text class=\"tick axislabel\" x=\"12\" y=\"16\" text-anchor=\"start\">margin %</text>");
+        svg.Append($"<text class=\"tick\" x=\"{pad - 6}\" y=\"{height - pad + 4}\" text-anchor=\"end\">{F(lowMargin)}</text>");
+        svg.Append($"<text class=\"tick\" x=\"{pad - 6}\" y=\"18\" text-anchor=\"end\">{F(highMargin)}</text>");
+        svg.Append("</svg>");
+
+        return svg.ToString();
     }
 
     private static void WriteReconciliation(StringBuilder p, DashboardData d)
@@ -241,10 +370,11 @@ public static class DashboardPage
     private static void WriteFooter(StringBuilder p, DashboardData d)
     {
         p.Append("<footer>");
-        p.Append("<p><strong>What this page cannot show, and why.</strong> The books record what was sold and for "
-               + "how much, and nothing about what it cost or what shelf it came from. So there is no margin here, "
-               + "no category split and no wastage — those need a cost price and a category on the catalogue, which "
-               + "this version does not carry. Returns are not shown because this version does not do them.</p>");
+        p.Append("<p><strong>What this page cannot show, and why.</strong> Category and margin are drawn from what "
+               + "each line carried <em>when it was sold</em>, so a shop that has only just added them will see them "
+               + "fill in from that day rather than backwards — nobody knew an item's cost last March, and inventing "
+               + "it would be worse than leaving the gap. There is no wastage here because the product tracks no "
+               + "stock, and no returns because it does not do them.</p>");
         p.Append("<p>Read from the lane's database without writing to it. Producing this page cannot affect a sale, "
                + "and nothing on the till is aware it ran.</p>");
         p.Append("</footer>");
@@ -573,6 +703,18 @@ public static class DashboardPage
           .figure .l{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
           .figure .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3}
           .figure .n{font-size:13px;color:var(--soft)}
+          .quad{width:100%;max-width:520px;height:auto;display:block;margin:0 auto}
+          .quad .dot{fill:var(--accent);opacity:.45;stroke:var(--accent);stroke-width:1}
+          .quad .dot:hover{opacity:.8}
+          .quad .split{stroke:var(--faint);stroke-width:1;stroke-dasharray:4 4}
+          .quad .axislabel{text-anchor:start}
+          .quadkey{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 20px;margin-top:16px}
+          .quadkey div{font-size:13px;color:var(--soft)}
+          .quadkey b{display:block;color:var(--ink);font-size:14px}
+          .quadkey span{display:block}
+          .quadkey .why{color:var(--faint);font-style:italic}
+          .note.warn{color:var(--soft);border-left:3px solid var(--accent);padding-left:12px}
+          .note code{font-family:ui-monospace,Consolas,monospace;font-size:.9em}
           footer{margin-top:56px;padding-top:22px;border-top:2px solid var(--ink);color:var(--faint);font-size:13.5px}
           footer strong{color:var(--soft)}
           @media (max-width:640px){body{padding:0 14px 60px;font-size:15px}.kpi .v{font-size:26px}}

@@ -20,6 +20,20 @@ public sealed class InvoiceLine
     public string? BatchNo { get; init; }
     public UnitType Unit { get; init; } = UnitType.Each;
 
+    /// <summary>
+    /// The department the item was in when it was sold, and what the shop was paying for it then.
+    /// </summary>
+    /// <remarks>
+    /// Snapshotted for the same reason the tax is: a shop moves an item between departments and
+    /// renegotiates its cost, and reading either from the catalogue at report time would restate
+    /// last quarter's figures every time one of them changed. Both are null on lines sold before
+    /// the catalogue carried them, which is honest — nobody knew the cost then.
+    /// </remarks>
+    public string? CategorySnapshot { get; init; }
+
+    /// <inheritdoc cref="CategorySnapshot"/>
+    public decimal? CostSnapshot { get; init; }
+
     /// <summary>Printed MRP, kept for display only — it does not feed the tax maths.</summary>
     public decimal Mrp { get; init; }
 
@@ -133,7 +147,12 @@ public sealed class InvoiceLine
         decimal gstRate,
         decimal quantity,
         decimal discount,
-        bool isInterState) => new()
+        bool isInterState,
+
+        // Appended, and optional, so that adding them did not have to touch a hundred call sites
+        // that have nothing to say about either.
+        string? categorySnapshot = null,
+        decimal? costSnapshot = null) => new()
     {
         ItemId = itemId,
         NameSnapshot = nameSnapshot,
@@ -148,6 +167,8 @@ public sealed class InvoiceLine
         Quantity = quantity,
         Discount = discount,
         IsInterState = isInterState,
+        CategorySnapshot = categorySnapshot,
+        CostSnapshot = costSnapshot,
     };
 
     /// <summary>Builds a line from an item master record at quantity 1.</summary>
@@ -164,5 +185,7 @@ public sealed class InvoiceLine
         GstRate = item.GstRate,
         Quantity = quantity,
         IsInterState = isInterState,
+        CategorySnapshot = item.Category,
+        CostSnapshot = item.CostPrice,
     };
 }

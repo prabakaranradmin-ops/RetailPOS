@@ -10,7 +10,8 @@ public sealed class HeldBillRepository : IHeldBillStore
 {
     private const string LineColumns =
         "item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no, unit_type, " +
-        "mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state";
+        "mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state, " +
+        "category_snapshot, cost_snapshot";
 
     private readonly PosDatabase _database;
 
@@ -58,14 +59,15 @@ public sealed class HeldBillRepository : IHeldBillStore
                   (held_bill_id, line_no, {LineColumns})
                 VALUES
                   ($billId, $lineNo, $itemId, $name, $hsn, $barcode, $batch, $unitType,
-                   $mrp, $unitPrice, $taxInclusive, $gstRate, $quantity, $discount, $interState);
+                   $mrp, $unitPrice, $taxInclusive, $gstRate, $quantity, $discount, $interState,
+                   $category, $cost);
                 """;
 
             foreach (var name in new[]
                      {
                          "$billId", "$lineNo", "$itemId", "$name", "$hsn", "$barcode", "$batch",
                          "$unitType", "$mrp", "$unitPrice", "$taxInclusive", "$gstRate",
-                         "$quantity", "$discount", "$interState",
+                         "$quantity", "$discount", "$interState", "$category", "$cost",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -90,6 +92,8 @@ public sealed class HeldBillRepository : IHeldBillStore
                 command.Parameters["$quantity"].Value = line.Quantity;
                 command.Parameters["$discount"].Value = line.Discount;
                 command.Parameters["$interState"].Value = line.IsInterState ? 1 : 0;
+                command.Parameters["$category"].Value = (object?)line.CategorySnapshot ?? DBNull.Value;
+                command.Parameters["$cost"].Value = (object?)line.CostSnapshot ?? DBNull.Value;
 
                 command.ExecuteNonQuery();
             }

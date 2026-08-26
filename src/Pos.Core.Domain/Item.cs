@@ -27,5 +27,31 @@ public sealed record Item
 
     public UnitType UnitType { get; init; } = UnitType.Each;
 
+    /// <summary>
+    /// Which part of the shop this belongs to — Staples, Dairy, Household. Optional, and null means
+    /// the shop has not said, not that the item belongs nowhere.
+    /// </summary>
+    public string? Category { get; init; }
+
+    /// <summary>
+    /// What the shop pays for one of these, tax inclusive to match <see cref="SellPrice"/>.
+    /// </summary>
+    /// <remarks>
+    /// Optional, because a shopkeeper rarely has a cost to hand for every line of a first catalogue
+    /// and refusing the import over it would stop a shop opening. Everything that uses it treats
+    /// absence as a fact rather than a zero, so an item with no cost is left out of a margin figure
+    /// instead of appearing to earn the whole of what it sells for.
+    /// </remarks>
+    public decimal? CostPrice { get; init; }
+
+    /// <summary>
+    /// What one sale of this earns, as a percentage of what it sells for. Null when the cost is
+    /// unknown, which is not the same as zero.
+    /// </summary>
+    public decimal? MarginPercent =>
+        CostPrice is null || SellPrice <= 0m
+            ? null
+            : decimal.Round((SellPrice - CostPrice.Value) / SellPrice * 100m, 2, MidpointRounding.ToEven);
+
     public bool IsActive { get; init; } = true;
 }

@@ -46,6 +46,13 @@ public static class ItemCsvParser
     private const string GstRate = "gst_rate";
     private const string IsWeighed = "is_weighed";
 
+    /// <summary>
+    /// The two optional columns. A catalogue written before they existed imports unchanged, which
+    /// is the whole point: a shop should never have to rewrite a working file to take an update.
+    /// </summary>
+    private const string Category = "category";
+    private const string CostPrice = "cost_price";
+
     private static readonly string[] RequiredColumns =
         [Sku, Barcode, Name, Hsn, Unit, Mrp, SellingPrice, GstRate, IsWeighed];
 
@@ -170,7 +177,28 @@ public static class ItemCsvParser
         if (mrp is not null && sellingPrice is not null && sellingPrice > mrp)
             problems.Add(new ImportProblem(line, SellingPrice, $"selling price {sellingPrice:0.00} is above the MRP of {mrp:0.00}."));
 
+        // Both optional. A column that is not in the file, or a cell left empty in one that is,
+        // means the shop has not said — which is a different thing from saying zero, and is treated
+        // as such everywhere downstream.
+        var category = Field(row, header, Category);
+        var costText = Field(row, header, CostPrice);
+        decimal? cost = null;
+
+        if (costText.Length > 0)
+        {
+            cost = ParseMoney(costText, CostPrice, line, problems);
+
+            // 0 <= cost <= selling <= mrp. A cost above what the item sells for is either a typo or
+            // a line the shop is losing money on every time it scans, and both are worth stopping
+            // the import over rather than discovering in a margin report months later.
+            if (cost is not null && sellingPrice is not null && cost > sellingPrice)
+                problems.Add(new ImportProblem(line, CostPrice, $"cost price {cost:0.00} is above the selling price of {sellingPrice:0.00}."));
+        }
+
         if (unit is null || weighed is null || mrp is null || sellingPrice is null || gstRate is null)
+            return null;
+
+        if (costText.Length > 0 && cost is null)
             return null;
 
         return new Item
@@ -184,6 +212,8 @@ public static class ItemCsvParser
             GstRate = gstRate.Value,
             IsTaxInclusive = true,
             UnitType = unit.Value,
+            Category = category.Length == 0 ? null : category,
+            CostPrice = cost,
             IsActive = true,
         };
     }

@@ -16,7 +16,8 @@ public sealed class ItemRepository : IItemStore
     public const int DefaultResultLimit = 50;
 
     private const string SelectColumns =
-        "id, sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active";
+        "id, sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, " +
+        "category, cost_price";
 
     private readonly PosDatabase _database;
 
@@ -251,9 +252,9 @@ public sealed class ItemRepository : IItemStore
 
             command.CommandText = """
                 INSERT INTO items
-                  (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active)
+                  (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, category, cost_price)
                 VALUES
-                  ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active)
+                  ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active, $category, $cost)
                 ON CONFLICT (sku) DO UPDATE SET
                   barcode = excluded.barcode,
                   hsn_code = excluded.hsn_code,
@@ -263,13 +264,15 @@ public sealed class ItemRepository : IItemStore
                   gst_rate = excluded.gst_rate,
                   is_tax_inclusive = excluded.is_tax_inclusive,
                   unit_type = excluded.unit_type,
-                  is_active = excluded.is_active;
+                  is_active = excluded.is_active,
+                  category = excluded.category,
+                  cost_price = excluded.cost_price;
                 """;
 
             foreach (var name in new[]
                      {
                          "$sku", "$barcode", "$hsn", "$name", "$mrp",
-                         "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active",
+                         "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -299,16 +302,16 @@ public sealed class ItemRepository : IItemStore
     {
         command.CommandText = """
             INSERT INTO items
-              (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active)
+              (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, category, cost_price)
             VALUES
-              ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active);
+              ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active, $category, $cost);
             SELECT last_insert_rowid();
             """;
 
         foreach (var name in new[]
                  {
                      "$sku", "$barcode", "$hsn", "$name", "$mrp",
-                     "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active",
+                     "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -327,6 +330,8 @@ public sealed class ItemRepository : IItemStore
         command.Parameters["$taxInclusive"].Value = item.IsTaxInclusive ? 1 : 0;
         command.Parameters["$unitType"].Value = (int)item.UnitType;
         command.Parameters["$active"].Value = item.IsActive ? 1 : 0;
+        command.Parameters["$category"].Value = (object?)item.Category ?? DBNull.Value;
+        command.Parameters["$cost"].Value = (object?)item.CostPrice ?? DBNull.Value;
     }
 
     /// <summary>
@@ -351,5 +356,7 @@ public sealed class ItemRepository : IItemStore
         IsTaxInclusive = reader.GetInt32(8) != 0,
         UnitType = (UnitType)reader.GetInt32(9),
         IsActive = reader.GetInt32(10) != 0,
+        Category = reader.IsDBNull(11) ? null : reader.GetString(11),
+        CostPrice = reader.IsDBNull(12) ? null : reader.GetDecimal(12),
     };
 }

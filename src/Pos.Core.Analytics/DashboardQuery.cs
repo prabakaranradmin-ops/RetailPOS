@@ -35,6 +35,9 @@ public sealed class DashboardQuery(PosDatabase database)
 
     private static string Sum(string column) => $"SUM({string.Format(CultureInfo.InvariantCulture, Paise, column)})";
 
+    /// <summary>The same conversion without the SUM, for use inside one.</summary>
+    private static string Paise0(string column) => string.Format(CultureInfo.InvariantCulture, Paise, column);
+
     /// <summary>
     /// A settled sale: not voided, and not a parked bill waiting to be recalled.
     /// </summary>
@@ -82,6 +85,8 @@ public sealed class DashboardQuery(PosDatabase database)
             Daily = FoldDaily(facts, from, to),
             WeekdayByHour = FoldWeekdayByHour(facts),
             TopItems = FoldTopItems(lines, topItems),
+            Categories = FoldCategories(lines),
+            Margins = FoldMargins(lines),
             Tenders = tenders,
             GstSlabs = FoldGstSlabs(lines),
             Voids = FoldVoids(facts),
@@ -332,6 +337,8 @@ public sealed class DashboardQuery(PosDatabase database)
         string Hsn,
         UnitType Unit,
         decimal Rate,
+        string? Category,
+        decimal? Cost,
         decimal Quantity,
         decimal LineTotal,
         decimal Taxable,
@@ -339,6 +346,9 @@ public sealed class DashboardQuery(PosDatabase database)
         decimal Sgst,
         decimal Igst,
         int Bills);
+
+    /// <summary>What a department is called when the shop has not said.</summary>
+    public const string Uncategorised = "Uncategorised";
 
     /// <summary>
     /// One pass over the invoice lines, serving both the item table and the GST breakup.
@@ -355,6 +365,16 @@ public sealed class DashboardQuery(PosDatabase database)
                    l.hsn_snapshot,
                    MAX(l.unit_type),
                    CAST(l.gst_rate AS REAL) AS rate,
+                   l.category_snapshot AS category,
+                   l.cost_snapshot IS NOT NULL AS priced,
+
+                   -- What the shop paid for everything sold in this group, in paise. A line with no
+                   -- cost contributes nothing here and is counted apart, so an unpriced item cannot
+                   -- masquerade as one bought for free.
+                   COALESCE(SUM(CASE WHEN l.cost_snapshot IS NOT NULL
+                                     THEN {Paise0("l.cost_snapshot")} * CAST(l.quantity AS REAL)
+                                     ELSE 0 END), 0),
+
                    COALESCE(SUM(CAST(l.quantity AS REAL)), 0),
                    COALESCE({Sum("l.line_total")}, 0),
                    COALESCE({Sum("l.taxable_value")}, 0),
@@ -365,7 +385,7 @@ public sealed class DashboardQuery(PosDatabase database)
             FROM invoice_lines l
             JOIN invoices i ON i.id = l.invoice_id
             WHERE i.lane_id = $lane AND {Settled} AND i.created_at >= $from AND i.created_at < $to
-            GROUP BY l.name_snapshot, l.hsn_snapshot, rate;
+            GROUP BY l.name_snapshot, l.hsn_snapshot, rate, category, priced;
             """);
 
         var lines = new List<LineFacts>();
@@ -380,13 +400,15 @@ public sealed class DashboardQuery(PosDatabase database)
                 reader.GetString(1),
                 (UnitType)reader.GetInt32(2),
                 Math.Round((decimal)reader.GetDouble(3), 2),
-                Math.Round((decimal)reader.GetDouble(4), 3),
-                Rupees(reader.GetInt64(5)),
-                Rupees(reader.GetInt64(6)),
-                Rupees(reader.GetInt64(7)),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetBoolean(5) ? Rupees((long)reader.GetDouble(6)) : null,
+                Math.Round((decimal)reader.GetDouble(7), 3),
                 Rupees(reader.GetInt64(8)),
                 Rupees(reader.GetInt64(9)),
-                reader.GetInt32(10)));
+                Rupees(reader.GetInt64(10)),
+                Rupees(reader.GetInt64(11)),
+                Rupees(reader.GetInt64(12)),
+                reader.GetInt32(13)));
         }
 
         return lines;
@@ -404,6 +426,86 @@ public sealed class DashboardQuery(PosDatabase database)
                 g.Sum(l => l.Bills)))
             .OrderByDescending(i => i.NetSales)
             .Take(count)];
+
+    /// <summary>
+    /// What each part of the shop brought in. Items the shop has not filed go into one honest
+    /// bucket rather than being dropped — a department chart that silently omits a third of the
+    /// takings is worse than one that says so.
+    /// </summary>
+    private static List<CategorySlice> FoldCategories(IReadOnlyList<LineFacts> lines) =>
+        [.. lines
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.Category) ? Uncategorised : l.Category!.Trim())
+            .Select(g => new CategorySlice(g.Key, g.Sum(l => l.LineTotal), g.Sum(l => l.Quantity), g.Sum(l => l.Bills)))
+            .OrderByDescending(c => c.NetSales)];
+
+    /// <summary>
+    /// Volume against margin, for the items that can answer both.
+    /// </summary>
+    /// <remarks>
+    /// An item is only placed if it carried a cost when it was sold. The rest are counted and their
+    /// takings reported, so the reader can see how much of the shop the picture speaks for — the
+    /// alternative is a quadrant that looks complete while describing a fraction of the trade, and
+    /// somebody clearing a shelf on the strength of it.
+    /// </remarks>
+    private static MarginPicture FoldMargins(IReadOnlyList<LineFacts> lines)
+    {
+        var byItem = lines.GroupBy(l => l.Name).ToList();
+        var priced = new List<ItemPerformance>();
+        var unpricedItems = 0;
+        var unpricedSales = 0m;
+
+        foreach (var group in byItem)
+        {
+            var withCost = group.Where(l => l.Cost is not null).ToList();
+            var sales = withCost.Sum(l => l.LineTotal);
+            var cost = withCost.Sum(l => l.Cost!.Value);
+
+            // Anything sold without a cost recorded, whether the whole item or part of its history.
+            var missing = group.Where(l => l.Cost is null).Sum(l => l.LineTotal);
+
+            if (missing > 0m)
+            {
+                unpricedSales += missing;
+
+                if (withCost.Count == 0)
+                    unpricedItems++;
+            }
+
+            if (withCost.Count == 0 || sales <= 0m)
+                continue;
+
+            priced.Add(new ItemPerformance(
+                group.Key,
+                string.IsNullOrWhiteSpace(withCost[0].Category) ? Uncategorised : withCost[0].Category!.Trim(),
+                withCost.Sum(l => l.Quantity),
+                sales,
+                cost,
+                decimal.Round((sales - cost) / sales * 100m, 2, MidpointRounding.ToEven)));
+        }
+
+        // The grid is split at the middle of what this shop actually does, not at an arbitrary
+        // margin or volume. A quadrant drawn against a fixed line says more about the line than the
+        // shop, and every shop's normal is different.
+        return new MarginPicture(
+            [.. priced.OrderByDescending(i => i.NetSales)],
+            unpricedItems,
+            unpricedSales,
+            Median([.. priced.Select(i => i.Quantity)]),
+            Median([.. priced.Select(i => i.MarginPercent)]));
+    }
+
+    private static decimal Median(List<decimal> values)
+    {
+        if (values.Count == 0)
+            return 0m;
+
+        values.Sort();
+        var middle = values.Count / 2;
+
+        return values.Count % 2 == 1
+            ? values[middle]
+            : decimal.Round((values[middle - 1] + values[middle]) / 2m, 2, MidpointRounding.ToEven);
+    }
 
     private static List<GstSlab> FoldGstSlabs(IReadOnlyList<LineFacts> lines) =>
         [.. lines

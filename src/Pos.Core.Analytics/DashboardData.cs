@@ -34,6 +34,48 @@ public sealed record TopItem(string Name, string Hsn, decimal Quantity, string U
 
 public sealed record TenderSlice(string Tender, int Count, decimal Amount);
 
+/// <param name="Category">The department, or "Uncategorised" for items the shop has not filed.</param>
+public sealed record CategorySlice(string Category, decimal NetSales, decimal Quantity, int Lines);
+
+/// <summary>
+/// Where one item sits on the volume-against-margin grid.
+/// </summary>
+/// <param name="MarginPercent">
+/// What the shop kept, as a share of what it charged. Only ever present when the item carried a
+/// cost price at the time it was sold.
+/// </param>
+public sealed record ItemPerformance(
+    string Name,
+    string Category,
+    decimal Quantity,
+    decimal NetSales,
+    decimal Cost,
+    decimal MarginPercent)
+{
+    public decimal Profit => NetSales - Cost;
+}
+
+/// <summary>
+/// The margin-against-velocity picture, and an honest account of how much of the shop it covers.
+/// </summary>
+/// <param name="Priced">Items that carried a cost price and can therefore be placed.</param>
+/// <param name="UnpricedItems">How many distinct items could not be, for want of a cost.</param>
+/// <param name="UnpricedSales">What those items sold for, so the gap can be judged rather than guessed.</param>
+public sealed record MarginPicture(
+    IReadOnlyList<ItemPerformance> Priced,
+    int UnpricedItems,
+    decimal UnpricedSales,
+    decimal MedianQuantity,
+    decimal MedianMargin)
+{
+    public decimal PricedSales => Priced.Sum(i => i.NetSales);
+
+    /// <summary>Share of the window's takings this picture can actually speak for.</summary>
+    public decimal Coverage => PricedSales + UnpricedSales == 0m
+        ? 0m
+        : decimal.Round(PricedSales / (PricedSales + UnpricedSales) * 100m, 1, MidpointRounding.ToEven);
+}
+
 /// <param name="Rate">The GST slab, as a percentage.</param>
 public sealed record GstSlab(decimal Rate, decimal TaxableValue, decimal Cgst, decimal Sgst, decimal Igst)
 {
@@ -80,6 +122,8 @@ public sealed record DashboardData
     public required IReadOnlyList<DailyPoint> Daily { get; init; }
     public required IReadOnlyList<WeekdayHourCell> WeekdayByHour { get; init; }
     public required IReadOnlyList<TopItem> TopItems { get; init; }
+    public required IReadOnlyList<CategorySlice> Categories { get; init; }
+    public required MarginPicture Margins { get; init; }
     public required IReadOnlyList<TenderSlice> Tenders { get; init; }
     public required IReadOnlyList<GstSlab> GstSlabs { get; init; }
     public required VoidSummary Voids { get; init; }
