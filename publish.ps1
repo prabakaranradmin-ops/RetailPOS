@@ -90,6 +90,7 @@ Write-Host 'Adding the templates and the runbook...' -ForegroundColor Cyan
 
 $package = @(
     @{ From = Join-Path $root 'deploy\settings.json';           To = 'settings.json' },
+    @{ From = Join-Path $root 'deploy\settings.pilot-tamil.json'; To = 'settings.pilot-tamil.json' },
     @{ From = Join-Path $root 'deploy\SETTINGS.md';             To = 'SETTINGS.md' },
     @{ From = Join-Path $root 'deploy\catalog_template.csv';    To = 'catalog_template.csv' },
     @{ From = Join-Path $root 'deploy\CATALOGUE_FORMAT.md';     To = 'CATALOGUE_FORMAT.md' },
@@ -121,7 +122,36 @@ if ($shipped.invoiceNumber.storePrefix -ne 'CHANGEME') {
     throw "The packaged settings.json has a real invoice prefix in it ('$($shipped.invoiceNumber.storePrefix)'). The template must ship with its CHANGEME marker intact."
 }
 
+# The pilot file is allowed to carry a prefix and a language — that is what it is for — but it must
+# never carry an identity. A GSTIN has to be typed from the shop's certificate and checked, and a
+# file that arrives with one already in it is a file nobody checks.
+$pilotPath = Join-Path $Output 'settings.pilot-tamil.json'
+$pilot = Get-Content $pilotPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+foreach ($field in @('name', 'gstin', 'fssaiNumber', 'customerCarePhone')) {
+    if ($pilot.store.$field -notlike 'FILL IN*') {
+        throw "The pilot settings file has a real value in store.$field ('$($pilot.store.$field)'). Identity is filled in on the lane, from the shop's own certificate."
+    }
+}
+
+if ($pilot.hardware.printerOutputFile) {
+    throw "The pilot settings file points the printer at a file. That is a development rig and must not ship."
+}
+
+# Both files are edited in Notepad on a lane, and both can carry Tamil. Without the byte-order mark
+# Notepad reads them in the machine's ANSI code page and saves the misreading back — which is how a
+# shop ends up printing its own name as mojibake on every bill.
+foreach ($name in @('settings.json', 'settings.pilot-tamil.json', 'catalog_template.csv')) {
+    $bytes = [System.IO.File]::ReadAllBytes((Join-Path $Output $name))
+
+    if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+        throw "$name is missing its UTF-8 byte-order mark. Editing it on a lane would corrupt any Tamil in it."
+    }
+}
+
 Write-Host '  settings.json checked: template defaults, no development rig' -ForegroundColor DarkGray
+Write-Host '  settings.pilot-tamil.json checked: prefix and language set, identity blank' -ForegroundColor DarkGray
+Write-Host '  templates checked: UTF-8 byte-order marks present' -ForegroundColor DarkGray
 
 Write-Host ''
 Write-Host "Published to $Output" -ForegroundColor Green

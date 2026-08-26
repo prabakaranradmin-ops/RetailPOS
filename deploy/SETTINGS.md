@@ -68,6 +68,26 @@ mark is what stops the problem happening in the first place, so do not strip it.
 If a lane has already printed bills with a mangled name, fix the file and reprint nothing — the
 invoices themselves are unaffected, only what was printed on them.
 
+## Two files ship, and you use one of them
+
+`settings.json` is the generic template — English, no prefix, `CHANGE ME` markers throughout. It is
+the starting point for any lane.
+
+`settings.pilot-tamil.json` is the same file with the pilot's decisions already made: Tamil
+receipts, prefix `RM`, no lane segment, unpadded sequence, 80mm paper. Copy **that** one to
+`%LOCALAPPDATA%\RetailPOS\settings.json`, fill in every `FILL IN`, and delete the two `_comment`
+lines at the top.
+
+It ships with the identity fields blank on purpose, and the build refuses to package it otherwise.
+A GSTIN has to be typed from the shop's own certificate and checked by somebody; a file that arrives
+with one already in it is a file nobody checks, and one wrong character prints on every invoice the
+shop ever issues.
+
+The prefix is in the pilot file rather than the template for the same kind of reason. `RM` belongs
+to one shop. A generic template carrying it would follow the next lane to the next shop, and with
+`includeLaneSegment` off two tills issuing `RM/26-27/…` would mint the same numbers as each other
+with nothing to notice.
+
 ## Worked example: the pilot lane
 
 The settled decisions for the first shop. Copy this over the template's corresponding blocks, then
