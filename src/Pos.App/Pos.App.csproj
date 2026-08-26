@@ -16,4 +16,13 @@
     <ProjectReference Include="..\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      Which folder the till bills against is internal because nothing outside the app decides it,
+      but it is worth testing directly: choosing the wrong one does not throw or look broken, it
+      just quietly opens somebody else's lane.
+    -->
+    <InternalsVisibleTo Include="Pos.App.Tests" />
+  </ItemGroup>
+
 </Project>

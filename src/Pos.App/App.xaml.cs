@@ -21,14 +21,42 @@ public partial class App : Application
     /// Everything this lane owns — database, settings, keymap — lives under one local folder.
     /// Nothing is fetched from a server, at startup or afterwards.
     /// </summary>
-    public static string DataDirectory { get; } = Path.Combine(
+    public static string DataDirectory { get; private set; } = DefaultDataDirectory;
+
+    private static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RetailPOS");
+
+    /// <summary>
+    /// Where this run keeps its data: <c>--data &lt;path&gt;</c>, else the lane's own folder.
+    /// </summary>
+    /// <remarks>
+    /// The same switch the <c>pos</c> tool takes, and it exists for the same reason. A test run
+    /// that had to share a folder with a real lane could only be made safe by moving that lane's
+    /// database out of the way and putting it back afterwards — which is a data-loss bug waiting
+    /// for the run to be interrupted. Pointing the run somewhere else cannot go wrong.
+    /// </remarks>
+    internal static string ResolveDataDirectory(string[] args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], "--data", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(args[i + 1]))
+            {
+                return Path.GetFullPath(args[i + 1]);
+            }
+        }
+
+        return DefaultDataDirectory;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
+        DataDirectory = ResolveDataDirectory(e.Args);
         Directory.CreateDirectory(DataDirectory);
 
         _log = new FileLog(Path.Combine(DataDirectory, "logs"));

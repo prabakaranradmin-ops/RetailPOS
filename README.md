@@ -75,6 +75,30 @@ dotnet test RetailPos.sln
 
 CI runs both on every push, on Windows.
 
+## The acceptance run
+
+```
+run-acceptance
+```
+
+Drives the shipped executables end to end — catalogue import, search, billing, weighed lines,
+discounts, hold and recall, split tender, reprint, day close — photographs the till at each step,
+and writes `artifacts\acceptance\acceptance-report.html`: one self-contained file with the
+screenshots embedded.
+
+Checks are reported in two sections, because they fail for opposite reasons. A **positive** check
+failing means something is broken. A **negative** check failing means something that should have
+been refused went through, which on a till is the worse of the two — a bad catalogue that imported,
+a damaged snapshot that restored, a day closed over an unpaid bill.
+
+It bills against a throwaway lane of its own and never touches `%LOCALAPPDATA%\RetailPOS`, so it is
+safe to run on a terminal with real data on it. That safety is checked rather than assumed: if the
+executable does not honour `--data`, the run stops before it reaches the till rather than putting
+test sales into a real shop's books.
+
+Screenshots need a desktop; `run-acceptance --no-ui` runs the command-line half alone. The exit
+code is 0 only if every check passed, so it can gate a rollout.
+
 ## Configuring a lane
 
 Everything a lane owns lives in `%LOCALAPPDATA%\RetailPOS`: the database, and two optional files
