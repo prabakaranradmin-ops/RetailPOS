@@ -53,6 +53,13 @@
     <Style TargetType="ListBoxItem">
       <Setter Property="Foreground" Value="{StaticResource Ink}" />
       <Setter Property="Padding" Value="6,2" />
+
+      <!--
+        Without this a row is only as wide as its content, so a Grid column set to * inside an item
+        template collapses and the columns run into each other — a search result reads
+        "Sugar LooseSUG001" instead of laying the name, code and price out across the row.
+      -->
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Style.Triggers>
         <Trigger Property="IsSelected" Value="True">
           <Setter Property="Background" Value="{StaticResource Accent}" />
