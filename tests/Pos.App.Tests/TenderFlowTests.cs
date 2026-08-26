@@ -261,6 +261,44 @@ public class TenderFlowTests
         Assert.Equal(0, card.Drawer.KickCount);
     }
 
+    /// <summary>
+    /// A printer that is failing has to be visible on every sale, not only in the log. A log nobody
+    /// reads until the evening is a shop that traded all day handing out no bills.
+    /// </summary>
+    [Fact]
+    public void AFailedPrintIsToldToTheCashierOnEverySale()
+    {
+        using var till = Till();
+        till.Printer.FailWith = "Could not open printer 'CHANGE ME - exact Windows printer name'";
+
+        till.Scan("8901234567890");
+        till.Press(Key.F12);
+        till.Press(Key.Enter);
+        till.Press(Key.Enter);
+
+        Assert.Contains("DID NOT PRINT", till.ViewModel.StatusMessage);
+        Assert.Contains("CHANGE ME", till.ViewModel.StatusMessage);
+
+        // And the sale is still saved, as it must be.
+        Assert.NotNull(till.Invoices.FindByInvoiceNo(till.ViewModel.LastInvoiceNo));
+    }
+
+    [Fact]
+    public void ALaneWithNoPrinterSaysNothingAboutPrinting()
+    {
+        using var till = Till();
+        till.Printer.IsConfigured = false;
+
+        till.Scan("8901234567890");
+        till.Press(Key.F12);
+        till.Press(Key.Enter);
+        till.Press(Key.Enter);
+
+        // Not an error: some counters genuinely have no printer.
+        Assert.DoesNotContain("DID NOT PRINT", till.ViewModel.StatusMessage);
+        Assert.NotNull(till.Invoices.FindByInvoiceNo(till.ViewModel.LastInvoiceNo));
+    }
+
     /// <summary>A drawer that will not open is reported, but the sale still completes.</summary>
     [Fact]
     public void ABrokenDrawerIsReportedWithoutLosingTheSale()

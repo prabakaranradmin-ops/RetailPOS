@@ -11,6 +11,14 @@ because a lane running under the wrong settings is worse than a lane that will n
 | `laneId` | Goes into every invoice number. **Two lanes with the same id will mint colliding invoice numbers.** Give each till its own — `L1`, `L2`, `COUNTER-A`. |
 | `outletStateCode` | The outlet's GST state code. Decides CGST/SGST against IGST when a customer is from another state. `33` is Tamil Nadu. |
 | `store.name`, `store.gstin` | Printed on every invoice. A GST invoice has to identify who issued it. |
+| `hardware.printerName` | See below. Ships as `CHANGE ME` deliberately. |
+
+## Cashier
+
+`defaultCashierName` sets who the till assumes is serving when it starts. Leave it `null` where
+shifts change — the cashier presses `Ctrl+U` and types their name, and the day-end report then
+splits takings and cash by person, which is what makes a drawer difference answerable. Set it to a
+name only on a lane that one person runs all day.
 
 ## Hardware
 
@@ -18,7 +26,7 @@ Leave a peripheral blank and the lane simply does not have one — it still bill
 
 | Setting | Notes |
 |---|---|
-| `printerName` | The Windows printer name, exactly as it appears in Printers & Scanners. Blank means no printer. |
+| `printerName` | The Windows printer name, **exactly** as it appears in Printers & Scanners — for an Epson TM-T82 that is usually something like `EPSON TM-T82 Receipt`. The template ships with a `CHANGE ME` value on purpose: a lane left unset then fails loudly on every sale, which is far better than an empty value, which means "this lane has no printer" and trades all day in silence. Set it to `""` only if the lane genuinely has none. |
 | `printerPaperWidthChars` | `48` for 80mm paper, `32` for 58mm. Check with `pos receipt-preview`. |
 | `printerOutputFile` | Writes receipts to a file instead of a printer. For setting a lane up before its printer arrives. Use forward slashes. |
 | `drawerConnection` | `Printer` (RJ11 off the printer — how nearly every counter is wired), `Serial`, or `None`. |

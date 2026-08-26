@@ -158,14 +158,21 @@ reproducible.
 .\publish.ps1
 ```
 
-Runs the tests, then produces two self-contained single-file executables in `artifacts\lane` that
-need nothing installed on the target machine — not even the .NET runtime. Copy the folder to the
-lane, then:
+Runs the tests, then stages the whole lane package in `artifacts\lane`: the two executables, the
+settings template, the catalogue template and its format guide, the operator runbook, and the
+hardware sign-off sheet. Both executables are self-contained — the target machine needs nothing
+installed, not even the .NET runtime.
+
+The script refuses to package a `settings.json` that points the printer at a file or carries a real
+store name, so a development rig cannot reach a store by accident.
+
+Copy the folder to the lane, then:
 
 ```
-pos import-items --file catalogue.csv
-pos test-hardware
-Pos.App.exe
+1. copy settings.json to %LOCALAPPDATA%\RetailPOS\ and edit it   (see SETTINGS.md)
+2. pos test-hardware                                             (see HARDWARE_SIGNOFF.md)
+3. pos import-items --file catalogue.csv --dry-run, then for real
+4. Pos.App.exe
 ```
 
 ## Checking the hardware

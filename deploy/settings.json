@@ -2,6 +2,8 @@
   "laneId": "L1",
   "outletStateCode": "33",
 
+  "defaultCashierName": null,
+
   "searchDebounceMs": 150,
   "scannerMaxKeystrokeGapMs": 30,
 
@@ -10,7 +12,7 @@
   "loyaltyRupeesPerPointEarned": 50,
 
   "store": {
-    "name": "CHANGE ME — Store Name",
+    "name": "CHANGE ME - Store Name",
     "addressLine1": "",
     "addressLine2": "",
     "phone": "",
@@ -20,7 +22,7 @@
   },
 
   "hardware": {
-    "printerName": "",
+    "printerName": "CHANGE ME - exact Windows printer name",
     "printerPaperWidthChars": 48,
     "printerOutputFile": null,
 

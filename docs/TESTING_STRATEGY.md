@@ -76,6 +76,14 @@ Run these with `pos test-hardware` on the lane, with the devices attached. The t
 physically happened — because no software can see paper leave a printer or a drawer slide open.
 It exits non-zero if any configured peripheral fails, so it can gate a rollout.
 
+**How this item gets closed.** `deploy/HARDWARE_SIGNOFF.md` ships in the lane package as a sheet to
+work through at the bench: what to check on each peripheral, what a failure looks like, and a place
+to record the weight used, the codes scanned, and the protocol the scale turned out to be speaking.
+When it is complete and all four read PASS, tick this box and keep the sheet as the evidence.
+
+Until then it stays open. The automated suite covers the bytes on the wire, not the paper in the
+tray, and ticking this on the strength of those tests would be recording something nobody has seen.
+
 The reason this split exists: everything above the wire — the command bytes, the layout, the frame
 parsing, the failure handling — is deterministic and worth testing exhaustively without a device.
 What is left needs eyes on the counter, and simulating it as passing would be worse than leaving

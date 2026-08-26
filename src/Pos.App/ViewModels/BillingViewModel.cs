@@ -1135,6 +1135,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (result.Drawer == DrawerKickResult.Failed)
             message += " The cash drawer did not open — open it by hand.";
 
+        // A printer that is failing has to be visible on every sale. It is logged either way, but a
+        // log nobody reads until the evening is a shop that traded all day handing out no bills.
+        if (result.Print.Status == PrintStatus.Failed)
+            message += $" THE RECEIPT DID NOT PRINT: {result.Print.Detail}. Fix the printer, then reprint this bill.";
+
         _basket = null;
         _pointsRedeemed = 0;
         _recalledFromToken = null;

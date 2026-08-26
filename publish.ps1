@@ -93,6 +93,7 @@ $package = @(
     @{ From = Join-Path $root 'deploy\SETTINGS.md';             To = 'SETTINGS.md' },
     @{ From = Join-Path $root 'deploy\catalog_template.csv';    To = 'catalog_template.csv' },
     @{ From = Join-Path $root 'deploy\CATALOGUE_FORMAT.md';     To = 'CATALOGUE_FORMAT.md' },
+    @{ From = Join-Path $root 'deploy\HARDWARE_SIGNOFF.md';     To = 'HARDWARE_SIGNOFF.md' },
     @{ From = Join-Path $root 'docs\PILOT_RUNBOOK.md';          To = 'PILOT_RUNBOOK.md' }
 )
 
@@ -100,6 +101,21 @@ foreach ($file in $package) {
     if (-not (Test-Path $file.From)) { throw "Missing from the package: $($file.From)" }
     Copy-Item $file.From (Join-Path $Output $file.To) -Force
 }
+
+# The settings that ship are the template, never whatever this machine happens to be configured
+# with. A developer's file-printer rig reaching a store would have it trading all day with no
+# receipts and nobody noticing, so it is checked rather than trusted.
+$shipped = Get-Content (Join-Path $Output 'settings.json') -Raw | ConvertFrom-Json
+
+if ($shipped.hardware.printerOutputFile) {
+    throw "The packaged settings.json points the printer at a file ($($shipped.hardware.printerOutputFile)). That is a development rig and must not ship."
+}
+
+if ($shipped.store.name -notlike 'CHANGE ME*') {
+    throw "The packaged settings.json has a real store name in it ('$($shipped.store.name)'). The template must ship with its CHANGE ME markers intact."
+}
+
+Write-Host '  settings.json checked: template defaults, no development rig' -ForegroundColor DarkGray
 
 Write-Host ''
 Write-Host "Published to $Output" -ForegroundColor Green

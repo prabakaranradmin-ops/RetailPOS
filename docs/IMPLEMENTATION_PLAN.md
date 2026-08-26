@@ -327,10 +327,34 @@ taken less ₹311.00 change); tenders less change equal net sales; the 5% and 18
 and summing to the invoice tax; 179 points redeemed at the 30% cap and 4 earned on the net bill.
 It printed "Reconciled: sales, tax and tenders all agree."
 
+Release package, staged in `artifacts/lane` by `publish.ps1`:
+
+| File | What it is |
+|---|---|
+| `Pos.App.exe` | The till. Self-contained; needs nothing installed. |
+| `pos.exe` | The lane tool: import, close, backup, restore, void, hardware checks. |
+| `settings.json` | Template with `CHANGE ME` markers, not any developer's rig. |
+| `SETTINGS.md` | What every setting does, and which three must be right first. |
+| `catalog_template.csv` | A worked example of the catalogue format. |
+| `CATALOGUE_FORMAT.md` | For whoever produces the store's item export. |
+| `PILOT_RUNBOOK.md` | Day-to-day guide for whoever runs the till. |
+| `HARDWARE_SIGNOFF.md` | The bench sheet that closes the last gate. |
+| `symbols/` | Debug symbols, out of the way — what turns a crash into a line number. |
+
+`publish.ps1` now refuses to package a `settings.json` that points the printer at a file or carries
+a real store name. A developer's file-printer rig reaching a store would have it trading all day
+with no receipts and nobody noticing, so it is checked rather than trusted.
+
 Still open, deliberately:
-- **Phase 3 hardware-in-the-loop.** Runs on site with `pos test-hardware`, with the devices
-  attached. Not simulated, not ticked.
+- **Phase 3 hardware-in-the-loop.** Runs on site with `pos test-hardware` and the devices attached,
+  recorded on `deploy/HARDWARE_SIGNOFF.md`. Not simulated, not ticked.
 - The on-site pilot itself.
+
+One fault found while preparing the package, and fixed: a receipt that failed to print was logged
+but never shown to the cashier. The printer name in the template ships as a `CHANGE ME` marker
+precisely so an unconfigured lane fails loudly rather than trading in silence — but the failure was
+only loud in a log nobody reads until the evening. It now appears on the status line on every
+affected sale.
 
 Decisions taken:
 - **Receipts are reduced to plain ASCII before printing.** PC437, WPC1252 and Latin-1 agree exactly
