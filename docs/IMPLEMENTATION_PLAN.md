@@ -254,10 +254,54 @@ Decisions taken:
   — GST slabs, barcode check digits, MRP — without the data layer depending on the hardware layer
   where the barcode rules live.
 
-## Phase 6 — Pilot
+## Phase 6 — Pilot — **package and dry run complete; on-site run pending**
 - Deploy to one lane at a pilot store, run in parallel with existing billing if applicable
 - Monitor for GST calculation discrepancies, hardware reliability, keyboard workflow friction
 - Fix findings before rolling out to additional lanes/stores
+
+Ready to go on site:
+- `publish.ps1` assembles the lane package: both executables, `settings.json`, the catalogue
+  template and its format guide, and the runbook. Self-contained, so a lane needs nothing
+  installed — not even the .NET runtime.
+- `docs/PILOT_RUNBOOK.md` — first-day setup, morning open, mid-day backup, nightly close and
+  drawer reconciliation, troubleshooting, and a tick-list.
+
+**Dry run, 2026-08-26**, against the published binaries in a clean lane folder:
+
+| Step | Result |
+|---|---|
+| Fresh lane configured from the shipped `settings.json` | Lane `PILOT-1`, no runtime installed |
+| `pos import-items --dry-run` then real | 6 items, all-or-nothing commit held |
+| `pos receipt-preview` | Correct at 48 and 32 characters |
+| `pos backup-db` mid-trading | Written and verified, billing unaffected |
+| `pos check-db` | Clean |
+| Three sales through the till UI, keyboard only | Cash over-tender, card, loyalty + cash split |
+| `Shift+F12` twice | Day closed, report no 2, backup taken automatically |
+| Z-report figures checked by hand | Every one reconciles — see below |
+
+The report from that cycle: ₹1,137.00 net across three invoices; cash expected ₹398.50 (₹709.50
+taken less ₹311.00 change); tenders less change equal net sales; the 5% and 18% slabs each correct
+and summing to the invoice tax; 179 points redeemed at the 30% cap and 4 earned on the net bill.
+It printed "Reconciled: sales, tax and tenders all agree."
+
+Still open, deliberately:
+- **Phase 3 hardware-in-the-loop.** Runs on site with `pos test-hardware`, with the devices
+  attached. Not simulated, not ticked.
+- The on-site pilot itself.
+
+Decisions taken:
+- **Receipts are reduced to plain ASCII before printing.** PC437, WPC1252 and Latin-1 agree exactly
+  on bytes 0-127 and disagree above them, so this makes the printer's code page irrelevant and a
+  lane whose printer was reconfigured by somebody else still prints correct receipts. Accents fold
+  (`Café` → `Cafe`), the rupee sign is spelled out because thermal fonts carry no glyph for it.
+  This replaced a Latin-1 encoder that was described as transliteration and was not: it produced
+  `Caf?` and sent bytes above 127 that PC437 renders as box-drawing characters.
+- **Product names in non-Latin scripts print as question marks.** There is no ASCII equivalent and
+  no font on the printer. Said plainly in the runbook and the catalogue guide, because it is a
+  hardware decision that has to be made before a pilot rather than discovered during one.
+- **The runbook states what the till does not do** — no returns, no opening float, no stock, no
+  report but the Z-report, nothing sent anywhere — so nobody spends a pilot evening looking for a
+  feature that was never built.
 
 ## Notes for Claude Code
 - If scope grows mid-implementation, update this file rather than silently expanding.

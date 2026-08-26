@@ -18,7 +18,12 @@ This is a **standalone product**, separate from the multi-outlet offline-first E
 | 3 | Printer, cash drawer, scanner, scale | Services and tests complete; hardware-in-the-loop pending devices |
 | 5 | Multi-lane, offline resilience, hardening | Complete, gate passing |
 | — | Pilot readiness: import, day-end, backup, reprint | Complete, gate passing |
-| 6 | Pilot | Not started |
+| 6 | Pilot | Package and dry run complete; on-site run pending |
+
+Two things are deliberately still open: the Phase 3 hardware-in-the-loop checks, which need the
+devices on a counter, and the pilot itself. Everything else has a passing gate.
+
+Start at [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md) if you are the one taking this to a store.
 
 Phase order and gates are defined in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
 and [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md). A phase does not start until the
