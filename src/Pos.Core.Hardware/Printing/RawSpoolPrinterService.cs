@@ -18,7 +18,10 @@ namespace Pos.Core.Hardware.Printing;
 /// </para>
 /// </remarks>
 [SupportedOSPlatform("windows")]
-public sealed class RawSpoolPrinterService(string printerName, int paperWidthChars = ReceiptBuilder.Width80Mm)
+public sealed class RawSpoolPrinterService(
+    string printerName,
+    int paperWidthChars = ReceiptBuilder.Width80Mm,
+    RasterOptions? raster = null)
     : IPrinterService
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(printerName);
@@ -26,6 +29,11 @@ public sealed class RawSpoolPrinterService(string printerName, int paperWidthCha
     public string Name { get; } = printerName ?? string.Empty;
 
     public int PaperWidthChars { get; } = paperWidthChars;
+
+    // This does not contradict the RAW choice above. Printing through GDI would rasterise the whole
+    // receipt, every line of it, on every sale. This draws only the lines carrying characters the
+    // printer has no glyph for and sends the rest as the handful of bytes they are.
+    public RasterOptions? Raster { get; } = raster;
 
     public PrintOutcome Print(byte[] job)
     {
@@ -135,13 +143,18 @@ public sealed class RawSpoolPrinterService(string printerName, int paperWidthCha
 /// compare against a printer that is misbehaving, and for a lane being set up before its printer
 /// arrives.
 /// </summary>
-public sealed class FilePrinterService(string path, int paperWidthChars = ReceiptBuilder.Width80Mm) : IPrinterService
+public sealed class FilePrinterService(
+    string path,
+    int paperWidthChars = ReceiptBuilder.Width80Mm,
+    RasterOptions? raster = null) : IPrinterService
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(path);
 
     public string Name { get; } = path ?? string.Empty;
 
     public int PaperWidthChars { get; } = paperWidthChars;
+
+    public RasterOptions? Raster { get; } = raster;
 
     public PrintOutcome Print(byte[] job)
     {

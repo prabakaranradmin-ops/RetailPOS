@@ -58,7 +58,7 @@ public class CheckoutTests : IDisposable
 
         var result = NewCheckout().Complete(Lane, bill, basket);
 
-        Assert.Equal($"{Lane}-{DateTimeOffset.Now.Year}-000001", result.Invoice.InvoiceNo);
+        Assert.Equal($"INV/{FiscalYear.For(DateTimeOffset.Now).ShortLabel}/{Lane}-1", result.Invoice.InvoiceNo);
         Assert.Equal(438.00m, result.Invoice.GrandTotal);
         Assert.Equal(62.00m, result.ChangeDue);
         Assert.Equal(1, _drawer.KickCount);

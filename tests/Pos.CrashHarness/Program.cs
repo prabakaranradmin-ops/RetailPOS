@@ -54,7 +54,7 @@ switch (mode)
         using (var seed = connection.CreateCommand())
         {
             seed.Transaction = transaction;
-            seed.CommandText = "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L1', 2026, 2) ON CONFLICT (lane_id, year) DO UPDATE SET next_value = next_value + 1;";
+            seed.CommandText = "INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value) VALUES ('L1', 2026, 2) ON CONFLICT (lane_id, fiscal_year_start) DO UPDATE SET next_value = next_value + 1;";
             seed.ExecuteNonQuery();
         }
 

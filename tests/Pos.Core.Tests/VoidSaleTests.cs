@@ -91,8 +91,8 @@ public class VoidSaleTests(ITestOutputHelper output) : IDisposable
         NewCheckout().VoidSale(first.InvoiceNo, null);
         var second = Sell();
 
-        Assert.EndsWith("-000001", first.InvoiceNo);
-        Assert.EndsWith("-000002", second.InvoiceNo);
+        Assert.EndsWith("-1", first.InvoiceNo);
+        Assert.EndsWith("-2", second.InvoiceNo);
     }
 
     [Fact]

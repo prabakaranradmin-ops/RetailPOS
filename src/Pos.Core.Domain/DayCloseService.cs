@@ -65,7 +65,7 @@ public sealed class DayCloseService(
 
         try
         {
-            return _printer.Print(_reports.Compose(day, isReprint).ToEscPos());
+            return _printer.Print(_reports.Compose(day, isReprint).ToEscPos(raster: _printer.Raster));
         }
         catch (Exception ex)
         {

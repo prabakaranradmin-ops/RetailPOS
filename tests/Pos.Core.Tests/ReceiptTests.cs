@@ -73,7 +73,7 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
         output.WriteLine(paper);
 
         Assert.Contains("Sri Lakshmi Stores", paper);
-        Assert.Contains("GSTIN: 33AABCS1429B1ZX", paper);
+        Assert.Contains("GSTIN 33AABCS1429B1ZX", paper);
         Assert.Contains("TAX INVOICE", paper);
         Assert.Contains(result.Invoice.InvoiceNo, paper);
         Assert.Contains("Toor Dal 1kg", paper);
@@ -81,9 +81,59 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
         Assert.Contains("HSN 0713", paper);
         Assert.Contains("CGST", paper);
         Assert.Contains("SGST", paper);
-        Assert.Contains("TOTAL Rs.", paper);
-        Assert.Contains("488.00", paper);
+        Assert.Contains("TOTAL", paper);
+        Assert.Contains("Rs. 488.00", paper);
         Assert.Contains("Thank you, please visit again", paper);
+    }
+
+    /// <summary>
+    /// The four tenders a counter deals in are printed on every bill whether or not they were used,
+    /// so the same four figures land in the same four places on every receipt of the day.
+    /// </summary>
+    [Fact]
+    public void EveryTenderIsShownEvenWhenItWasNotUsed()
+    {
+        var paper = Composer.Compose(CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice).ToPlainText();
+
+        var first = paper.Split('\n').Single(l => l.Contains("Cash") && l.Contains("UPI"));
+        var second = paper.Split('\n').Single(l => l.Contains("Card") && l.Contains("Credit"));
+
+        Assert.Contains("189.00", first);
+        Assert.Contains("0.00", first);
+        Assert.Contains("0.00", second);
+
+        // A right-aligned figure fills its cell, so without a gutter the next label runs into it.
+        Assert.DoesNotContain("0.00UPI", first);
+        Assert.DoesNotContain("0.00Credit", second);
+    }
+
+    /// <summary>
+    /// The FSSAI licence and customer care number a grocery bill carries, printed only when the
+    /// shop has actually been given them.
+    /// </summary>
+    [Fact]
+    public void TheFssaiLicenceAndCustomerCareNumberArePrintedWhenConfigured()
+    {
+        var invoice = CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice;
+
+        var profile = Store with
+        {
+            FssaiNumber = "12426020000127",
+            CustomerCarePhone = "9080678177",
+        };
+
+        var paper = new ReceiptComposer(profile).Compose(invoice).ToPlainText();
+
+        Assert.Contains("FSSAI No 12426020000127", paper);
+        Assert.Contains("Customer Care - 9080678177", paper);
+
+        // The shop's own number gives way to the care number rather than printing beside it.
+        Assert.DoesNotContain("Ph: ", paper);
+
+        var without = Composer.Compose(invoice).ToPlainText();
+        Assert.DoesNotContain("FSSAI", without);
+        Assert.DoesNotContain("Customer Care", without);
+        Assert.Contains("Ph: 0422 2345678", without);
     }
 
     /// <summary>
@@ -137,19 +187,48 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
         var paper = Composer.Compose(result.Invoice).ToPlainText();
 
         Assert.Contains("Anitha", paper);
-        Assert.Contains("Reward points", paper);
-        Assert.Contains("Redeemed", paper);
-        Assert.Contains("Earned", paper);
-        Assert.Contains("Loyalty points", paper);
+        Assert.Contains($"Points redeemed : {redemption.Points}", paper);
+        Assert.Contains("Points earned : ", paper);
+
+        // The running balance a shopper checks the bill for, and the points as a tender that make
+        // the four-way block add up to the total.
+        Assert.Contains("Total points earned : ", paper);
+        Assert.Contains("Points", paper);
+    }
+
+    /// <summary>
+    /// Discounted bills say what the customer saved. It is the line a shopper looks for, and it is
+    /// the total of the line discounts rather than anything recomputed.
+    /// </summary>
+    [Fact]
+    public void TheSavingsLineShowsTheDiscountAndOnlyAppearsWhenThereIsOne()
+    {
+        var bill = BillWith(("Shampoo 340ml", 299m, 18m));
+        bill.SetDiscount(0, 49m);
+
+        var basket = new TenderBasket(bill.Totals.GrandTotal);
+        basket.Add(TenderType.Cash, bill.Totals.GrandTotal);
+
+        var discounted = Composer.Compose(NewCheckout().Complete(Lane, bill, basket).Invoice).ToPlainText();
+        Assert.Contains("Today's saving : 49.00", discounted);
+
+        var undiscounted = Composer.Compose(CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice).ToPlainText();
+        Assert.DoesNotContain("Today's saving", undiscounted);
     }
 
     [Fact]
-    public void AWalkInReceiptHasNoCustomerOrLoyaltySection()
+    public void AWalkInReceiptHasNoLoyaltySectionAndNoCustomerName()
     {
         var paper = Composer.Compose(CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice).ToPlainText();
 
-        Assert.DoesNotContain("Reward points", paper);
-        Assert.DoesNotContain("Customer", paper);
+        Assert.DoesNotContain("Total points earned", paper);
+        Assert.DoesNotContain("Points redeemed", paper);
+        Assert.DoesNotContain("Mobile", paper);
+
+        // The customer row keeps its place beside the time so every bill has the same shape; on a
+        // walk-in it simply has nothing in it.
+        var customerLine = paper.Split('\n').Single(l => l.TrimStart().StartsWith("Customer", StringComparison.Ordinal));
+        Assert.Matches(@"^Customer\s+Time\s+\d\d:\d\d [AP]M\s*$", customerLine.TrimEnd('\r'));
     }
 
     /// <summary>A reprint has to say so on its face, or it can be passed off as a second sale.</summary>

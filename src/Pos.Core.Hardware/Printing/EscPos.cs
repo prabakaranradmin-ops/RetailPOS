@@ -143,6 +143,47 @@ public static class EscPos
     }
 
     /// <summary>
+    /// Tallest band sent in one raster command. The parameter itself allows 65,535 rows, but
+    /// printers buffer a band before printing it and a firmware given a very tall one commonly
+    /// prints garbage or drops it. Every printer handles a band of this height.
+    /// </summary>
+    public const int MaxRasterBandHeight = 255;
+
+    /// <summary>
+    /// GS v 0 — prints a raster bitmap. This is how anything the printer has no font for gets onto
+    /// paper: the characters are drawn here and sent as dots, so the printer's own code pages and
+    /// glyph set stop mattering entirely.
+    /// </summary>
+    /// <remarks>
+    /// A tall image is split into bands of <see cref="MaxRasterBandHeight"/> rows and sent as
+    /// consecutive commands, which prints identically — the head simply prints each band as it
+    /// arrives — and keeps every band inside what the smallest printer buffer will take.
+    /// </remarks>
+    public static byte[] RasterImage(MonochromeBitmap image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+
+        if (image.BytesPerRow > ushort.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(image), image.Width, "The image is wider than the raster command can describe.");
+
+        var bytes = new List<byte>((image.BytesPerRow * image.Height) + 16);
+
+        for (var top = 0; top < image.Height; top += MaxRasterBandHeight)
+        {
+            var bottom = Math.Min(top + MaxRasterBandHeight, image.Height);
+            var band = top == 0 && bottom == image.Height ? image : image.Slice(top, bottom);
+
+            // GS v 0 m xL xH yL yH — m=0 is normal density in both directions.
+            bytes.AddRange([Gs, (byte)'v', (byte)'0', 0]);
+            bytes.AddRange([(byte)(band.BytesPerRow & 0xFF), (byte)(band.BytesPerRow >> 8)]);
+            bytes.AddRange([(byte)(band.Height & 0xFF), (byte)(band.Height >> 8)]);
+            bytes.AddRange(band.Pixels);
+        }
+
+        return [.. bytes];
+    }
+
+    /// <summary>
     /// Encodes text for the printer, replacing anything the chosen code page cannot represent.
     /// </summary>
     /// <remarks>

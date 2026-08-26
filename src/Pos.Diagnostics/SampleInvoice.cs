@@ -9,7 +9,7 @@ namespace Pos.Diagnostics;
 /// </summary>
 internal static class SampleInvoice
 {
-    public static SettledInvoice Build(string laneId)
+    public static SettledInvoice Build(string laneId, InvoiceNumberFormat? numberFormat = null)
     {
         var customer = new Customer
         {
@@ -49,7 +49,12 @@ internal static class SampleInvoice
             PointsEarned: 32,
             RecalledFromToken: "H007");
 
-        return new SettledInvoice(0, $"{laneId}-{DateTimeOffset.Now.Year}-000000", sale);
+        // Numbered the way this lane actually numbers, so a test print shows the shop what its own
+        // bill numbers will look like rather than a placeholder in some other shape.
+        var format = numberFormat ?? InvoiceNumberFormat.Default;
+        var number = format.Format(laneId, FiscalYear.For(DateTimeOffset.Now), 1);
+
+        return new SettledInvoice(0, number, sale);
     }
 
     private static InvoiceLine Line(

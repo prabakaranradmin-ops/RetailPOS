@@ -15,6 +15,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Pos.App\Pos.App.csproj" />
+    <!--
+      The real font engine. It is referenced here rather than only through the till because the
+      Tamil rendering tests need a Windows target, and this is the test project that has one.
+    -->
+    <ProjectReference Include="..\..\src\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
     <ProjectReference Include="..\Pos.TestSupport\Pos.TestSupport.csproj" />
   </ItemGroup>
 

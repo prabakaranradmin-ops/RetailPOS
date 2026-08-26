@@ -44,10 +44,41 @@ The tool shows the receipt as text **before** printing it, then sends it.
 
 Paper width: ______ (48 for 80mm, 32 for 58mm — if text wraps oddly, this is wrong)
 
-If characters look like boxes or Greek letters, the code page is not the problem — receipts are
-plain ASCII on purpose. Report it, because it means something else.
+If English characters look like boxes or Greek letters, the code page is not the problem — the
+English on a receipt is plain ASCII on purpose. Report it, because it means something else.
 
 **Result:** PASS / FAIL  Notes: ________________________________________
+
+## 1a. Tamil on the receipt
+
+*Skip this section on a lane set to `"receiptLanguage": "English"`.*
+
+Before printing anything, look at the bill on screen:
+
+```
+pos receipt-preview --png receipt.png
+```
+
+Open `receipt.png`. It is the dots the printer will burn, so what is in it is what will come out.
+
+- [ ] The shop name at the top is in Tamil and reads correctly
+- [ ] The column headings read `பொருளின் பெயர்` / `விலை` / `அளவு` / `தொகை`
+- [ ] `மொத்தம்` appears beside the total, and the total is right
+- [ ] No Tamil word is cut off, and none runs into the figure beside it
+- [ ] Nothing prints as `?` or as empty boxes
+
+Then print it and check the paper against the image.
+
+- [ ] The printed Tamil matches the image
+- [ ] The Tamil and the English are the same height on the line
+
+A row of `?` means the lane could not draw the text: either `printerRasterMode` is `Never`, or the
+machine has no Tamil font. The preview says which. **Do not open the shop on a receipt printing
+`?` where the shop's own name should be.**
+
+Font used (printed by `pos receipt-preview`): ____________________
+
+**Result:** PASS / FAIL / N/A  Notes: ________________________________________
 
 ## 2. Cash drawer
 
@@ -104,7 +135,10 @@ Weight used: ______ kg   Weight shown: ______ kg   Settles in: ______ seconds
 With all four passing, ring one up on the till itself:
 
 - [ ] Scan an item — it appears on the bill at the right price
-- [ ] Weigh a loose item — the weight and price are right
+- [ ] Add a loose item and key its weight with `F3` — the price works out right.
+      *(The scale is checked in section 4 but is **not** wired into the billing screen in this
+      version: read the weight off the scale's own display and type it. This line used to ask for
+      the weight to arrive on the bill by itself, which the software has never done.)*
 - [ ] `F12`, pay cash with change due
 - [ ] Receipt prints, drawer opens, change matches
 - [ ] `Ctrl+P` reprints the bill, marked as a reprint

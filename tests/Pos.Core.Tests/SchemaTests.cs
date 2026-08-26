@@ -224,17 +224,32 @@ public class SchemaTests
     }
 
     [Fact]
-    public void ALaneOwnsOneSequencePerYear()
+    public void ALaneOwnsOneSequencePerFinancialYear()
     {
         using var temp = new TempDatabase();
         using var connection = temp.Database.OpenConnection();
 
-        Execute(connection, "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L1', 2026, 1);");
-        Execute(connection, "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L1', 2027, 1);");
-        Execute(connection, "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L2', 2026, 1);");
+        Execute(connection, "INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value) VALUES ('L1', 2026, 1);");
+        Execute(connection, "INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value) VALUES ('L1', 2027, 1);");
+        Execute(connection, "INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value) VALUES ('L2', 2026, 1);");
 
         Assert.Throws<SqliteException>(() =>
-            Execute(connection, "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L1', 2026, 9);"));
+            Execute(connection, "INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value) VALUES ('L1', 2026, 9);"));
+    }
+
+    /// <summary>
+    /// The column was called <c>year</c> and held a calendar year. Migration 006 renamed it, and
+    /// the two differ only between January and March — the window where code still reading the old
+    /// name would restart a live sequence and mint a duplicate invoice number.
+    /// </summary>
+    [Fact]
+    public void TheSequenceIsKeyedOnTheFinancialYearNotTheCalendarYear()
+    {
+        using var temp = new TempDatabase();
+        using var connection = temp.Database.OpenConnection();
+
+        Assert.Throws<SqliteException>(() =>
+            Execute(connection, "INSERT INTO invoice_sequences (lane_id, year, next_value) VALUES ('L1', 2026, 1);"));
     }
 
     private static string InsertItem(string sku, string barcode) => $"""

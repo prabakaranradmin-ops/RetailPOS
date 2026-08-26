@@ -11,6 +11,7 @@ because a lane running under the wrong settings is worse than a lane that will n
 | `laneId` | Goes into every invoice number. **Two lanes with the same id will mint colliding invoice numbers.** Give each till its own — `L1`, `L2`, `COUNTER-A`. |
 | `outletStateCode` | The outlet's GST state code. Decides CGST/SGST against IGST when a customer is from another state. `33` is Tamil Nadu. |
 | `store.name`, `store.gstin` | Printed on every invoice. A GST invoice has to identify who issued it. |
+| `invoiceNumber.storePrefix` | The shop's own prefix — the `RM` of `RM/26-27/11358`. Ships as `CHANGEME`. **Settle this before the first sale**; an invoice number cannot be changed once a bill is in a customer's hand. |
 | `hardware.printerName` | See below. Ships as `CHANGE ME` deliberately. |
 
 ## Cashier
@@ -20,6 +21,35 @@ shifts change — the cashier presses `Ctrl+U` and types their name, and the day
 splits takings and cash by person, which is what makes a drawer difference answerable. Set it to a
 name only on a lane that one person runs all day.
 
+## Invoice numbers
+
+`{storePrefix}/{financial year}/{lane}-{sequence}` — for example `RM/26-27/L1-11358`, or
+`RM/26-27/11358` with the lane segment turned off.
+
+| Setting | Notes |
+|---|---|
+| `storePrefix` | The shop's own prefix. No spaces and no slashes. |
+| `includeLaneSegment` | **Leave this `true` unless the shop has exactly one till and never will have two.** Each lane mints its own 1, 2, 3…, so with the segment off two tills issue the same invoice numbers as each other. There is no server to notice. |
+| `sequencePadding` | `0` prints the number as-is, which is what a counter bill normally shows. Set it to `6` for a fixed-width `000123`. |
+
+The year is the Indian financial year, 1 April to 31 March, because that is what a GST return is
+filed against. The sequence restarts on 1 April, not on 1 January.
+
+## Receipt language
+
+`receiptLanguage` is `English` or `Tamil`. Only the labels change — every figure, item name and
+invoice number is identical either way.
+
+Tamil labels are **drawn as dots** and sent to the printer as an image, because no thermal printer
+has a Tamil font and a Tamil syllable is assembled from several code points rather than mapped one
+byte at a time. This needs `hardware.printerRasterMode` left at `Auto` and a Tamil-capable font on
+the machine; every Windows build since 8 has Nirmala UI. Set the language and run
+`pos receipt-preview --png receipt.png`, then look at the image — that is the only way to check the
+result without using a roll of paper.
+
+A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
+than letting it reach a customer.
+
 ## Hardware
 
 Leave a peripheral blank and the lane simply does not have one — it still bills.
@@ -28,6 +58,10 @@ Leave a peripheral blank and the lane simply does not have one — it still bill
 |---|---|
 | `printerName` | The Windows printer name, **exactly** as it appears in Printers & Scanners — for an Epson TM-T82 that is usually something like `EPSON TM-T82 Receipt`. The template ships with a `CHANGE ME` value on purpose: a lane left unset then fails loudly on every sale, which is far better than an empty value, which means "this lane has no printer" and trades all day in silence. Set it to `""` only if the lane genuinely has none. |
 | `printerPaperWidthChars` | `48` for 80mm paper, `32` for 58mm. Check with `pos receipt-preview`. |
+| `printerPaperWidthDots` | Print head width in dots — `576` for 80mm, `384` for 58mm. `0` works it out from the character width, which is right unless the printer has been set to an unusual font. |
+| `printerRasterMode` | `Auto` draws only the lines the printer has no glyphs for and sends the rest as characters — fast, sharp, and how a bilingual bill is normally produced. `Always` draws the whole receipt in one typeface, at roughly 1.7KB a line. `Never` draws nothing, and anything not ASCII prints as `?`. |
+| `receiptFontFamily` | Blank picks the best installed of Nirmala UI, Latha, Arial Unicode MS, Segoe UI. Only set it if the shop wants a particular face. |
+| `receiptFontSizeDots` | Em size for drawn text, in printer dots. `0` uses a size matched to the printer's own font so drawn and typed lines are the same height. |
 | `printerOutputFile` | Writes receipts to a file instead of a printer. For setting a lane up before its printer arrives. Use forward slashes. |
 | `drawerConnection` | `Printer` (RJ11 off the printer — how nearly every counter is wired), `Serial`, or `None`. |
 | `drawerPin` | `0` for RJ11 pin 2, `1` for pin 5. A single drawer is almost always pin 2. |

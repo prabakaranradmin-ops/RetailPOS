@@ -153,7 +153,7 @@ public class CrashDurabilityTests : IDisposable
         var database = new PosDatabase(DatabasePath);
         var saved = new InvoiceRepository(database).Save(SampleSale());
 
-        Assert.Equal("L1-2026-000001", saved.InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", saved.InvoiceNo);
     }
 
     /// <summary>A batch abandoned halfway must not leave a header with some of its lines.</summary>
@@ -189,8 +189,8 @@ public class CrashDurabilityTests : IDisposable
         var first = invoices.Save(SampleSale());
         var second = invoices.Save(SampleSale());
 
-        Assert.Equal("L1-2026-000001", first.InvoiceNo);
-        Assert.Equal("L1-2026-000002", second.InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", first.InvoiceNo);
+        Assert.Equal("INV/26-27/L1-2", second.InvoiceNo);
         Assert.True(database.CheckIntegrity().IsHealthy);
     }
 

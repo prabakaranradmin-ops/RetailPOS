@@ -4,6 +4,7 @@ using Pos.Core.Domain.Import;
 using Pos.Core.Domain.Printing;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Printing;
+using Pos.Core.Hardware.Windows;
 using Pos.Core.Logging;
 using Pos.Diagnostics;
 
@@ -42,6 +43,11 @@ Console.WriteLine($"Settings: {(File.Exists(settingsPath) ? settingsPath : "defa
 // two — a restore or a void shows up alongside the sales around it.
 using var log = new FileLog(Path.Combine(dataDirectory, "logs"));
 log.Info("tool", $"pos {string.Join(' ', args)}");
+
+// Draws the labels the printer has no glyphs for. Shared by every command that produces a receipt,
+// so what the tool prints is byte for byte what the till would have printed.
+var rasterizer = CreateRasterizer(settings, log);
+using var rasterizerLifetime = rasterizer as IDisposable;
 
 var checks = new HardwareChecks(settings, Console.Out, Console.In);
 var window = ParseWindow(args) ?? TimeSpan.FromSeconds(10);
@@ -199,7 +205,7 @@ switch (command)
             ? $"Backed up to {backup.Path} ({backup.Bytes / 1024:N0} KB, verified)."
             : $"BACKUP FAILED: {string.Join("; ", backup.Problems)}");
 
-        var printer = PeripheralFactory.CreatePrinter(settings.Hardware);
+        var printer = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
 
         if (printer.IsConfigured)
         {
@@ -280,7 +286,7 @@ switch (command)
         var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
         database.EnsureMigrated();
 
-        var invoices = new InvoiceRepository(database);
+        var invoices = new InvoiceRepository(database, settings.InvoiceNumber.ToFormat());
         var existing = invoices.FindByInvoiceNo(number);
 
         if (existing is null)
@@ -321,7 +327,7 @@ switch (command)
         var checkout = new CheckoutService(
             invoices,
             new CustomerRepository(database),
-            PeripheralFactory.CreateDrawer(settings.Hardware, PeripheralFactory.CreatePrinter(settings.Hardware)),
+            PeripheralFactory.CreateDrawer(settings.Hardware, PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer)),
             settings.LoyaltyRules,
             TimeProvider.System,
             log: log);
@@ -388,12 +394,37 @@ switch (command)
         // Renders the sample receipt as text without touching a printer, which is how the layout
         // gets checked on a bench or against a different paper width.
         var width = ParseWidth(args) ?? settings.Hardware.PrinterPaperWidthChars;
-        var receipt = new ReceiptComposer(settings.Store.ToProfile(), width)
-            .Compose(SampleInvoice.Build(settings.LaneId));
+        var receipt = new ReceiptComposer(settings.Store.ToProfile(), width, settings.ReceiptLanguage)
+            .Compose(SampleInvoice.Build(settings.LaneId, settings.InvoiceNumber.ToFormat()));
 
         Console.WriteLine();
         Console.WriteLine(receipt.ToPlainText());
-        Console.WriteLine($"({receipt.ToEscPos().Length} bytes of ESC/POS at {width} characters wide)");
+
+        var raster = rasterizer is null || settings.Hardware.PrinterRasterMode == RasterMode.Never
+            ? null
+            : new RasterOptions(rasterizer, settings.Hardware.EffectivePaperWidthDots, settings.Hardware.PrinterRasterMode);
+
+        Console.WriteLine($"({receipt.ToEscPos(raster: raster).Length} bytes of ESC/POS at {width} characters wide)");
+
+        if (settings.ReceiptLanguage != ReceiptLanguage.English && raster is null)
+            Console.WriteLine("WARNING: this lane prints Tamil labels but has no text renderer, so they will print as '?'.");
+
+        // The text preview above counts characters, which says nothing about how Tamil will
+        // actually come out. This renders the dots the printer would burn and saves them as an
+        // image, so the layout can be looked at on a bench with no printer and no paper.
+        if (ParseStringOption(args, "--png") is { } pngPath)
+        {
+            if (raster is null)
+            {
+                Console.Error.WriteLine("Nothing to draw: this lane has no text renderer, or rasterising is switched off.");
+                return 2;
+            }
+
+            var pixels = receipt.ToBitmap(raster);
+            ReceiptImage.SavePng(pixels, pngPath);
+            Console.WriteLine($"Saved {pixels.Width}x{pixels.Height} dots to {pngPath}.");
+        }
+
         return 0;
     }
 
@@ -443,6 +474,32 @@ switch (command)
         Console.Error.WriteLine();
         WriteHelp();
         return 2;
+}
+
+/// <summary>
+/// Builds the text rasteriser, or null when the machine cannot supply one. A missing font engine
+/// costs the Tamil on a receipt; it must not stop the tool running, because the commands that
+/// matter most when something is wrong are the ones that touch no printer at all.
+/// </summary>
+static ITextRasterizer? CreateRasterizer(PosSettings settings, FileLog log)
+{
+    if (settings.Hardware.PrinterRasterMode == RasterMode.Never)
+        return null;
+
+    try
+    {
+        var size = settings.Hardware.ReceiptFontSizeDots > 0
+            ? (float)settings.Hardware.ReceiptFontSizeDots
+            : GdiTextRasterizer.DefaultEmSizeDots;
+
+        return new GdiTextRasterizer(settings.Hardware.ReceiptFontFamily, size);
+    }
+    catch (Exception ex)
+    {
+        log.Error("tool", "could not start the receipt text renderer", ex);
+        Console.Error.WriteLine($"Text rendering unavailable: {ex.Message}");
+        return null;
+    }
 }
 
 static string Describe(CheckResult result) => result switch
@@ -504,9 +561,11 @@ static void WriteHelp()
               The printer and drawer checks ask you to confirm what physically
               happened, because no software can see paper come out of a printer.
 
-          pos receipt-preview [--width N]
+          pos receipt-preview [--width N] [--png <path>]
               Renders a sample receipt as text. Touches no hardware, so it works
-              on a bench and against any paper width.
+              on a bench and against any paper width. --png saves the dots the
+              printer would actually burn, which is the only way to check that
+              Tamil came out right without using a roll of paper.
 
           pos import-items --file <path> [--update] [--dry-run]
               Loads a catalogue CSV. Columns: sku, barcode, name, hsn_code,

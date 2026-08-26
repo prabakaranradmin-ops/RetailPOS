@@ -100,7 +100,7 @@ public class RegressionSweepTests(ITestOutputHelper output) : IDisposable
         // Phase 4: the sale is on disk, numbered, with everything intact.
         var saved = invoices.FindByInvoiceNo(result.Invoice.InvoiceNo);
         Assert.NotNull(saved);
-        Assert.Equal("L1-" + DateTimeOffset.Now.Year + "-000001", saved.InvoiceNo);
+        Assert.Equal($"INV/{FiscalYear.For(DateTimeOffset.Now).ShortLabel}/L1-1", saved.InvoiceNo);
         Assert.Equal(3, saved.Sale.Lines.Count);
         Assert.Equal(3, saved.Sale.Payments.Count);
         Assert.Equal(totals.GrandTotal, saved.Sale.Totals.GrandTotal);
@@ -174,7 +174,7 @@ public class RegressionSweepTests(ITestOutputHelper output) : IDisposable
         var settled = checkout.Complete("L1", resumed, finalBasket, recalledFromToken: token);
 
         // Three sales, numbered one two three with no hole where the parked bill waited.
-        Assert.Equal("L1-" + DateTimeOffset.Now.Year + "-000003", settled.Invoice.InvoiceNo);
+        Assert.Equal($"INV/{FiscalYear.For(DateTimeOffset.Now).ShortLabel}/L1-3", settled.Invoice.InvoiceNo);
         Assert.Equal(token, invoices.FindByInvoiceNo(settled.Invoice.InvoiceNo)!.Sale.RecalledFromToken);
         Assert.Empty(held.List("L1"));
     }
@@ -276,8 +276,9 @@ public class RegressionSweepTests(ITestOutputHelper output) : IDisposable
         // Each lane's own run is consecutive with no holes.
         foreach (var lane in lanes)
         {
+            // The lane segment sits between the financial year and the sequence: INV/26-27/L1-7.
             var sequences = numbers
-                .Where(n => n.StartsWith(lane + "-", StringComparison.Ordinal))
+                .Where(n => n.Contains($"/{lane}-", StringComparison.Ordinal))
                 .Select(n => int.Parse(n.Split('-')[^1]))
                 .OrderBy(n => n)
                 .ToList();

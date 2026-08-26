@@ -3,16 +3,26 @@ using System.Text;
 namespace Pos.Core.Hardware.Printing;
 
 /// <summary>
-/// Lays out a receipt for a fixed-width thermal printer and renders it either as ESC/POS bytes or
-/// as plain text.
+/// Lays out a receipt for a fixed-width thermal printer and renders it as ESC/POS bytes, as drawn
+/// bitmaps, or as plain text.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The plain-text rendering is not a debugging afterthought. Receipt bugs are layout bugs — a
 /// column that does not line up, a long item name that swallows the price — and those are far
 /// easier to see and to assert as text than as a byte array. The tests check layout against
 /// <see cref="ToPlainText"/> and check the command bytes against <see cref="EscPos"/> directly, so
 /// each is tested by whichever form makes the failure obvious. The diagnostics CLI prints the same
 /// text as a preview.
+/// </para>
+/// <para>
+/// Every line is kept twice over: as the composed, space-padded string the character path prints,
+/// and as the segments it was composed from. The two are not redundant. Character padding aligns
+/// columns by counting characters, which is exactly right for a monospaced printer font and
+/// meaningless for Tamil drawn in a proportional face — there, a column lands where its segment
+/// says it lands, measured in dots. Keeping both means the same layout call produces a correct
+/// receipt down either path.
+/// </para>
 /// </remarks>
 public sealed class ReceiptBuilder
 {
@@ -46,7 +56,18 @@ public sealed class ReceiptBuilder
         var usable = Math.Max(1, PaperWidthChars / widthMultiplier);
 
         foreach (var line in Wrap(text ?? string.Empty, usable))
-            _directives.Add(new Directive.Line(Justify(line, usable, alignment), alignment, bold, widthMultiplier, heightMultiplier));
+        {
+            // The segment spans the whole paper and carries its own alignment, so the drawn form
+            // does not inherit the character path's padding — which was counted at the scaled
+            // width and would put a centred heading in the wrong place on a proportional face.
+            _directives.Add(new Directive.Line(
+                Justify(line, usable, alignment),
+                [new Segment(line, 0, PaperWidthChars, alignment)],
+                alignment,
+                bold,
+                widthMultiplier,
+                heightMultiplier));
+        }
 
         return this;
     }
@@ -63,7 +84,61 @@ public sealed class ReceiptBuilder
 
         var gap = Math.Max(1, PaperWidthChars - leftText.Length - rightText.Length);
 
-        _directives.Add(new Directive.Line(leftText + new string(' ', gap) + rightText, TextAlignment.Left, bold, 1, 1));
+        _directives.Add(new Directive.Line(
+            leftText + new string(' ', gap) + rightText,
+            [
+                new Segment(leftText, 0, PaperWidthChars, TextAlignment.Left),
+                new Segment(rightText, 0, PaperWidthChars, TextAlignment.Right),
+            ],
+            TextAlignment.Left,
+            bold,
+            1,
+            1));
+
+        return this;
+    }
+
+    /// <summary>
+    /// A line divided into cells of stated widths, each with its own alignment.
+    /// </summary>
+    /// <remarks>
+    /// What a label/value pair repeated across a line needs — a bill number and a date on one line,
+    /// a customer and a time on the next, or a block of tenders two by two. <see cref="Columns"/>
+    /// only ever has a left and a right, and building this out of it would put every cell in the
+    /// wrong place the moment the text was not English.
+    /// </remarks>
+    public ReceiptBuilder Cells(params ReceiptCell[] cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+
+        if (cells.Length == 0)
+            return Blank();
+
+        var composed = new StringBuilder(PaperWidthChars);
+        var segments = new List<Segment>(cells.Length);
+        var offset = 0;
+
+        foreach (var cell in cells)
+        {
+            var width = Math.Max(0, Math.Min(cell.Width, PaperWidthChars - offset));
+
+            if (width == 0)
+                break;
+
+            var text = Truncate(cell.Text ?? string.Empty, width);
+
+            composed.Append(cell.Alignment switch
+            {
+                TextAlignment.Right => text.PadLeft(width),
+                TextAlignment.Center => text.PadLeft(text.Length + ((width - text.Length) / 2)).PadRight(width),
+                _ => text.PadRight(width),
+            });
+
+            segments.Add(new Segment(text, offset, width, cell.Alignment));
+            offset += width;
+        }
+
+        _directives.Add(new Directive.Line(composed.ToString(), segments, TextAlignment.Left, false, 1, 1));
         return this;
     }
 
@@ -107,14 +182,42 @@ public sealed class ReceiptBuilder
             wrapped.Add(string.Empty);
 
         var figures = new StringBuilder();
+        var segments = new List<Segment>(columns.Length + 1)
+        {
+            new(wrapped[0], 0, descriptionWidth, TextAlignment.Left),
+        };
+
+        var offset = descriptionWidth;
 
         foreach (var column in columns)
-            figures.Append(' ').Append(PadLeft(column.Text, column.Width));
+        {
+            var value = Truncate(column.Text, column.Width);
+            figures.Append(' ').Append(value.PadLeft(column.Width));
 
-        _directives.Add(new Directive.Line(PadRight(wrapped[0], descriptionWidth) + figures, TextAlignment.Left, false, 1, 1));
+            // The leading space belongs to the gutter, not to the figure, so the drawn column is
+            // right-aligned against the same edge the character-padded one lands on.
+            segments.Add(new Segment(value, offset + 1, column.Width, TextAlignment.Right));
+            offset += column.Width + 1;
+        }
+
+        _directives.Add(new Directive.Line(
+            PadRight(wrapped[0], descriptionWidth) + figures,
+            segments,
+            TextAlignment.Left,
+            false,
+            1,
+            1));
 
         for (var i = 1; i < wrapped.Count; i++)
-            _directives.Add(new Directive.Line(wrapped[i], TextAlignment.Left, false, 1, 1));
+        {
+            _directives.Add(new Directive.Line(
+                wrapped[i],
+                [new Segment(wrapped[i], 0, descriptionWidth, TextAlignment.Left)],
+                TextAlignment.Left,
+                false,
+                1,
+                1));
+        }
 
         return this;
     }
@@ -126,12 +229,28 @@ public sealed class ReceiptBuilder
     private ReceiptBuilder StackedRow(string description, ColumnValue[] columns)
     {
         foreach (var line in Wrap(description, PaperWidthChars))
-            _directives.Add(new Directive.Line(line, TextAlignment.Left, false, 1, 1));
+        {
+            _directives.Add(new Directive.Line(
+                line,
+                [new Segment(line, 0, PaperWidthChars, TextAlignment.Left)],
+                TextAlignment.Left,
+                false,
+                1,
+                1));
+        }
 
         var figures = string.Join(' ', columns.Select(column => PadLeft(column.Text, column.Width)));
 
         if (figures.Trim().Length > 0)
-            _directives.Add(new Directive.Line(PadLeft(figures, PaperWidthChars), TextAlignment.Left, false, 1, 1));
+        {
+            _directives.Add(new Directive.Line(
+                PadLeft(figures, PaperWidthChars),
+                [new Segment(figures, 0, PaperWidthChars, TextAlignment.Right)],
+                TextAlignment.Left,
+                false,
+                1,
+                1));
+        }
 
         return this;
     }
@@ -139,14 +258,14 @@ public sealed class ReceiptBuilder
     /// <summary>A full-width run of the given character, as a separator.</summary>
     public ReceiptBuilder Rule(char character = '-')
     {
-        _directives.Add(new Directive.Line(new string(character, PaperWidthChars), TextAlignment.Left, false, 1, 1));
+        _directives.Add(new Directive.Rule(character));
         return this;
     }
 
     public ReceiptBuilder Blank(int lines = 1)
     {
         for (var i = 0; i < lines; i++)
-            _directives.Add(new Directive.Line(string.Empty, TextAlignment.Left, false, 1, 1));
+            _directives.Add(new Directive.Line(string.Empty, [], TextAlignment.Left, false, 1, 1));
 
         return this;
     }
@@ -172,7 +291,15 @@ public sealed class ReceiptBuilder
     }
 
     /// <summary>Renders to the byte stream a printer consumes.</summary>
-    public byte[] ToEscPos(Encoding? encoding = null)
+    /// <param name="encoding">
+    /// The code page for the character path. Null reduces text to ASCII, which prints identically
+    /// whatever the printer is set to.
+    /// </param>
+    /// <param name="raster">
+    /// How to draw the lines the printer has no glyphs for. Null means never draw anything, which
+    /// is the behaviour of a lane that prints only English.
+    /// </param>
+    public byte[] ToEscPos(Encoding? encoding = null, RasterOptions? raster = null)
     {
         var bytes = new List<byte>(512);
         bytes.AddRange(EscPos.Initialize());
@@ -182,10 +309,26 @@ public sealed class ReceiptBuilder
         var width = 1;
         var height = 1;
 
+        // A drawn line is a full-width image, so the printer's own justification has to be off or
+        // it would centre the image as well as the text inside it.
+        void ResetForRaster()
+        {
+            if (alignment != TextAlignment.Left)
+            {
+                bytes.AddRange(EscPos.Align(TextAlignment.Left));
+                alignment = TextAlignment.Left;
+            }
+        }
+
         foreach (var directive in _directives)
         {
             switch (directive)
             {
+                case Directive.Line line when ShouldRaster(line, raster):
+                    ResetForRaster();
+                    bytes.AddRange(EscPos.RasterImage(DrawLine(line, raster!)));
+                    break;
+
                 case Directive.Line line:
                     // Only emit a mode change when the mode actually changes; a receipt that resets
                     // bold on every line wastes bytes and makes the output hard to read in a dump.
@@ -209,6 +352,33 @@ public sealed class ReceiptBuilder
                     }
 
                     bytes.AddRange(EscPos.Line(line.Text.TrimEnd(), encoding));
+                    break;
+
+                case Directive.Rule rule when raster is { Mode: RasterMode.Always }:
+                    ResetForRaster();
+                    bytes.AddRange(EscPos.RasterImage(DrawRule(rule.Character, raster)));
+                    break;
+
+                case Directive.Rule rule:
+                    if (alignment != TextAlignment.Left)
+                    {
+                        bytes.AddRange(EscPos.Align(TextAlignment.Left));
+                        alignment = TextAlignment.Left;
+                    }
+
+                    if (bold)
+                    {
+                        bytes.AddRange(EscPos.Bold(false));
+                        bold = false;
+                    }
+
+                    if (width != 1 || height != 1)
+                    {
+                        bytes.AddRange(EscPos.NormalTextSize());
+                        width = height = 1;
+                    }
+
+                    bytes.AddRange(EscPos.Line(new string(rule.Character, PaperWidthChars), encoding));
                     break;
 
                 case Directive.Feed feed:
@@ -242,6 +412,176 @@ public sealed class ReceiptBuilder
         return [.. bytes];
     }
 
+    private static bool ShouldRaster(Directive.Line line, RasterOptions? raster) => raster?.Mode switch
+    {
+        RasterMode.Always => line.Segments.Count > 0,
+        RasterMode.Auto => line.Segments.Any(s => RasterOptions.NeedsRaster(s.Text)),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Draws one line's segments into a strip of dots, each in the cell range it was laid out in.
+    /// </summary>
+    internal MonochromeBitmap DrawLine(Directive.Line line, RasterOptions raster)
+    {
+        var style = new RasterTextStyle(line.Bold, line.WidthMultiplier, line.HeightMultiplier);
+        var strip = new MonochromeBitmap(raster.PaperWidthDots, Math.Max(1, raster.Rasterizer.LineHeight(style)));
+
+        foreach (var segment in line.Segments)
+        {
+            if (string.IsNullOrEmpty(segment.Text))
+                continue;
+
+            var left = CellToDots(segment.CellStart, raster.PaperWidthDots);
+            var right = CellToDots(segment.CellStart + segment.CellWidth, raster.PaperWidthDots);
+            var room = Math.Max(0, right - left);
+            var measured = raster.Rasterizer.Measure(segment.Text, style);
+
+            // An over-long run is left where it starts rather than pushed off the paper by an
+            // alignment calculation that assumed it fitted.
+            var x = measured >= room
+                ? left
+                : segment.Alignment switch
+                {
+                    TextAlignment.Right => right - measured,
+                    TextAlignment.Center => left + ((room - measured) / 2),
+                    _ => left,
+                };
+
+            raster.Rasterizer.Draw(strip, segment.Text, x, 0, style);
+        }
+
+        return strip;
+    }
+
+    /// <summary>A separator as dots: solid for '=', a dashed run for anything else.</summary>
+    private static MonochromeBitmap DrawRule(char character, RasterOptions raster)
+    {
+        var strip = new MonochromeBitmap(raster.PaperWidthDots, character == '=' ? 3 : 1);
+
+        for (var x = 0; x < strip.Width; x++)
+        {
+            // A dashed rule reads as a rule rather than as a smudge, and matches what the
+            // character path prints on the lines around it.
+            if (character != '=' && (x % 4) >= 2)
+                continue;
+
+            for (var y = 0; y < strip.Height; y++)
+                strip[x, y] = true;
+        }
+
+        return strip;
+    }
+
+    private int CellToDots(int cell, int paperWidthDots) =>
+        (int)Math.Round((double)Math.Clamp(cell, 0, PaperWidthChars) * paperWidthDots / PaperWidthChars);
+
+    /// <summary>
+    /// Renders the whole receipt as the dots a printer would burn.
+    /// </summary>
+    /// <remarks>
+    /// Not a printing path — it is how the output gets looked at. A character preview counts
+    /// characters, which says nothing about where a Tamil label actually lands or whether it
+    /// collides with the figure beside it, and those are the only two questions worth asking about
+    /// a bilingual receipt. Every line goes through the same layout the printer gets, including the
+    /// ones that would have been sent as characters, so what comes out is a fair picture rather
+    /// than a second implementation.
+    /// </remarks>
+    public MonochromeBitmap ToBitmap(RasterOptions raster)
+    {
+        ArgumentNullException.ThrowIfNull(raster);
+
+        var baseHeight = Math.Max(1, raster.Rasterizer.LineHeight(new RasterTextStyle()));
+        var strips = new List<MonochromeBitmap?>();
+        var total = 0;
+
+        void Add(MonochromeBitmap? strip, int height)
+        {
+            strips.Add(strip);
+            total += height;
+        }
+
+        foreach (var directive in _directives)
+        {
+            switch (directive)
+            {
+                case Directive.Line line:
+                    var drawn = DrawLine(line, raster);
+                    Add(drawn, drawn.Height);
+                    break;
+
+                case Directive.Rule rule:
+                    var ruled = DrawRule(rule.Character, raster);
+
+                    // A rule is a few dots tall but occupies a whole line on paper, so the gap
+                    // around it is what stops the preview reading tighter than the receipt.
+                    Add(ruled, baseHeight);
+                    break;
+
+                case Directive.Feed feed:
+                    Add(null, feed.Lines * baseHeight);
+                    break;
+
+                case Directive.Cut:
+                    Add(null, baseHeight);
+                    break;
+
+                case Directive.Kick:
+                    break;
+            }
+        }
+
+        var page = new MonochromeBitmap(raster.PaperWidthDots, Math.Max(1, total));
+        var y = 0;
+        var index = 0;
+
+        foreach (var directive in _directives)
+        {
+            switch (directive)
+            {
+                case Directive.Line:
+                    y += Blit(page, strips[index++], y, 0);
+                    break;
+
+                case Directive.Rule:
+                    var strip = strips[index++];
+                    Blit(page, strip, y, (baseHeight - (strip?.Height ?? 0)) / 2);
+                    y += baseHeight;
+                    break;
+
+                case Directive.Feed feed:
+                    index++;
+                    y += feed.Lines * baseHeight;
+                    break;
+
+                case Directive.Cut:
+                    index++;
+                    y += baseHeight;
+                    break;
+            }
+        }
+
+        return page;
+    }
+
+    /// <summary>Copies a strip onto the page and reports how tall it was.</summary>
+    private static int Blit(MonochromeBitmap page, MonochromeBitmap? strip, int top, int inset)
+    {
+        if (strip is null)
+            return 0;
+
+        for (var row = 0; row < strip.Height; row++)
+        {
+            for (var column = 0; column < strip.Width; column++)
+            {
+                if (strip[column, row])
+                    page[column, top + inset + row] = true;
+            }
+        }
+
+        return strip.Height;
+    }
+
     /// <summary>Renders what the paper will look like, for tests and for the diagnostics preview.</summary>
     public string ToPlainText()
     {
@@ -260,6 +600,10 @@ public sealed class ReceiptBuilder
                     text.AppendLine(Rescale(line.Text, line.WidthMultiplier).TrimEnd());
                     break;
 
+                case Directive.Rule rule:
+                    text.AppendLine(new string(rule.Character, PaperWidthChars));
+                    break;
+
                 case Directive.Feed feed:
                     for (var i = 0; i < feed.Lines; i++)
                         text.AppendLine();
@@ -276,6 +620,9 @@ public sealed class ReceiptBuilder
 
         return text.ToString();
     }
+
+    /// <summary>The laid-out lines, for tests that need to know where a segment landed.</summary>
+    internal IReadOnlyList<Directive> Directives => _directives;
 
     /// <summary>Widens a scaled line's indent so the preview shows where it actually starts.</summary>
     private static string Rescale(string text, int widthMultiplier)
@@ -344,9 +691,20 @@ public sealed class ReceiptBuilder
 
     private static string PadRight(string text, int width) => Truncate(text, width).PadRight(width);
 
-    private abstract record Directive
+    /// <summary>One run of text and the cell range it was laid out in.</summary>
+    internal readonly record struct Segment(string Text, int CellStart, int CellWidth, TextAlignment Alignment);
+
+    internal abstract record Directive
     {
-        public sealed record Line(string Text, TextAlignment Alignment, bool Bold, int WidthMultiplier, int HeightMultiplier) : Directive;
+        public sealed record Line(
+            string Text,
+            IReadOnlyList<Segment> Segments,
+            TextAlignment Alignment,
+            bool Bold,
+            int WidthMultiplier,
+            int HeightMultiplier) : Directive;
+
+        public sealed record Rule(char Character) : Directive;
 
         public sealed record Feed(int Lines) : Directive;
 
@@ -358,3 +716,6 @@ public sealed class ReceiptBuilder
 
 /// <summary>A fixed-width figure printed beside a description in <see cref="ReceiptBuilder.Row"/>.</summary>
 public readonly record struct ColumnValue(string Text, int Width);
+
+/// <summary>One cell of a <see cref="ReceiptBuilder.Cells"/> line.</summary>
+public readonly record struct ReceiptCell(string Text, int Width, TextAlignment Alignment = TextAlignment.Left);

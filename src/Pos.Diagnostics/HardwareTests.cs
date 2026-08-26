@@ -47,8 +47,8 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
             return CheckResult.NotConfigured;
         }
 
-        var receipt = new ReceiptComposer(_settings.Store.ToProfile(), printer.PaperWidthChars)
-            .Compose(SampleInvoice.Build(_settings.LaneId));
+        var receipt = new ReceiptComposer(_settings.Store.ToProfile(), printer.PaperWidthChars, _settings.ReceiptLanguage)
+            .Compose(SampleInvoice.Build(_settings.LaneId, _settings.InvoiceNumber.ToFormat()));
 
         output.WriteLine();
         output.WriteLine("  This is what should come out:");
@@ -58,7 +58,7 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
         if (!Confirm("Send this to the printer?"))
             return CheckResult.NotConfigured;
 
-        var outcome = printer.Print(receipt.ToEscPos());
+        var outcome = printer.Print(receipt.ToEscPos(raster: printer.Raster));
 
         if (!outcome.Succeeded)
         {

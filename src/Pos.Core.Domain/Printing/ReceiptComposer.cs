@@ -13,11 +13,36 @@ namespace Pos.Core.Domain.Printing;
 /// cut paper; it has no business knowing what an HSN code is. The split also means the content can
 /// be tested by reading the receipt as text.
 /// </remarks>
-public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = ReceiptBuilder.Width80Mm)
+public sealed class ReceiptComposer
 {
-    private readonly StoreProfile _store = store ?? throw new ArgumentNullException(nameof(store));
+    /// <summary>
+    /// Narrowest paper that will take the side-by-side blocks — the bill number beside the date,
+    /// and the four tenders two across. Below this they go one per line instead, which is not a
+    /// preference: five cells on 32-character paper leaves six characters each, and a figure
+    /// truncated to six characters is a wrong figure.
+    /// </summary>
+    private const int MinPairedLayoutWidth = 40;
 
-    public int PaperWidthChars { get; } = paperWidthChars;
+    private readonly StoreProfile _store;
+
+    public ReceiptComposer(
+        StoreProfile store,
+        int paperWidthChars = ReceiptBuilder.Width80Mm,
+        ReceiptLanguage language = ReceiptLanguage.English)
+    {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        PaperWidthChars = paperWidthChars;
+        Language = language;
+        Labels = ReceiptLabels.For(language);
+    }
+
+    public int PaperWidthChars { get; }
+
+    public ReceiptLanguage Language { get; }
+
+    public ReceiptLabels Labels { get; }
+
+    private bool Paired => PaperWidthChars >= MinPairedLayoutWidth;
 
     public ReceiptBuilder Compose(SettledInvoice invoice, bool isReprint = false)
     {
@@ -31,7 +56,7 @@ public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = Re
         WriteTotals(receipt, sale);
         WriteTaxSummary(receipt, sale);
         WritePayments(receipt, sale);
-        WriteLoyalty(receipt, sale);
+        WriteSavingsAndPoints(receipt, sale);
         WriteFooter(receipt);
 
         return receipt;
@@ -47,51 +72,109 @@ public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = Re
                 receipt.Text(line, TextAlignment.Center);
         }
 
-        if (!string.IsNullOrWhiteSpace(_store.Phone))
+        // The shop's own number is dropped when a customer care number is configured, rather than
+        // printing two numbers a customer has to choose between.
+        if (!string.IsNullOrWhiteSpace(_store.Phone) && string.IsNullOrWhiteSpace(_store.CustomerCarePhone))
             receipt.Text($"Ph: {_store.Phone}", TextAlignment.Center);
 
         if (!string.IsNullOrWhiteSpace(_store.Gstin))
-            receipt.Text($"GSTIN: {_store.Gstin}", TextAlignment.Center);
+            receipt.Text($"GSTIN {_store.Gstin}", TextAlignment.Center);
+
+        // A shop selling food has to display its FSSAI licence, and the bill is where a customer
+        // looks for it.
+        if (!string.IsNullOrWhiteSpace(_store.FssaiNumber))
+            receipt.Text($"FSSAI No {_store.FssaiNumber}", TextAlignment.Center);
+
+        if (!string.IsNullOrWhiteSpace(_store.CustomerCarePhone))
+            receipt.Text($"Customer Care - {_store.CustomerCarePhone}", TextAlignment.Center);
 
         receipt.Blank();
-        receipt.Text("TAX INVOICE", TextAlignment.Center, bold: true);
+        receipt.Text(Labels.TaxInvoice, TextAlignment.Center, bold: true);
 
         // A reprint has to say so on its face, or it can be passed off as a second sale.
         if (isReprint)
-            receipt.Text("** REPRINT **", TextAlignment.Center, bold: true);
+            receipt.Text(Labels.Reprint, TextAlignment.Center, bold: true);
 
         receipt.Rule();
+        WriteBillIdentity(receipt, invoice);
+        receipt.Rule();
+    }
 
+    /// <summary>
+    /// The bill number beside the date and the customer beside the time, which is how a counter
+    /// bill packs four facts into two lines.
+    /// </summary>
+    private void WriteBillIdentity(ReceiptBuilder receipt, SettledInvoice invoice)
+    {
         var sale = invoice.Sale;
-        receipt.Columns("Invoice", invoice.InvoiceNo);
-        receipt.Columns("Date", sale.CreatedAt.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture));
-        receipt.Columns("Lane", sale.LaneId);
+        var date = sale.CreatedAt.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+        var time = sale.CreatedAt.ToString("hh:mm tt", CultureInfo.InvariantCulture);
+        var customer = sale.Customer is { } c ? c.Name ?? c.MobileNo : null;
 
-        if (sale.Customer is { } customer)
+        if (!Paired)
         {
-            receipt.Columns("Customer", customer.Name ?? customer.MobileNo);
+            receipt.Columns(Labels.BillNumber, invoice.InvoiceNo);
+            receipt.Columns(Labels.Date, date);
+            receipt.Columns(Labels.Time, time);
+            receipt.Columns(Labels.Lane, sale.LaneId);
 
-            if (customer.Name is not null)
-                receipt.Columns("Mobile", customer.MobileNo);
+            if (customer is not null)
+                receipt.Columns(Labels.Customer, customer);
+
+            if (sale.Customer is { Name: not null } named)
+                receipt.Columns(Labels.Mobile, named.MobileNo);
+
+            if (sale.RecalledFromToken is { } parked)
+                receipt.Columns(Labels.ParkedAs, parked);
+
+            return;
         }
 
-        if (sale.RecalledFromToken is { } token)
-            receipt.Columns("Parked as", token);
+        // The label columns take what the longer of the two languages needs; the values take the
+        // rest, with the wider share going to the invoice number and the customer name.
+        var labelWidth = Math.Clamp(Math.Max(Labels.BillNumber.Length, Labels.Customer.Length) + 1, 9, 14);
+        var rightLabelWidth = Math.Clamp(Math.Max(Labels.Date.Length, Labels.Time.Length) + 1, 5, 9);
+        var rightValueWidth = 11;
+        var leftValueWidth = PaperWidthChars - labelWidth - rightLabelWidth - rightValueWidth;
 
-        receipt.Rule();
+        receipt.Cells(
+            new ReceiptCell(Labels.BillNumber, labelWidth),
+            new ReceiptCell(invoice.InvoiceNo, leftValueWidth),
+            new ReceiptCell(Labels.Date, rightLabelWidth),
+            new ReceiptCell(date, rightValueWidth, TextAlignment.Right));
+
+        receipt.Cells(
+            new ReceiptCell(Labels.Customer, labelWidth),
+            new ReceiptCell(customer ?? string.Empty, leftValueWidth),
+            new ReceiptCell(Labels.Time, rightLabelWidth),
+            new ReceiptCell(time, rightValueWidth, TextAlignment.Right));
+
+        // Anything else only earns a line when it is actually true of this bill.
+        if (sale.Customer is { Name: not null } withMobile)
+            receipt.Columns(Labels.Mobile, withMobile.MobileNo);
+
+        if (sale.RecalledFromToken is { } token)
+            receipt.Columns(Labels.ParkedAs, token);
     }
 
     private void WriteLines(ReceiptBuilder receipt, SaleDraft sale)
     {
-        receipt.Row("Item", new ColumnValue("Qty", 6), new ColumnValue("Rate", 9), new ColumnValue("Amount", 10));
+        // Price, then quantity, then amount — the order they multiply out in, and the order an
+        // Indian counter bill prints them.
+        receipt.Row(
+            Labels.ItemName,
+            new ColumnValue(Labels.Rate, 9),
+            new ColumnValue(Labels.Quantity, 6),
+            new ColumnValue(Labels.Amount, 10));
+
         receipt.Rule();
 
         foreach (var line in sale.Lines)
         {
             receipt.Row(
                 line.NameSnapshot,
-                new ColumnValue(Quantity(line), 6),
                 new ColumnValue(Amount(line.Mrp), 9),
+                new ColumnValue(Quantity(line), 6),
                 new ColumnValue(Amount(line.LineTotal), 10));
 
             // HSN belongs on a GST invoice, and the discount has to be visible or the customer
@@ -111,24 +194,21 @@ public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = Re
     {
         var totals = sale.Totals;
 
-        receipt.Columns("Taxable value", Amount(totals.SubtotalTaxable));
+        receipt.Columns(Labels.TaxableValue, Amount(totals.SubtotalTaxable));
 
         if (totals.TotalDiscount > 0m)
-            receipt.Columns("Discount", Amount(totals.TotalDiscount));
+            receipt.Columns(Labels.Discount, Amount(totals.TotalDiscount));
 
         if (totals.TotalCgst > 0m || totals.TotalSgst > 0m)
         {
-            receipt.Columns("CGST", Amount(totals.TotalCgst));
-            receipt.Columns("SGST", Amount(totals.TotalSgst));
+            receipt.Columns(Labels.Cgst, Amount(totals.TotalCgst));
+            receipt.Columns(Labels.Sgst, Amount(totals.TotalSgst));
         }
 
         if (totals.TotalIgst > 0m)
-            receipt.Columns("IGST", Amount(totals.TotalIgst));
+            receipt.Columns(Labels.Igst, Amount(totals.TotalIgst));
 
-        receipt.Rule('=');
-        receipt.Columns($"TOTAL {_store.CurrencyPrefix}", Amount(totals.GrandTotal), bold: true);
-        receipt.Rule('=');
-        receipt.Columns($"Items: {totals.LineCount}", $"Qty: {Quantity(totals.TotalQuantity)}");
+        receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.TotalQuantity}: {Quantity(totals.TotalQuantity)}");
     }
 
     /// <summary>
@@ -153,48 +233,118 @@ public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = Re
             return;
 
         receipt.Blank();
-        receipt.Text("Tax summary", bold: true);
-        receipt.Row("Rate", new ColumnValue("Taxable", 12), new ColumnValue("Tax", 10));
+        receipt.Text(Labels.TaxSummary, bold: true);
+        receipt.Row(Labels.TaxSummaryRate, new ColumnValue(Labels.TaxSummaryTaxable, 12), new ColumnValue(Labels.TaxSummaryTax, 10));
 
         foreach (var slab in slabs)
             receipt.Row($"{Rate(slab.Rate)}%", new ColumnValue(Amount(slab.Taxable), 12), new ColumnValue(Amount(slab.Tax), 10));
     }
 
+    /// <summary>
+    /// The four tenders a counter deals in, printed two across with the bill total beside them —
+    /// every one of them, whether or not it was used.
+    /// </summary>
+    /// <remarks>
+    /// Printing the zeros is the point. A customer settling in cash can see at a glance that nothing
+    /// went on a card, and a shopkeeper reconciling a drawer at closing gets the same four figures
+    /// in the same four places on every bill of the day rather than a block whose shape depends on
+    /// how the customer happened to pay.
+    /// </remarks>
     private void WritePayments(ReceiptBuilder receipt, SaleDraft sale)
     {
-        if (sale.Payments.Count == 0)
-            return;
+        receipt.Rule('=');
 
-        receipt.Blank();
-        receipt.Text("Payment", bold: true);
+        var byType = sale.Payments
+            .GroupBy(p => p.Type)
+            .ToDictionary(g => g.Key, g => Money.ToPresentation(g.Sum(p => p.Amount)));
 
-        foreach (var payment in sale.Payments)
+        decimal Taken(TenderType type) => byType.TryGetValue(type, out var amount) ? amount : 0m;
+
+        var total = Amount(sale.Totals.GrandTotal);
+
+        if (Paired)
         {
-            receipt.Columns(Label(payment.Type), Amount(payment.Amount));
+            const int labelWidth = 7;
+            const int valueWidth = 9;
 
-            if (!string.IsNullOrWhiteSpace(payment.ReferenceNo))
-                receipt.Text($"  {payment.ReferenceNo}");
+            // A right-aligned figure fills its cell to the last character, so without a gutter of
+            // its own the next label starts against it and the line reads "600.00UPI".
+            const int gutterWidth = 2;
+            var totalWidth = PaperWidthChars - (2 * (labelWidth + valueWidth)) - gutterWidth;
+
+            receipt.Cells(
+                new ReceiptCell(Labels.Cash, labelWidth),
+                new ReceiptCell(Amount(Taken(TenderType.Cash)), valueWidth, TextAlignment.Right),
+                new ReceiptCell(string.Empty, gutterWidth),
+                new ReceiptCell(Labels.Upi, labelWidth),
+                new ReceiptCell(Amount(Taken(TenderType.Upi)), valueWidth, TextAlignment.Right),
+                new ReceiptCell(Labels.Total, totalWidth, TextAlignment.Right));
+
+            receipt.Cells(
+                new ReceiptCell(Labels.Card, labelWidth),
+                new ReceiptCell(Amount(Taken(TenderType.Card)), valueWidth, TextAlignment.Right),
+                new ReceiptCell(string.Empty, gutterWidth),
+                new ReceiptCell(Labels.Credit, labelWidth),
+                new ReceiptCell(Amount(Taken(TenderType.StoreCredit)), valueWidth, TextAlignment.Right),
+                new ReceiptCell($"{_store.CurrencyPrefix} {total}", totalWidth, TextAlignment.Right));
+        }
+        else
+        {
+            receipt.Columns(Labels.Cash, Amount(Taken(TenderType.Cash)));
+            receipt.Columns(Labels.Upi, Amount(Taken(TenderType.Upi)));
+            receipt.Columns(Labels.Card, Amount(Taken(TenderType.Card)));
+            receipt.Columns(Labels.Credit, Amount(Taken(TenderType.StoreCredit)));
+            receipt.Columns(Labels.Total, $"{_store.CurrencyPrefix} {total}", bold: true);
         }
 
+        // Points settle a bill like any other tender, so leaving them out of the block would make
+        // the tenders fail to add up to the total on exactly the bills where a customer is most
+        // likely to check.
+        var points = Taken(TenderType.LoyaltyPoints);
+
+        if (points > 0m)
+            receipt.Columns(Labels.LoyaltyPoints, Amount(points));
+
         if (sale.ChangeDue > 0m)
-            receipt.Columns("Change", Amount(sale.ChangeDue), bold: true);
+            receipt.Columns(Labels.Change, Amount(sale.ChangeDue), bold: true);
+
+        receipt.Rule('=');
+
+        // Card and UPI references are what a customer disputes a charge with, so they belong on the
+        // bill. A loyalty redemption has no such reference — its own line already says how many
+        // points went — so printing one would just repeat the figure above it.
+        foreach (var payment in sale.Payments)
+        {
+            if (payment.Type is TenderType.LoyaltyPoints || string.IsNullOrWhiteSpace(payment.ReferenceNo))
+                continue;
+
+            receipt.Text($"{Label(payment.Type)} {payment.ReferenceNo}");
+        }
     }
 
-    private void WriteLoyalty(ReceiptBuilder receipt, SaleDraft sale)
+    /// <summary>
+    /// What the customer saved today, and what their points come to — the two lines a shopper
+    /// actually looks at, so they get the foot of the bill to themselves.
+    /// </summary>
+    private void WriteSavingsAndPoints(ReceiptBuilder receipt, SaleDraft sale)
     {
-        if (sale.Customer is null || (sale.PointsRedeemed == 0 && sale.PointsEarned == 0))
+        var totals = sale.Totals;
+
+        if (totals.TotalDiscount > 0m)
+            receipt.Text($"{Labels.TodaysSaving} : {Amount(totals.TotalDiscount)}", TextAlignment.Center);
+
+        if (sale.Customer is not { } customer)
             return;
 
-        receipt.Blank();
-        receipt.Text("Reward points", bold: true);
-
         if (sale.PointsRedeemed > 0)
-            receipt.Columns("Redeemed", sale.PointsRedeemed.ToString(CultureInfo.InvariantCulture));
+            receipt.Text($"{Labels.PointsRedeemed} : {sale.PointsRedeemed.ToString(CultureInfo.InvariantCulture)}", TextAlignment.Center);
 
         if (sale.PointsEarned > 0)
-            receipt.Columns("Earned", sale.PointsEarned.ToString(CultureInfo.InvariantCulture));
+            receipt.Text($"{Labels.PointsEarnedThisBill} : {sale.PointsEarned.ToString(CultureInfo.InvariantCulture)}", TextAlignment.Center);
 
-        receipt.Columns("Balance", sale.Customer.LoyaltyBalance.ToString(CultureInfo.InvariantCulture));
+        receipt.Text(
+            $"{Labels.TotalPointsEarned} : {customer.LoyaltyBalance.ToString(CultureInfo.InvariantCulture)}",
+            TextAlignment.Center);
     }
 
     private void WriteFooter(ReceiptBuilder receipt)
@@ -215,13 +365,13 @@ public sealed class ReceiptComposer(StoreProfile store, int paperWidthChars = Re
 
     private static string Quantity(InvoiceLine line) => Quantity(line.Quantity);
 
-    private static string Label(TenderType type) => type switch
+    private string Label(TenderType type) => type switch
     {
-        TenderType.Cash => "Cash",
-        TenderType.Card => "Card",
-        TenderType.Upi => "UPI",
-        TenderType.StoreCredit => "Store credit",
-        TenderType.LoyaltyPoints => "Loyalty points",
+        TenderType.Cash => Labels.Cash,
+        TenderType.Card => Labels.Card,
+        TenderType.Upi => Labels.Upi,
+        TenderType.StoreCredit => Labels.Credit,
+        TenderType.LoyaltyPoints => Labels.LoyaltyPoints,
         _ => type.ToString(),
     };
 }

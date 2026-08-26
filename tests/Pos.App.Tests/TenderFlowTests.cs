@@ -89,7 +89,7 @@ public class TenderFlowTests
 
         Assert.False(till.ViewModel.IsTendering);
         Assert.Empty(till.ViewModel.Lines);
-        Assert.Equal($"{BillingHarness.LaneId}-{DateTimeOffset.Now.Year}-000001", till.ViewModel.LastInvoiceNo);
+        Assert.Equal($"INV/{FiscalYear.For(DateTimeOffset.Now).ShortLabel}/{BillingHarness.LaneId}-1", till.ViewModel.LastInvoiceNo);
         Assert.NotNull(till.Invoices.FindByInvoiceNo(till.ViewModel.LastInvoiceNo));
     }
 
@@ -207,7 +207,7 @@ public class TenderFlowTests
         Assert.False(till.ViewModel.IsTendering);
         Assert.Single(till.ViewModel.Lines);
         Assert.Equal(189.00m, till.ViewModel.GrandTotal);
-        Assert.Empty(till.Invoices.FindByInvoiceNo($"{BillingHarness.LaneId}-{DateTimeOffset.Now.Year}-000001")?.Sale.Lines ?? []);
+        Assert.Empty(till.Invoices.FindByInvoiceNo($"INV/{FiscalYear.For(DateTimeOffset.Now).ShortLabel}/{BillingHarness.LaneId}-1")?.Sale.Lines ?? []);
     }
 
     [Fact]
@@ -573,7 +573,7 @@ public class TenderFlowTests
         till.Press(Key.F12);
         till.Press(Key.Enter);
         till.Press(Key.Enter);
-        Assert.EndsWith("-000001", till.ViewModel.LastInvoiceNo);
+        Assert.EndsWith("-1", till.ViewModel.LastInvoiceNo);
 
         // Back to the parked bill.
         till.Press(Key.F6);
@@ -593,7 +593,7 @@ public class TenderFlowTests
 
         var saved = till.Invoices.FindByInvoiceNo(till.ViewModel.LastInvoiceNo)!;
 
-        Assert.EndsWith("-000002", saved.InvoiceNo);
+        Assert.EndsWith("-2", saved.InvoiceNo);
         Assert.Equal(600.00m, saved.Sale.Totals.GrandTotal);
         Assert.Equal(2, saved.Sale.Payments.Count);
         Assert.Equal(token, saved.Sale.RecalledFromToken);

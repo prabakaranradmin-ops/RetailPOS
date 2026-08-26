@@ -157,6 +157,30 @@ reconciliations (gross less discount, taxable plus tax, tenders less change) are
 against net sales, because a Z-report that does not add up is the one a shopkeeper has to
 reconstruct by hand.
 
+**Tamil receipts, fiscal-year numbering** — passing
+- [x] The financial year, including both boundaries and the century wrap — `InvoiceNumberFormatTests`
+- [x] Invoice number shape, padding, the lane segment, and what is refused — `InvoiceNumberFormatTests`, `InvoicePersistenceTests`
+- [x] The sequence keyed on the financial year rather than the calendar year — `SchemaTests`, `InvoicePersistenceTests`
+- [x] Raster bitmap packing and the `GS v 0` command, including banding — `RasterImageTests`
+- [x] Where drawn text lands, in dots, in both languages — `RasterLayoutTests`
+- [x] Which lines get drawn under each raster mode — `RasterLayoutTests`
+- [x] The Tamil labels, the four-way tender block, the savings and points lines — `TamilReceiptTests`
+- [x] The same bill in both languages carrying the same figures — `TamilReceiptTests`
+- [x] Real font rendering: Tamil inks, shapes, scales and clips — `TamilRasterizationTests`
+
+**On the two rasteriser test doubles.** The layout tests use a rasteriser made of arithmetic —
+every character the same width — because layout is what can be asserted exactly, and with real
+glyphs it could not be: the answers would depend on which fonts the machine running the tests
+happens to have. What that cannot prove is that the glyphs exist at all, so a second set runs
+against the real font engine. The test a missing font cannot pass is that two different Tamil words
+of the same length draw *differently*: a font with no Tamil renders every character as the same
+fallback box, and would put down identical ink.
+
+**On what is still not proved here.** That the Tamil is *correct Tamil* — that the shaping is right
+and a shopkeeper reads it as words — cannot be asserted by any of this. It was checked by rendering
+the bill and looking at it, and `pos receipt-preview --png` exists so the same check can be made on
+the lane before it opens.
+
 **Operational gaps** — passing
 - [x] Voiding: what it does, what it refuses, loyalty reversal, the day-end boundary, the Z-report — `VoidSaleTests`, `VoidAndCashierFlowTests`
 - [x] Logging: entries reach disk, stay on one line, roll by day and by size, prune, never throw — `FileLogTests`

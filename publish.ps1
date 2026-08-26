@@ -115,6 +115,12 @@ if ($shipped.store.name -notlike 'CHANGE ME*') {
     throw "The packaged settings.json has a real store name in it ('$($shipped.store.name)'). The template must ship with its CHANGE ME markers intact."
 }
 
+# An invoice prefix cannot be corrected after the fact: the bills carrying it are already in
+# customers' hands. Shipping a template that looks configured invites a lane to trade on it.
+if ($shipped.invoiceNumber.storePrefix -ne 'CHANGEME') {
+    throw "The packaged settings.json has a real invoice prefix in it ('$($shipped.invoiceNumber.storePrefix)'). The template must ship with its CHANGEME marker intact."
+}
+
 Write-Host '  settings.json checked: template defaults, no development rig' -ForegroundColor DarkGray
 
 Write-Host ''

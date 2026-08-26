@@ -22,8 +22,11 @@ before anything else happens:
 
 - **`laneId`** — unique to this till. `L1` on the first, `L2` on the second.
   **If you copied this folder from another lane, change it now.** The invoice number is
-  `{laneId}-{year}-{sequence}`, and the lane prefix is the only thing stopping two tills from
-  issuing the same invoice number. There is no server to catch it.
+  `{prefix}/{financial year}/{laneId}-{sequence}`, and the lane part is the only thing stopping two
+  tills from issuing the same invoice number. There is no server to catch it.
+- **`invoiceNumber.storePrefix`** — the shop's own prefix, the `RM` of `RM/26-27/11358`. Ships as
+  `CHANGEME`. **Settle it before the first sale** — a number cannot be changed once the bill is in
+  a customer's hand. The year is the financial year, so the sequence restarts on 1 April.
 - **`outletStateCode`** — the outlet's GST state code (`33` is Tamil Nadu).
 - **`store.name` and `store.gstin`** — printed on every invoice.
 
@@ -63,8 +66,20 @@ listed lines and run it again. The format and every rule are in `CATALOGUE_FORMA
 pos receipt-preview
 ```
 
-Prints a sample receipt as text. Check the shop name, the GSTIN, and that nothing runs off the
-edge. If it does, the paper width is wrong — `48` for 80mm, `32` for 58mm.
+Prints a sample receipt as text. Check the shop name, the GSTIN, the FSSAI number and the bill
+number, and that nothing runs off the edge. If it does, the paper width is wrong — `48` for 80mm,
+`32` for 58mm.
+
+**On a lane printing Tamil**, the text preview is not enough: it counts characters, and Tamil is
+drawn rather than typed. Render the actual dots and look at them:
+
+```
+pos receipt-preview --png receipt.png
+```
+
+Open the image. That is what will come out of the printer. If any Tamil shows as `?`, the lane
+cannot draw it — the preview says why — and the shop must not open on a receipt printing `?` where
+its own name should be.
 
 ---
 
@@ -255,10 +270,11 @@ Print this and tick it.
 
 **Before the first day**
 - [ ] Software copied to the lane
-- [ ] `settings.json` edited — `laneId` unique, state code, shop name, GSTIN
+- [ ] `settings.json` edited — `laneId` unique, invoice prefix, state code, shop name, GSTIN, FSSAI
 - [ ] `pos test-hardware` — every configured peripheral passed
 - [ ] Catalogue dry-run clean, then imported
 - [ ] `pos receipt-preview` looks right and fits the paper
+- [ ] On a Tamil lane: `pos receipt-preview --png` checked by eye, no `?` anywhere
 - [ ] A test sale rung up and settled, and the receipt checked against the shelf price
 
 **Each morning**

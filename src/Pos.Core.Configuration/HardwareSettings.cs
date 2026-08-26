@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Pos.Core.Hardware.Printing;
 
 namespace Pos.Core.Configuration;
 
@@ -48,6 +49,37 @@ public sealed class HardwareSettings
     /// </summary>
     [JsonPropertyName("printerOutputFile")]
     public string? PrinterOutputFile { get; set; }
+
+    /// <summary>
+    /// Print head width in dots: 576 for 80mm at the usual 203dpi, 384 for 58mm. Zero derives it
+    /// from <see cref="PrinterPaperWidthChars"/>, which is right for every printer that has not
+    /// been reconfigured to an unusual font.
+    /// </summary>
+    [JsonPropertyName("printerPaperWidthDots")]
+    public int PrinterPaperWidthDots { get; set; }
+
+    /// <summary>
+    /// When to draw text as dots instead of sending it as characters. <c>Auto</c> draws only the
+    /// lines a printer has no glyphs for, which is what puts Tamil on paper while leaving the
+    /// English crisp and cheap.
+    /// </summary>
+    [JsonPropertyName("printerRasterMode")]
+    public RasterMode PrinterRasterMode { get; set; } = RasterMode.Auto;
+
+    /// <summary>
+    /// Font used for drawn text. Empty picks the best installed of Nirmala UI, Latha, Arial
+    /// Unicode MS and Segoe UI — the first of those carries Tamil and Latin in one face.
+    /// </summary>
+    [JsonPropertyName("receiptFontFamily")]
+    public string? ReceiptFontFamily { get; set; }
+
+    /// <summary>Em size in printer dots for drawn text. Zero uses the default, which is sized to match the printer's own font.</summary>
+    [JsonPropertyName("receiptFontSizeDots")]
+    public double ReceiptFontSizeDots { get; set; }
+
+    /// <summary>The dot width to lay drawn text out against, derived when not stated outright.</summary>
+    public int EffectivePaperWidthDots =>
+        PrinterPaperWidthDots > 0 ? PrinterPaperWidthDots : RasterOptions.DotsForCharacterWidth(PrinterPaperWidthChars);
 
     [JsonPropertyName("drawerConnection")]
     public DrawerConnection DrawerConnection { get; set; } = DrawerConnection.Printer;

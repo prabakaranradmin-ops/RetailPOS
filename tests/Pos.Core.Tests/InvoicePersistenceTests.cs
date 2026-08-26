@@ -54,7 +54,33 @@ public class InvoicePersistenceTests : IDisposable
     {
         var saved = Invoices.Save(Sale());
 
-        Assert.Equal("L1-2026-000001", saved.InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", saved.InvoiceNo);
+    }
+
+    [Fact]
+    public void TheShopsOwnPrefixAndFormatAreUsed()
+    {
+        var repository = new InvoiceRepository(_temp.Database, new InvoiceNumberFormat
+        {
+            StorePrefix = "RM",
+            IncludeLaneSegment = false,
+        });
+
+        Assert.Equal("RM/26-27/1", repository.Save(Sale()).InvoiceNo);
+        Assert.Equal("RM/26-27/2", repository.Save(Sale()).InvoiceNo);
+    }
+
+    [Fact]
+    public void TheSequenceCanBePaddedForAFixedWidthNumber()
+    {
+        var repository = new InvoiceRepository(_temp.Database, new InvoiceNumberFormat
+        {
+            StorePrefix = "RM",
+            IncludeLaneSegment = false,
+            SequencePadding = 5,
+        });
+
+        Assert.Equal("RM/26-27/00001", repository.Save(Sale()).InvoiceNo);
     }
 
     [Fact]
@@ -63,25 +89,44 @@ public class InvoicePersistenceTests : IDisposable
         var numbers = Enumerable.Range(0, 5).Select(_ => Invoices.Save(Sale()).InvoiceNo).ToList();
 
         Assert.Equal(
-            ["L1-2026-000001", "L1-2026-000002", "L1-2026-000003", "L1-2026-000004", "L1-2026-000005"],
+            ["INV/26-27/L1-1", "INV/26-27/L1-2", "INV/26-27/L1-3", "INV/26-27/L1-4", "INV/26-27/L1-5"],
             numbers);
     }
 
     [Fact]
     public void EachLaneKeepsItsOwnSequence()
     {
-        Assert.Equal("L1-2026-000001", Invoices.Save(Sale(lane: "L1")).InvoiceNo);
-        Assert.Equal("L2-2026-000001", Invoices.Save(Sale(lane: "L2")).InvoiceNo);
-        Assert.Equal("L1-2026-000002", Invoices.Save(Sale(lane: "L1")).InvoiceNo);
-        Assert.Equal("L2-2026-000002", Invoices.Save(Sale(lane: "L2")).InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", Invoices.Save(Sale(lane: "L1")).InvoiceNo);
+        Assert.Equal("INV/26-27/L2-1", Invoices.Save(Sale(lane: "L2")).InvoiceNo);
+        Assert.Equal("INV/26-27/L1-2", Invoices.Save(Sale(lane: "L1")).InvoiceNo);
+        Assert.Equal("INV/26-27/L2-2", Invoices.Save(Sale(lane: "L2")).InvoiceNo);
     }
 
     [Fact]
-    public void TheSequenceRestartsInANewYear()
+    public void TheSequenceRestartsInANewFinancialYear()
     {
-        Assert.Equal("L1-2026-000001", Invoices.Save(Sale(year: 2026)).InvoiceNo);
-        Assert.Equal("L1-2027-000001", Invoices.Save(Sale(year: 2027)).InvoiceNo);
-        Assert.Equal("L1-2026-000002", Invoices.Save(Sale(year: 2026)).InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", Invoices.Save(Sale(year: 2026)).InvoiceNo);
+        Assert.Equal("INV/27-28/L1-1", Invoices.Save(Sale(year: 2027)).InvoiceNo);
+        Assert.Equal("INV/26-27/L1-2", Invoices.Save(Sale(year: 2026)).InvoiceNo);
+    }
+
+    /// <summary>
+    /// The year that matters is the one the return is filed for. A bill on 31 March and a bill the
+    /// next morning belong to different financial years despite being a day apart, and two bills
+    /// eleven months apart in the same financial year share a sequence.
+    /// </summary>
+    [Fact]
+    public void TheYearTurnsOverInAprilNotInJanuary()
+    {
+        var march = Sale() with { CreatedAt = new DateTimeOffset(2027, 3, 31, 20, 0, 0, TimeSpan.FromHours(5.5)) };
+        var april = Sale() with { CreatedAt = new DateTimeOffset(2027, 4, 1, 9, 0, 0, TimeSpan.FromHours(5.5)) };
+        var january = Sale() with { CreatedAt = new DateTimeOffset(2028, 1, 15, 9, 0, 0, TimeSpan.FromHours(5.5)) };
+
+        Assert.Equal("INV/26-27/L1-1", Invoices.Save(march).InvoiceNo);
+        Assert.Equal("INV/27-28/L1-1", Invoices.Save(april).InvoiceNo);
+
+        // Mid-January is still the financial year that opened the previous April.
+        Assert.Equal("INV/27-28/L1-2", Invoices.Save(january).InvoiceNo);
     }
 
     /// <summary>
@@ -139,7 +184,7 @@ public class InvoicePersistenceTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => Invoices.Save(empty));
 
         // The next real sale still gets number one, so the failure consumed nothing.
-        Assert.Equal("L1-2026-000001", Invoices.Save(Sale()).InvoiceNo);
+        Assert.Equal("INV/26-27/L1-1", Invoices.Save(Sale()).InvoiceNo);
     }
 
     // ---- Round trip --------------------------------------------------------------------------
@@ -251,7 +296,7 @@ public class InvoicePersistenceTests : IDisposable
     [Fact]
     public void LookingUpAnInvoiceThatDoesNotExistReturnsNothing()
     {
-        Assert.Null(Invoices.FindByInvoiceNo("L9-2026-000404"));
+        Assert.Null(Invoices.FindByInvoiceNo("INV/26-27/L9-404"));
         Assert.Null(Invoices.FindByInvoiceNo(""));
     }
 

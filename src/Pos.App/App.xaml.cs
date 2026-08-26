@@ -7,6 +7,8 @@ using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
 using Pos.Core.Domain.Printing;
+using Pos.Core.Hardware.Printing;
+using Pos.Core.Hardware.Windows;
 using Pos.Core.Logging;
 
 namespace Pos.App;
@@ -52,12 +54,12 @@ public partial class App : Application
         _log.Info("startup", $"lane {settings.LaneId}, state {settings.OutletStateCode}, data at {DataDirectory}");
 
         var customers = new CustomerRepository(database);
-        var invoices = new InvoiceRepository(database);
+        var invoices = new InvoiceRepository(database, settings.InvoiceNumber.ToFormat());
         var heldBills = new HeldBillRepository(database);
 
         // Built from the lane's settings. A peripheral that is not configured yields the honest
         // "none" implementation, so a lane with no printer or no drawer still bills.
-        var printer = PeripheralFactory.CreatePrinter(settings.Hardware);
+        var printer = PeripheralFactory.CreatePrinter(settings.Hardware, CreateRasterizer(settings));
         var drawer = PeripheralFactory.CreateDrawer(settings.Hardware, printer);
 
         _log.Info("hardware", $"printer: {printer.Name} at {printer.PaperWidthChars} chars, drawer: {drawer.Name}, scale: {settings.Hardware.ScalePort ?? "none"}");
@@ -73,7 +75,7 @@ public partial class App : Application
             settings.LoyaltyRules,
             TimeProvider.System,
             printer,
-            new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars),
+            new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
             _log,
             () => viewModelRef?.CashierName);
 
@@ -104,6 +106,35 @@ public partial class App : Application
         MainWindow.Show();
 
         _log.Info("startup", $"till ready, cashier {viewModel.CashierLabel}");
+    }
+
+    /// <summary>
+    /// Builds the text rasteriser, or returns null if the machine cannot supply one.
+    /// </summary>
+    /// <remarks>
+    /// A font engine that will not start must not stop a till from opening. Losing it costs the
+    /// Tamil on the receipt, which is a bad receipt; refusing to run costs the shop its counter.
+    /// </remarks>
+    private ITextRasterizer? CreateRasterizer(PosSettings settings)
+    {
+        if (settings.Hardware.PrinterRasterMode == RasterMode.Never)
+            return null;
+
+        try
+        {
+            var size = settings.Hardware.ReceiptFontSizeDots > 0
+                ? (float)settings.Hardware.ReceiptFontSizeDots
+                : GdiTextRasterizer.DefaultEmSizeDots;
+
+            var rasterizer = new GdiTextRasterizer(settings.Hardware.ReceiptFontFamily, size);
+            _log?.Info("hardware", $"receipt text drawn in {rasterizer.FontFamily} at {size} dots, mode {settings.Hardware.PrinterRasterMode}");
+            return rasterizer;
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("hardware", "could not start the receipt text renderer; receipts will print in ASCII only", ex);
+            return null;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

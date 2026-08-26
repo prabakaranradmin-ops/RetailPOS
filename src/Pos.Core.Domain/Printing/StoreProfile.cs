@@ -17,6 +17,18 @@ public sealed record StoreProfile
     /// <summary>The outlet's GST identification number, printed on every invoice.</summary>
     public string? Gstin { get; init; }
 
+    /// <summary>
+    /// The outlet's FSSAI licence number. A shop selling food has to display it, and a grocery
+    /// bill in India carries it under the GSTIN.
+    /// </summary>
+    public string? FssaiNumber { get; init; }
+
+    /// <summary>
+    /// The number a customer rings about a bill. Printed separately from <see cref="Phone"/>
+    /// because on a multi-branch shop they are often not the same number.
+    /// </summary>
+    public string? CustomerCarePhone { get; init; }
+
     /// <summary>Printed at the foot. A thank-you, return policy, or nothing.</summary>
     public string? FooterMessage { get; init; }
 

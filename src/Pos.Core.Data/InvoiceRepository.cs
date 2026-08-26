@@ -9,12 +9,18 @@ namespace Pos.Core.Data;
 public sealed class InvoiceRepository : IInvoiceStore
 {
     private readonly PosDatabase _database;
+    private readonly InvoiceNumberFormat _numberFormat;
 
-    public InvoiceRepository(PosDatabase database)
+    public InvoiceRepository(PosDatabase database, InvoiceNumberFormat? numberFormat = null)
     {
         ArgumentNullException.ThrowIfNull(database);
         _database = database;
+        _numberFormat = numberFormat ?? InvoiceNumberFormat.Default;
+        _numberFormat.Validate();
     }
+
+    /// <summary>How this lane composes its invoice numbers.</summary>
+    public InvoiceNumberFormat NumberFormat => _numberFormat;
 
     /// <summary>
     /// Mints the number and writes header, lines and payments as one unit.
@@ -35,9 +41,9 @@ public sealed class InvoiceRepository : IInvoiceStore
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction(deferred: false);
 
-        var year = sale.CreatedAt.Year;
-        var sequence = TakeNextSequence(connection, transaction, sale.LaneId, year);
-        var invoiceNo = FormatInvoiceNo(sale.LaneId, year, sequence);
+        var fiscalYear = FiscalYear.For(sale.CreatedAt);
+        var sequence = TakeNextSequence(connection, transaction, sale.LaneId, fiscalYear);
+        var invoiceNo = _numberFormat.Format(sale.LaneId, fiscalYear, sequence);
 
         var invoiceId = InsertHeader(connection, transaction, sale, invoiceNo);
         InsertLines(connection, transaction, invoiceId, sale.Lines);
@@ -49,24 +55,21 @@ public sealed class InvoiceRepository : IInvoiceStore
     }
 
     /// <summary>
-    /// `{lane}-{year}-{sequence}`, per ARCHITECTURE.md section 6. The lane prefix is what lets
-    /// several tills number their own invoices with nothing coordinating them.
+    /// The sequence is kept per lane and per <em>financial</em> year, so it restarts on 1 April
+    /// with the year the invoice will be filed under rather than in the middle of it.
     /// </summary>
-    public static string FormatInvoiceNo(string laneId, int year, long sequence) =>
-        $"{laneId}-{year}-{sequence:D6}";
-
-    private static long TakeNextSequence(SqliteConnection connection, SqliteTransaction transaction, string laneId, int year)
+    private static long TakeNextSequence(SqliteConnection connection, SqliteTransaction transaction, string laneId, FiscalYear fiscalYear)
     {
         using (var seed = connection.CreateCommand())
         {
             seed.Transaction = transaction;
             seed.CommandText = """
-                INSERT INTO invoice_sequences (lane_id, year, next_value)
-                VALUES ($lane, $year, 1)
-                ON CONFLICT (lane_id, year) DO NOTHING;
+                INSERT INTO invoice_sequences (lane_id, fiscal_year_start, next_value)
+                VALUES ($lane, $fy, 1)
+                ON CONFLICT (lane_id, fiscal_year_start) DO NOTHING;
                 """;
             seed.Parameters.AddWithValue("$lane", laneId);
-            seed.Parameters.AddWithValue("$year", year);
+            seed.Parameters.AddWithValue("$fy", fiscalYear.StartYear);
             seed.ExecuteNonQuery();
         }
 
@@ -75,11 +78,11 @@ public sealed class InvoiceRepository : IInvoiceStore
         take.CommandText = """
             UPDATE invoice_sequences
             SET next_value = next_value + 1
-            WHERE lane_id = $lane AND year = $year
+            WHERE lane_id = $lane AND fiscal_year_start = $fy
             RETURNING next_value - 1;
             """;
         take.Parameters.AddWithValue("$lane", laneId);
-        take.Parameters.AddWithValue("$year", year);
+        take.Parameters.AddWithValue("$fy", fiscalYear.StartYear);
 
         return Convert.ToInt64(take.ExecuteScalar());
     }

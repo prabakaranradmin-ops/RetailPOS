@@ -2,7 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+
+    <!--
+      Windows-targeted because the tool drives the lane's real hardware: the printer goes through
+      the Windows spooler, and drawing Tamil for a receipt needs the OS font engine. It was already
+      Windows-only in practice and already published win-x64; this states it.
+    -->
+    <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>Pos.Diagnostics</RootNamespace>
     <!-- Invoked as `pos test-hardware`. -->
     <AssemblyName>pos</AssemblyName>
@@ -13,6 +19,7 @@
     <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />
     <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />
     <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
+    <ProjectReference Include="..\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
     <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
   </ItemGroup>
 

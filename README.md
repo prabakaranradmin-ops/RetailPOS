@@ -42,6 +42,7 @@ src/Pos.Core.Domain/     Invoice, line, item, customer model and the live bill
 src/Pos.Core.Data/          SQLite access, migrations, item search, invoice and held-bill storage
 src/Pos.Core.Loyalty/       Points accrual and redemption
 src/Pos.Core.Hardware/      ESC/POS, receipt layout, scale protocol, barcodes, serial, drivers
+src/Pos.Core.Hardware.Windows/  Text rendered to dots, so Tamil reaches paper
 src/Pos.Core.Configuration/ Lane settings, and what they build into
 src/Pos.App/                WPF UI, MVVM, keyboard routing
 src/Pos.Diagnostics/        The `pos` command — peripheral checks and receipt preview
@@ -140,6 +141,40 @@ rejected import leaves the catalogue exactly as it was. Alongside the obvious ch
 selling price above MRP, a barcode whose EAN or UPC check digit does not add up, and a `unit` that
 contradicts `is_weighed`. Codes of a non-standard length have no check digit to test and are
 accepted as-is. Use `--update` for a re-import, which is nearly always a price revision.
+
+## Printing in Tamil
+
+`"receiptLanguage": "Tamil"` puts the labels on the bill in Tamil — `பில் நம்பர்`, `பொருளின் பெயர்`,
+`மொத்தம்`, `இன்றைய சேமிப்பு`. Only the labels change: every figure, item name and invoice number is
+identical either way, and that is asserted directly by printing the same bill both ways.
+
+No thermal printer has a Tamil font, and no printer ever could map it byte by byte — a syllable is
+assembled from several code points and reordered, so `கெ` stores its vowel sign after the consonant
+and draws it before. The labels are therefore **drawn** by the operating system's font engine and
+sent as a raster image, which sidesteps the printer's code pages entirely.
+
+Only the lines that need it are drawn. English goes as characters, which is sharper, faster and a
+fraction of the data — which is also why the Tamil on a real shop bill looks like a different
+typeface from the English beside it. `printerRasterMode` is `Auto` for that, `Always` to put the
+whole receipt in one face, `Never` to switch drawing off.
+
+```
+pos receipt-preview --png receipt.png
+```
+
+Renders the dots the printer would burn and saves them as an image. It is the only way to check a
+Tamil bill without a roll of paper, and it is what the hardware sign-off asks for.
+
+## Invoice numbers
+
+`{prefix}/{financial year}/{lane}-{sequence}` — `RM/26-27/L1-11358`, or `RM/26-27/11358` on a shop
+with one till. The year is the Indian financial year, 1 April to 31 March, because that is what a
+GST return is filed against; the sequence restarts in April, not in January.
+
+The lane segment is not decoration. Each till mints its own 1, 2, 3… with nothing coordinating
+them, so turning it off on a two-till shop means both issue the same numbers and nothing notices.
+`sequencePadding` and the prefix are set in `settings.json`, and they have to be right before the
+shop's first sale — a number cannot be changed once the bill is in a customer's hand.
 
 ## Closing the day
 

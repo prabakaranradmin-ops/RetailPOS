@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />
     <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
     <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
+    <ProjectReference Include="..\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
   </ItemGroup>
 
 </Project>

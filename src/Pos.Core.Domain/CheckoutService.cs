@@ -215,7 +215,7 @@ public sealed class CheckoutService(
 
         try
         {
-            return _printer.Print(_receipts.Compose(invoice, isReprint).ToEscPos());
+            return _printer.Print(_receipts.Compose(invoice, isReprint).ToEscPos(raster: _printer.Raster));
         }
         catch (Exception ex)
         {

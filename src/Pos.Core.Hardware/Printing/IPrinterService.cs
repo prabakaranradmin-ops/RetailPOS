@@ -48,6 +48,16 @@ public interface IPrinterService
     /// <summary>Characters per line, which the receipt layout is built against.</summary>
     int PaperWidthChars { get; }
 
+    /// <summary>
+    /// How this printer draws text it has no glyphs for, or null when it draws nothing.
+    /// </summary>
+    /// <remarks>
+    /// It hangs off the printer because the answer is a property of the device — how wide its head
+    /// is in dots, and what the lane has installed to draw with. A caller composing a receipt should
+    /// not have to know either; it renders the layout for whatever printer it was handed.
+    /// </remarks>
+    RasterOptions? Raster => null;
+
     PrintOutcome Print(byte[] job);
 }
 
@@ -76,6 +86,9 @@ public sealed class LoopbackPrinterService(int paperWidthChars = ReceiptBuilder.
     public string Name => "loopback";
 
     public int PaperWidthChars { get; } = paperWidthChars;
+
+    /// <summary>Settable so a test can drive the drawn path without a real printer.</summary>
+    public RasterOptions? Raster { get; set; }
 
     /// <summary>Set to make the next print fail, for exercising the degraded path.</summary>
     public string? FailWith { get; set; }

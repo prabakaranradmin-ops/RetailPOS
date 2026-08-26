@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Pos.Core.Hardware.Windows</RootNamespace>
+
+    <!--
+      Not because anything here shows a window. This is what references the Windows Desktop
+      framework, which is where System.Drawing lives; without it the same types would have to come
+      from a NuGet package. Drawing a glyph needs a font engine, and that is the one part of
+      putting Tamil on a receipt that cannot be platform-neutral.
+    -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+
+    <!-- The threshold loop walks locked bitmap rows directly; per pixel, GetPixel is not viable. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pos.Core.Hardware\Pos.Core.Hardware.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Pos.App.Tests" />
+  </ItemGroup>
+
+</Project>

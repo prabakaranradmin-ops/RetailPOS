@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Pos.Core.Domain.Printing;
 using Pos.Core.Loyalty;
 
 namespace Pos.Core.Configuration;
@@ -64,6 +65,23 @@ public sealed class PosSettings
     [JsonPropertyName("store")]
     public StoreProfileSettings Store { get; set; } = new();
 
+    /// <summary>How this lane composes its invoice numbers.</summary>
+    [JsonPropertyName("invoiceNumber")]
+    public InvoiceNumberSettings InvoiceNumber { get; set; } = new();
+
+    /// <summary>
+    /// Which language the receipt's labels print in. The figures, the item names and the invoice
+    /// number are unaffected — only the words around them change.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to English because that prints on any thermal printer with no rasterising at all.
+    /// A lane set to Tamil draws those labels as dots instead, which needs
+    /// <c>hardware.printerRasterMode</c> left at its default and a Tamil-capable font on the
+    /// machine — every Windows build since 8 has one.
+    /// </remarks>
+    [JsonPropertyName("receiptLanguage")]
+    public ReceiptLanguage ReceiptLanguage { get; set; } = ReceiptLanguage.English;
+
     /// <summary>Which peripherals this lane has, and how they are attached.</summary>
     [JsonPropertyName("hardware")]
     public HardwareSettings Hardware { get; set; } = new();
@@ -119,6 +137,17 @@ public sealed class PosSettings
         catch (ArgumentOutOfRangeException ex)
         {
             throw new InvalidOperationException($"The settings file at '{path}' has an unworkable loyalty scheme: {ex.Message}", ex);
+        }
+
+        // An unusable invoice prefix has to stop the lane starting. Discovering it at the first
+        // sale would mean the shop's first bill of the day carries a number nobody can file.
+        try
+        {
+            settings.InvoiceNumber.ToFormat().Validate();
+        }
+        catch (Exception ex) when (ex is ArgumentException or ArgumentOutOfRangeException)
+        {
+            throw new InvalidOperationException($"The settings file at '{path}' has an unusable invoice number format: {ex.Message}", ex);
         }
 
         // Likewise for the peripherals. A lane told to kick a drawer on a serial port it does not

@@ -83,6 +83,46 @@ Each service is behind an interface so the domain and UI layers can be tested ag
 - Each lane/terminal has a configured lane ID.
 - Invoice numbers are generated locally as `{lane_id}-{year}-{local_sequence}`, where `local_sequence` is a per-lane counter persisted to disk — guarantees uniqueness across lanes without any coordination service, since lane ID is baked into the number.
 
+**As built, this shape changed.** The number is
+`{store_prefix}/{financial_year}/{lane_id}-{sequence}` — `RM/26-27/L1-11358` — and the sequence is
+kept per lane and per *financial* year rather than per calendar year.
+
+Two reasons, both from what a shop actually files. The year on an Indian bill is the financial year,
+1 April to 31 March, because that is the year a GST return covers; a sequence restarting on
+1 January restarts in the middle of the year it will be filed under. And a counter bill carries the
+shop's own prefix, which is how a shopkeeper and their accountant refer to it.
+
+The property the original wording exists to protect is unchanged, and it is what the tests assert:
+the lane ID is still inside the number, so lanes number independently with nothing coordinating
+them. `includeLaneSegment` can drop it for a shop with exactly one till, and the setting says in
+terms what that would cost a shop that later buys a second one.
+
+## 6a. Scripts the printer has no font for
+
+A thermal printer maps one byte to one glyph from a handful of built-in code pages, none of which
+carries an Indic script — and no byte-to-glyph mapping ever could carry one. A Tamil syllable is
+assembled from several code points and reordered: `கெ` stores its vowel sign after the consonant and
+draws it before.
+
+So text the printer cannot set is **drawn** instead. The OS font engine rasterises it and the dots
+go down the wire as a `GS v 0` raster image, which sidesteps the printer's fonts and code pages
+entirely.
+
+- `ITextRasterizer` is the seam. Everything above it — layout, the command bytes, where a run lands
+  in dots — is platform-neutral and tested without a font. `GdiTextRasterizer` is the one piece that
+  needs an operating system, and it is the only reason `Pos.Core.Hardware.Windows` exists.
+- Layout is kept twice over: the character grid the printer's own font aligns against, and the same
+  line as positioned segments measured in dots. Character padding is exactly right for a monospaced
+  printer font and meaningless for a proportional face, so a drawn line is laid out from the
+  segments and a typed one from the padding.
+- Only lines that need drawing are drawn (`RasterMode.Auto`). English stays as characters — sharper,
+  faster, and a fraction of the data. This is also why the Tamil on a real shop bill looks like a
+  different typeface from the English beside it.
+
+The cost is data: roughly 1.7KB per drawn line on 80mm paper against a few dozen bytes typed. A
+Tamil receipt is around 27KB where an English one is 2KB. Over USB that is not noticeable; it is
+the reason `Always` is not the default.
+
 ## 7. Stack
 
 | Layer | Choice |

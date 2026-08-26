@@ -11,20 +11,35 @@
   "loyaltyRupeesPerPoint": 0.5,
   "loyaltyRupeesPerPointEarned": 50,
 
+  "receiptLanguage": "English",
+
   "store": {
     "name": "CHANGE ME - Store Name",
     "addressLine1": "",
     "addressLine2": "",
     "phone": "",
     "gstin": "",
+    "fssaiNumber": "",
+    "customerCarePhone": "",
     "footerMessage": "Thank you, please visit again",
     "currencyPrefix": "Rs."
+  },
+
+  "invoiceNumber": {
+    "storePrefix": "CHANGEME",
+    "includeLaneSegment": true,
+    "sequencePadding": 0
   },
 
   "hardware": {
     "printerName": "CHANGE ME - exact Windows printer name",
     "printerPaperWidthChars": 48,
+    "printerPaperWidthDots": 0,
     "printerOutputFile": null,
+
+    "printerRasterMode": "Auto",
+    "receiptFontFamily": "",
+    "receiptFontSizeDots": 0,
 
     "drawerConnection": "Printer",
     "drawerPort": null,
