@@ -1,4 +1,4 @@
-<#
+﻿<#
     Drives the billing screen from the keyboard and photographs it.
 
     The till is keyboard-only by design, which is what makes this possible at all: every action a

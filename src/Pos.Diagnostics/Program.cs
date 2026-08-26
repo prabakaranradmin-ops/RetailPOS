@@ -12,6 +12,19 @@ using Pos.Diagnostics;
 // means printing test pages and firing drawers, which is not something to expose inside the
 // billing screen where a cashier can reach it mid-sale.
 
+// Say what encoding the output is in, rather than inheriting whatever code page the console
+// happens to be on. A Z-report with Tamil headings is something a shopkeeper reasonably pipes to a
+// file or sends to whoever supports the lane, and without this it arrives as question marks or as
+// mojibake depending on which way it was read. Wrapped because a process with no console attached
+// cannot set it, and that must not stop the tool running.
+try
+{
+    Console.OutputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+}
+catch (System.IO.IOException)
+{
+}
+
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
 var flags = args.Skip(1).Select(a => a.ToLowerInvariant()).ToHashSet();
 

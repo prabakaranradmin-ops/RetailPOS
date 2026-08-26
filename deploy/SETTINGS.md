@@ -50,6 +50,24 @@ result without using a roll of paper.
 A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
 than letting it reach a customer.
 
+## Editing it when anything is in Tamil
+
+**Save the file as UTF-8.** In Notepad: File → Save As → Encoding → *UTF-8 with BOM*.
+
+This matters more than it sounds. If the file is saved in the machine's ANSI encoding instead, a
+Tamil shop name comes back as `à®°à®µà®¿ à®®à®³à®¿à®•à¯ˆ`, and that is what prints at the top of every
+bill. The corruption is invisible to everything downstream — the mangled text is valid JSON and
+valid UTF-8, so nothing can tell it was ever anything else. The receipt's *labels* stay correct
+because they are built into the software, so the bill looks right apart from the shop's own name,
+which is the one thing on it nobody re-reads after the first day.
+
+The lane checks for this at startup and refuses to open, telling you what the text was meant to
+say. The template ships with a byte-order mark so Notepad reads and re-saves it correctly; that
+mark is what stops the problem happening in the first place, so do not strip it.
+
+If a lane has already printed bills with a mangled name, fix the file and reprint nothing — the
+invoices themselves are unaffected, only what was printed on them.
+
 ## Worked example: the pilot lane
 
 The settled decisions for the first shop. Copy this over the template's corresponding blocks, then

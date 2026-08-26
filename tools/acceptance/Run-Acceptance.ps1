@@ -1,4 +1,4 @@
-<#
+﻿<#
     The end-to-end acceptance run.
 
     This is not the unit suite. The unit suite proves the parts; this drives the shipped
@@ -123,8 +123,12 @@ function Invoke-Pos {
     $process = Start-Process -FilePath $pos -ArgumentList $all -NoNewWindow -Wait -PassThru `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 
-    $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { '' }
-    $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { '' }
+    # -Encoding UTF8, not the default. Windows PowerShell reads a file in the machine's ANSI code
+    # page unless told otherwise, so a Tamil line in the tool's output would arrive here as
+    # mojibake and never match anything — a check failing on how it read the answer rather than on
+    # what the answer was.
+    $out = if (Test-Path $stdout) { Get-Content $stdout -Raw -Encoding UTF8 } else { '' }
+    $err = if (Test-Path $stderr) { Get-Content $stderr -Raw -Encoding UTF8 } else { '' }
 
     [pscustomobject]@{
         ExitCode = $process.ExitCode
@@ -294,7 +298,7 @@ Set-Content -Path (Join-Path $brokenDir 'settings.json') -Value '{ "laneId": ' -
 $stdout = Join-Path $workspace 'broken-out.txt'
 $p = Start-Process -FilePath $pos -ArgumentList @('check-db', '--data', $brokenDir) -NoNewWindow -Wait -PassThru `
     -RedirectStandardOutput $stdout -RedirectStandardError (Join-Path $workspace 'broken-err.txt')
-$brokenOut = (Get-Content (Join-Path $workspace 'broken-err.txt') -Raw) + (Get-Content $stdout -Raw)
+$brokenOut = (Get-Content (Join-Path $workspace 'broken-err.txt') -Raw -Encoding UTF8) + (Get-Content $stdout -Raw -Encoding UTF8)
 Add-Result -Kind Negative -Feature 'Settings' -Name 'Malformed settings stop the lane with a reason' `
     -Expected 'non-zero exit naming the file' -Actual (Short $brokenOut) `
     -Passed ($p.ExitCode -ne 0 -and $brokenOut -match 'settings')
@@ -306,9 +310,49 @@ Set-Content -Path (Join-Path $badPrefixDir 'settings.json') `
     -Value '{ "laneId": "T1", "invoiceNumber": { "storePrefix": "R/M" } }' -Encoding utf8
 $p = Start-Process -FilePath $pos -ArgumentList @('check-db', '--data', $badPrefixDir) -NoNewWindow -Wait -PassThru `
     -RedirectStandardOutput (Join-Path $workspace 'prefix-out.txt') -RedirectStandardError (Join-Path $workspace 'prefix-err.txt')
-$prefixOut = (Get-Content (Join-Path $workspace 'prefix-err.txt') -Raw) + (Get-Content (Join-Path $workspace 'prefix-out.txt') -Raw)
+$prefixOut = (Get-Content (Join-Path $workspace 'prefix-err.txt') -Raw -Encoding UTF8) + (Get-Content (Join-Path $workspace 'prefix-out.txt') -Raw -Encoding UTF8)
 Add-Result -Kind Negative -Feature 'Settings' -Name 'An unusable invoice prefix is refused at startup' `
     -Expected 'non-zero exit, prefix named' -Actual (Short $prefixOut) -Passed ($p.ExitCode -ne 0)
+
+# A settings file saved in the machine's ANSI encoding instead of UTF-8. The mangled text is valid
+# JSON and valid UTF-8, so nothing downstream can tell — which is why the lane has to.
+$mojibakeDir = Join-Path $workspace 'mojibake'
+New-Item -ItemType Directory -Force -Path $mojibakeDir | Out-Null
+
+$correct = 'ரவி மளிகை'
+
+# The 0x80-0x9F band is where Windows-1252 differs from Latin-1; every other byte is its own
+# character. This reproduces exactly what an editor does when it reads UTF-8 as ANSI.
+#
+# Written as code points rather than as the characters themselves, deliberately: PowerShell treats
+# U+2018 and U+2019 as string delimiters, so two of these entries cannot be written as literals at
+# all. Keeping the table numeric also keeps this file's own encoding out of the question.
+$cp1252 = @{
+    0x80 = 0x20AC; 0x82 = 0x201A; 0x83 = 0x0192; 0x84 = 0x201E
+    0x85 = 0x2026; 0x86 = 0x2020; 0x87 = 0x2021; 0x88 = 0x02C6
+    0x89 = 0x2030; 0x8A = 0x0160; 0x8B = 0x2039; 0x8C = 0x0152
+    0x8E = 0x017D; 0x91 = 0x2018; 0x92 = 0x2019; 0x93 = 0x201C
+    0x94 = 0x201D; 0x95 = 0x2022; 0x96 = 0x2013; 0x97 = 0x2014
+    0x98 = 0x02DC; 0x99 = 0x2122; 0x9A = 0x0161; 0x9B = 0x203A
+    0x9C = 0x0153; 0x9E = 0x017E; 0x9F = 0x0178
+}
+
+$mangled = -join ([System.Text.Encoding]::UTF8.GetBytes($correct) | ForEach-Object {
+    $b = [int] $_
+    if ($cp1252.ContainsKey($b)) { [char] $cp1252[$b] } else { [char] $b }
+})
+
+Set-Content -Path (Join-Path $mojibakeDir 'settings.json') -Encoding utf8 `
+    -Value ('{ "laneId": "T1", "store": { "name": "' + $mangled + '" } }')
+
+$p = Start-Process -FilePath $pos -ArgumentList @('check-db', '--data', $mojibakeDir) -NoNewWindow -Wait -PassThru `
+    -RedirectStandardOutput (Join-Path $workspace 'moji-out.txt') -RedirectStandardError (Join-Path $workspace 'moji-err.txt')
+$mojiOut = (Get-Content (Join-Path $workspace 'moji-err.txt') -Raw -Encoding UTF8) + (Get-Content (Join-Path $workspace 'moji-out.txt') -Raw -Encoding UTF8)
+
+Add-Result -Kind Negative -Feature 'Settings' -Name 'A settings file saved in the wrong encoding stops the lane' `
+    -Expected "non-zero exit, naming what the text should have said" -Actual (Short $mojiOut 3) `
+    -Passed (($p.ExitCode -ne 0) -and ($mojiOut -match 'UTF-8')) `
+    -Detail 'Left alone this prints the shop name as nonsense on every bill, and nothing downstream can detect it.'
 
 # --------------------------------------------------------------------------------------------
 # 3. The till itself
@@ -327,14 +371,21 @@ else {
 # 4. What actually reached the printer
 # --------------------------------------------------------------------------------------------
 
-Write-Host 'What reached the printer' -ForegroundColor Cyan
+if ($NoUi) {
+    # Nothing has been sold, so there is nothing to have printed. Reporting that as a failure would
+    # make -NoUi permanently red and train whoever runs it to ignore the colour.
+    Write-Host 'What reached the printer: skipped (-NoUi, nothing was sold)' -ForegroundColor DarkGray
+}
+elseif (-not (Test-Path $receiptStream)) {
+    Write-Host 'What reached the printer' -ForegroundColor Cyan
 
-if (-not (Test-Path $receiptStream)) {
     Add-Result -Kind Positive -Feature 'Printing' -Name 'A receipt reached the printer path' `
         -Expected 'an ESC/POS job written by the sale' -Actual 'nothing was printed' -Passed $false `
         -Detail 'Either no sale completed, or the printer was not wired up for this run.'
 }
 else {
+    Write-Host 'What reached the printer' -ForegroundColor Cyan
+
     $bytes = (Get-Item $receiptStream).Length
     $raw = [System.IO.File]::ReadAllBytes($receiptStream)
 

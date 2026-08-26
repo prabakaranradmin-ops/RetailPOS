@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Pos.Core.Domain.Printing;
@@ -139,6 +140,14 @@ public sealed class PosSettings
             throw new InvalidOperationException($"The settings file at '{path}' has an unworkable loyalty scheme: {ex.Message}", ex);
         }
 
+        // Text that was saved in the wrong encoding reads as valid JSON and valid UTF-8, so nothing
+        // else here can catch it. It has to be caught before the lane opens, because what it
+        // corrupts is the store's own identity on every invoice it issues.
+        TextEncodingCheck.ThrowIfMangled(settings.Store.Name, "the store name", path);
+        TextEncodingCheck.ThrowIfMangled(settings.Store.AddressLine1, "the first address line", path);
+        TextEncodingCheck.ThrowIfMangled(settings.Store.AddressLine2, "the second address line", path);
+        TextEncodingCheck.ThrowIfMangled(settings.Store.FooterMessage, "the footer message", path);
+
         // An unusable invoice prefix has to stop the lane starting. Discovering it at the first
         // sale would mean the shop's first bill of the day carries a number nobody can file.
         try
@@ -172,8 +181,15 @@ public sealed class PosSettings
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
-        File.WriteAllText(path, JsonSerializer.Serialize(this, Options));
+        // With the byte-order mark, not without. A shopkeeper edits this file in Notepad, and
+        // Notepad decides how to read a file it is given: with the mark it reads UTF-8 and saves
+        // UTF-8, and a Tamil shop name survives being edited. Without it, older builds fall back to
+        // the machine's ANSI code page, show the name as mojibake, and save that back — which is
+        // how a shop ends up printing 'à®°à®µà®¿' where its own name should be.
+        File.WriteAllText(path, JsonSerializer.Serialize(this, Options), Utf8WithBom);
     }
+
+    private static readonly UTF8Encoding Utf8WithBom = new(encoderShouldEmitUTF8Identifier: true);
 
     private static readonly JsonSerializerOptions Options = new()
     {

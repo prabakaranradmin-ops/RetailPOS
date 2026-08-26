@@ -1,4 +1,4 @@
-<#
+﻿<#
     Writes the acceptance run up as a single self-contained HTML file.
 
     Screenshots are embedded as data URIs rather than linked, so the report can be attached to an
