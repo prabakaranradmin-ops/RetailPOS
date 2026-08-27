@@ -26,12 +26,16 @@ public sealed class DayCloseService(
     ZReportComposer reports,
     IPrinterService printer,
     IBackupService? backups = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    IStockStore? stock = null)
 {
     private readonly IDayCloseStore _closes = closes ?? throw new ArgumentNullException(nameof(closes));
     private readonly ZReportComposer _reports = reports ?? throw new ArgumentNullException(nameof(reports));
     private readonly IPrinterService _printer = printer ?? throw new ArgumentNullException(nameof(printer));
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
+    /// <summary>Where the reorder list at the foot of the report comes from. Null means no list.</summary>
+    private readonly IStockStore? _stock = stock;
 
     /// <summary>What the lane would report if it closed now. Changes nothing.</summary>
     public DayCloseSummary Preview(string laneId) => _closes.Preview(laneId, _clock.GetLocalNow());
@@ -58,6 +62,30 @@ public sealed class DayCloseService(
     /// <summary>The last report this lane produced, for reprinting.</summary>
     public DayCloseSummary? Latest(string laneId) => _closes.FindLatest(laneId);
 
+    /// <summary>
+    /// What needs reordering, or null if this lane does not count stock.
+    /// </summary>
+    /// <remarks>
+    /// Swallows its own failure. The day is already closed and the takings are already reported;
+    /// a stock query that will not run is not a reason to lose the sheet that says what is in the
+    /// drawer.
+    /// </remarks>
+    private IReadOnlyList<StockLevel>? LowStock()
+    {
+        if (_stock is null)
+            return null;
+
+        try
+        {
+            var low = _stock.ListLow(50);
+            return low.Count == 0 ? null : low;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private PrintOutcome Print(DayCloseSummary day, bool isReprint = false)
     {
         if (!_printer.IsConfigured)
@@ -65,7 +93,12 @@ public sealed class DayCloseService(
 
         try
         {
-            return _printer.Print(_reports.Compose(day, isReprint).ToEscPos(raster: _printer.Raster));
+            // The reorder list is a fact about the shelves right now, not about the day being
+            // reported, so it goes on the original and never on a duplicate. A report pulled out
+            // of the file months later must not carry today's shelves under last spring's takings.
+            var lowStock = isReprint ? null : LowStock();
+
+            return _printer.Print(_reports.Compose(day, isReprint, lowStock).ToEscPos(raster: _printer.Raster));
         }
         catch (Exception ex)
         {

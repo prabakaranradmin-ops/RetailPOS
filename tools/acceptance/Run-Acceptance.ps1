@@ -227,12 +227,16 @@ Set-Content -Path (Join-Path $workspace 'settings.json') -Value $settings -Encod
 # Real EAN-13s: the last digit of each is its check digit, and the importer verifies it. Inventing
 # a barcode by changing a digit produces a code it will correctly refuse — which is the point of
 # the rule, and how the first draft of this file was caught.
+#
+# The optional columns are on some rows and not others on purpose. Sugar is sold loose out of a
+# sack and is never counted, so it must not appear in any stock listing — an item with no figure
+# is not an item with none left.
 $goodCatalogue = @'
-sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed
-DAL001,8901234567890,Toor Dal 1kg,0713,Pcs,189.00,189.00,5,false
-SUG001,8901234567906,Sugar Loose,1701,Kg,45.00,45.00,5,true
-OIL001,8901234567913,Sunflower Oil 1L,1512,Pcs,145.00,145.00,5,false
-SHP001,8901234567920,Shampoo 340ml,3305,Pcs,299.00,299.00,18,false
+sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed,category,cost_price,stock_qty,reorder_level
+DAL001,8901234567890,Toor Dal 1kg,0713,Pcs,189.00,189.00,5,false,Staples,150.00,40,10
+SUG001,8901234567906,Sugar Loose,1701,Kg,45.00,45.00,5,true,Staples,38.00,,
+ACC-RICE,8901234567913,Ponni Rice 5kg,1006,Pcs,145.00,145.00,5,false,Staples,120.00,3,10
+SHP001,8901234567920,Shampoo 340ml,3305,Pcs,299.00,299.00,18,false,Household,240.00,25,5
 '@
 Set-Content -Path (Join-Path $workspace 'catalogue.csv') -Value $goodCatalogue -Encoding utf8
 
@@ -301,6 +305,24 @@ Add-Result -Kind Positive -Feature 'Dashboard' -Name 'The dashboard renders from
     -Detail 'Reads without writing to the books, so it can run while the till is billing.'
 
 Remove-Item $dash -Force -ErrorAction SilentlyContinue
+
+# Stock, end to end through the tool. The catalogue loaded above carries stock_qty on some rows
+# and not on others, which is the case that matters: an uncounted item must never appear.
+$r = Invoke-Pos @('stock')
+Add-Result -Kind Positive -Feature 'Stock' -Name 'What is on the shelf can be listed' `
+    -Expected 'exit 0, counted items only' -Actual (Short $r.Output 6) `
+    -Passed (($r.ExitCode -eq 0) -and ($r.Output -match 'counted'))
+
+$r = Invoke-Pos @('stock', '--low')
+Add-Result -Kind Positive -Feature 'Stock' -Name 'Only what needs reordering is listed as low' `
+    -Expected 'exit 0' -Actual (Short $r.Output 6) -Passed ($r.ExitCode -eq 0)
+
+$r = Invoke-Pos @('stock', '--set', '--sku', 'ACC-RICE', '--qty', '48', '--reason', 'delivery')
+$after = Invoke-Pos @('stock')
+Add-Result -Kind Positive -Feature 'Stock' -Name 'A count can be corrected by hand' `
+    -Expected 'exit 0, the new figure in the listing' -Actual (Short $r.Output 4) `
+    -Passed (($r.ExitCode -eq 0) -and ($after.Output -match '48')) `
+    -Detail 'The change and the reason are kept, so a count that stops matching the shelf can be traced.'
 
 $r = Invoke-Pos @('dashboard-pin') -StdIn @('Maligai26', 'Maligai26')
 Add-Result -Kind Positive -Feature 'Dashboard' -Name 'A PIN can be put in front of the dashboard' `

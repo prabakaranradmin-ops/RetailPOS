@@ -17,7 +17,7 @@ public sealed class ItemRepository : IItemStore
 
     private const string SelectColumns =
         "id, sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, " +
-        "category, cost_price";
+        "category, cost_price, stock_qty, reorder_level";
 
     private readonly PosDatabase _database;
 
@@ -252,9 +252,11 @@ public sealed class ItemRepository : IItemStore
 
             command.CommandText = """
                 INSERT INTO items
-                  (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, category, cost_price)
+                  (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
+                   category, cost_price, stock_qty, reorder_level)
                 VALUES
-                  ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active, $category, $cost)
+                  ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
+                   $category, $cost, $stock, $reorder)
                 ON CONFLICT (sku) DO UPDATE SET
                   barcode = excluded.barcode,
                   hsn_code = excluded.hsn_code,
@@ -266,13 +268,23 @@ public sealed class ItemRepository : IItemStore
                   unit_type = excluded.unit_type,
                   is_active = excluded.is_active,
                   category = excluded.category,
-                  cost_price = excluded.cost_price;
+                  cost_price = excluded.cost_price,
+
+                  -- COALESCE, not excluded: an empty stock cell leaves the live count alone.
+                  --
+                  -- A shop re-imports to change prices far more often than to restate its shelves,
+                  -- and the file it re-imports is usually the one it first loaded. Overwriting here
+                  -- would silently reset every count to whatever was in a spreadsheet weeks ago,
+                  -- and the only sign would be wrong reorder warnings nobody could explain.
+                  stock_qty = COALESCE(excluded.stock_qty, items.stock_qty),
+                  reorder_level = COALESCE(excluded.reorder_level, items.reorder_level);
                 """;
 
             foreach (var name in new[]
                      {
                          "$sku", "$barcode", "$hsn", "$name", "$mrp",
                          "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
+                         "$stock", "$reorder",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -302,9 +314,11 @@ public sealed class ItemRepository : IItemStore
     {
         command.CommandText = """
             INSERT INTO items
-              (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, category, cost_price)
+              (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
+               category, cost_price, stock_qty, reorder_level)
             VALUES
-              ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active, $category, $cost);
+              ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
+               $category, $cost, $stock, $reorder);
             SELECT last_insert_rowid();
             """;
 
@@ -312,6 +326,7 @@ public sealed class ItemRepository : IItemStore
                  {
                      "$sku", "$barcode", "$hsn", "$name", "$mrp",
                      "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
+                     "$stock", "$reorder",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -332,6 +347,8 @@ public sealed class ItemRepository : IItemStore
         command.Parameters["$active"].Value = item.IsActive ? 1 : 0;
         command.Parameters["$category"].Value = (object?)item.Category ?? DBNull.Value;
         command.Parameters["$cost"].Value = (object?)item.CostPrice ?? DBNull.Value;
+        command.Parameters["$stock"].Value = (object?)item.StockQty ?? DBNull.Value;
+        command.Parameters["$reorder"].Value = (object?)item.ReorderLevel ?? DBNull.Value;
     }
 
     /// <summary>
@@ -358,5 +375,10 @@ public sealed class ItemRepository : IItemStore
         IsActive = reader.GetInt32(10) != 0,
         Category = reader.IsDBNull(11) ? null : reader.GetString(11),
         CostPrice = reader.IsDBNull(12) ? null : reader.GetDecimal(12),
+
+        // Null is "not counted", and stays null rather than becoming a zero that would put an
+        // out-of-stock warning on the counter screen for something nobody tracks.
+        StockQty = reader.IsDBNull(13) ? null : reader.GetDecimal(13),
+        ReorderLevel = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
     };
 }

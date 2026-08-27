@@ -130,6 +130,16 @@ public sealed record DashboardData
     public required CustomerMix Customers { get; init; }
     public required PointsFlow Points { get; init; }
 
+    /// <summary>
+    /// What needs reordering.
+    /// </summary>
+    /// <remarks>
+    /// Unlike everything else here this is not about the window at all — it is the state of the
+    /// shelves right now. It is on this page because it is the thing an owner reading the figures
+    /// is most likely to act on, and because they are already here.
+    /// </remarks>
+    public IReadOnlyList<Pos.Core.Domain.StockLevel> LowStock { get; init; } = [];
+
     /// <summary>How long the whole gather took. Shown on the page, because it is a promise.</summary>
     public required TimeSpan Elapsed { get; init; }
 }

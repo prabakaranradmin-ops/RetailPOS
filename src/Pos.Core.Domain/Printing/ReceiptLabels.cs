@@ -33,6 +33,9 @@ public sealed record ReceiptLabels
     /// <summary>The total before payment on a bill that taxed nothing.</summary>
     public required string Subtotal { get; init; }
 
+    /// <summary>Heading for the reorder list at the foot of the day-end report.</summary>
+    public required string LowStock { get; init; }
+
     public required string Reprint { get; init; }
     public required string BillNumber { get; init; }
     public required string Date { get; init; }
@@ -119,6 +122,7 @@ public sealed record ReceiptLabels
         TaxInvoice = "TAX INVOICE",
         BillOfSupply = "BILL OF SUPPLY",
         Subtotal = "Subtotal",
+        LowStock = "TO REORDER (have / level)",
         Reprint = "** REPRINT **",
         BillNumber = "Bill No",
         Date = "Date",
@@ -206,6 +210,7 @@ public sealed record ReceiptLabels
         // Not மொத்தம் — that is already Total, and two lines reading the same word on one bill is
         // worse than a slightly formal word for the one above it.
         Subtotal = "இடைத்தொகை",
+        LowStock = "ஆர்டர் செய்ய வேண்டியவை (உள்ளது / அளவு)",
         Reprint = "** REPRINT **",
         BillNumber = "பில் நம்பர்",
         Date = "தேதி",

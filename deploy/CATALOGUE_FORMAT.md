@@ -18,16 +18,43 @@ optional and may be left out altogether.
 | `is_weighed` | yes | `true`/`false`, `yes`/`no`, `1`/`0`. Must agree with `unit`. |
 | `category` | no | Which part of the shop it belongs to — `Staples`, `Dairy`, `Household`. Free text; whatever you type becomes a slice of the dashboard's department chart. |
 | `cost_price` | no | What you pay for one, tax inclusive like `selling_price`. Must be between `0` and `selling_price`. |
+| `stock_qty` | no | How many are on the shelf now. Leave blank for anything you do not count. |
+| `reorder_level` | no | Warn when the shelf reaches this. Needs a `stock_qty` beside it. |
 
-## The two optional columns
+## The four optional columns
 
-`category` and `cost_price` may be left out of the file entirely, and a catalogue written before they
-existed imports unchanged. Individual cells may be blank too — a blank means *you have not said*,
-which is not the same as zero and is treated differently everywhere it matters.
+`category`, `cost_price`, `stock_qty` and `reorder_level` may be left out of the file entirely, and a
+catalogue written before they existed imports unchanged. Individual cells may be blank too — a blank
+means *you have not said*, which is not the same as zero and is treated differently everywhere it
+matters.
 
-They exist for the dashboard. Without `category` every sale lands in one bucket called
+The first two exist for the dashboard. Without `category` every sale lands in one bucket called
 **Uncategorised**; without `cost_price` there is no margin, so the shop can be told what it sold but
 not what it earned. Neither affects billing, a receipt, or a GST return.
+
+### Counting stock
+
+`stock_qty` starts a count. From then on every sale takes off it, every void puts back, and
+`pos stock --low` says what to order. `reorder_level` is the line below which it warns — the cashier
+sees *"Only 3 left"* when the item is scanned, and the figure goes on the day-end report and the
+dashboard.
+
+**Leave `stock_qty` blank for anything you do not count.** Loose rice out of a sack, vegetables sold
+by weight — a blank means the item is not counted, and it never appears in a stock list or produces
+a warning. That is different from `0`, which means you counted and there are none.
+
+**A count is never a barrier.** If the till says none are left and the customer is holding one, the
+sale goes through and the count goes negative. The shelf is the authority; a negative figure is the
+software telling you the count and the shelf have parted company.
+
+**Re-importing does not reset your counts.** A blank `stock_qty` on a re-import leaves the live
+figure alone, so changing prices with the same file you first loaded will not quietly restore every
+count to what it was weeks ago. To restate a count deliberately, put the new figure in the cell — or
+correct one item with:
+
+```
+pos stock --set --sku DAL001 --qty 24 --reason "delivery"
+```
 
 **Both are recorded onto the bill at the moment of sale.** Move an item to another department or
 renegotiate its cost tomorrow, and last month's figures stay as they were — the same rule the price
@@ -55,6 +82,10 @@ list of problems with line numbers — fix the file and run it again.
 - The same `sku` or `barcode` on two rows, or a `barcode` already belonging to a different item.
 - `unit` and `is_weighed` contradicting each other. They say the same thing, so if they disagree
   one of them is wrong and there is no way to tell which.
+- A negative `stock_qty` or `reorder_level`. A count below zero is something the till records after
+  a sale, not something a spreadsheet declares.
+- A `reorder_level` with no `stock_qty` beside it — there is nothing to compare it against, so it
+  would never fire, and a half-filled row is nearly always a mistake rather than a choice.
 - A `cost_price` above the `selling_price`. Either it is a typo, or the shop is losing money on
   every scan of that item — and both are worth stopping the import over rather than finding in a
   margin report months later. A negative cost is refused for the same reason.

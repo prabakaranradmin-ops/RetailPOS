@@ -92,11 +92,54 @@ public sealed class DashboardQuery(PosDatabase database)
             Voids = FoldVoids(facts),
             Customers = ReadCustomerMix(connection, laneId, from, to, facts),
             Points = FoldPoints(connection, facts),
+            LowStock = ReadLowStock(connection),
             Elapsed = clock.Elapsed,
         };
 
         clock.Stop();
         return data with { Elapsed = clock.Elapsed };
+    }
+
+    /// <summary>
+    /// What is at or below its reorder level, most depleted first.
+    /// </summary>
+    /// <remarks>
+    /// The one query here that ignores the window entirely: the shelves are in whatever state they
+    /// are in today, and an owner deciding what to order does not want last month's shortages.
+    ///
+    /// Cheap enough not to matter to the page's timing — it reads a partial index over the item
+    /// master, not the invoice history that everything else on this page walks.
+    /// </remarks>
+    private static List<StockLevel> ReadLowStock(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, sku, name, category, stock_qty, reorder_level, unit_type
+            FROM items
+            WHERE is_active = 1
+              AND stock_qty IS NOT NULL
+              AND reorder_level IS NOT NULL
+              AND CAST(stock_qty AS REAL) <= CAST(reorder_level AS REAL)
+            ORDER BY CAST(stock_qty AS REAL) - CAST(reorder_level AS REAL), name
+            LIMIT 50;
+            """;
+
+        using var reader = command.ExecuteReader();
+        var levels = new List<StockLevel>();
+
+        while (reader.Read())
+        {
+            levels.Add(new StockLevel(
+                ItemId: reader.GetInt64(0),
+                Sku: reader.GetString(1),
+                Name: reader.GetString(2),
+                Category: reader.IsDBNull(3) ? null : reader.GetString(3),
+                Quantity: reader.GetDecimal(4),
+                ReorderLevel: reader.GetDecimal(5),
+                Unit: (UnitType)reader.GetInt32(6)));
+        }
+
+        return levels;
     }
 
     /// <summary>

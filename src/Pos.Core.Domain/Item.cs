@@ -53,5 +53,37 @@ public sealed record Item
             ? null
             : decimal.Round((SellPrice - CostPrice.Value) / SellPrice * 100m, 2, MidpointRounding.ToEven);
 
+    /// <summary>
+    /// How many are on the shelf. Null means this item is not counted, which is not the same as
+    /// none being left.
+    /// </summary>
+    /// <remarks>
+    /// A shop weighs loose rice out of a sack and is never going to keep a running figure for it.
+    /// Inventing one would put a warning on the counter screen for something nobody is tracking, so
+    /// absence stays absence everywhere it is read.
+    ///
+    /// It may go negative. A sale is never blocked by a number in a database — the shelf is the
+    /// authority, and a negative figure is itself the signal that the count and the shelf have
+    /// parted company.
+    /// </remarks>
+    public decimal? StockQty { get; init; }
+
+    /// <summary>
+    /// The level at or below which this needs reordering. Null means never warn about it.
+    /// </summary>
+    public decimal? ReorderLevel { get; init; }
+
+    /// <summary>Whether this item is counted at all.</summary>
+    public bool IsStockTracked => StockQty is not null;
+
+    /// <summary>
+    /// True when the shelf is at or below the reorder level. False when either figure is missing —
+    /// an item nobody counts cannot be running low.
+    /// </summary>
+    public bool IsLowStock => StockQty is { } have && ReorderLevel is { } floor && have <= floor;
+
+    /// <summary>True when the count says there are none left, or worse.</summary>
+    public bool IsOutOfStock => StockQty is { } have && have <= 0m;
+
     public bool IsActive { get; init; } = true;
 }

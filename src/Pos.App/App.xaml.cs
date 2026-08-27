@@ -105,13 +105,16 @@ public partial class App : Application
             printer,
             new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
             _log,
-            () => viewModelRef?.CashierName);
+            () => viewModelRef?.CashierName,
+            new StockRepository(database));
 
         var dayClose = new DayCloseService(
             new DayCloseRepository(database, heldBills),
             new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage, settings.TaxMode),
             printer,
-            new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log));
+            new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log),
+            clock: null,
+            stock: new StockRepository(database));
 
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode, settings.TaxMode),

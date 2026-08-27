@@ -222,6 +222,36 @@ window.
 printed sheet was the only way to see a past day's figures. A printer that jams at closing time is
 not a rare event, and a shop should not lose a day's takings to one.
 
+**A composition lane issues bills of supply** — passing
+- [x] No tax is charged even on an item carrying a rate, and the price on the shelf is the whole bill — `CompositionBillTests`
+- [x] An out-of-state customer still produces no IGST — `CompositionBillTests`
+- [x] The bill says BILL OF SUPPLY, carries the declaration, and has no slab table or 0% row — `CompositionBillTests`
+- [x] The declaration survives whole on 80mm and 58mm paper, and nothing overruns — `CompositionBillTests`
+- [x] A Tamil bill of supply keeps the two phrases the rules use in English — `CompositionBillTests`
+- [x] The mode round-trips, and a bill of supply still reprints as one after the shop switches to GST — `CompositionBillTests`
+- [x] A GST lane is completely unaffected, on the bill and on the day-end report — `CompositionBillTests`
+
+**Why the reprint test is the important one.** Reading today's setting at print time would reprint
+last year's bill of supply as a tax invoice showing no tax — a document claiming the shop collected
+GST it never collected. The mode is stored per invoice so that cannot happen.
+
+**Stock: what is left on the shelf** — passing
+- [x] Null is not zero — an uncounted item never warns and never appears in a listing — `StockTests`
+- [x] Low means at or below the level; no level means never low — `StockTests`
+- [x] Selling takes it off; selling more than the count knows about still sells and goes negative — `StockTests`
+- [x] Voiding puts it back — `StockTests`
+- [x] Every movement records what it was, what it became, why, and against which bill — `StockTests`
+- [x] Re-importing with an empty stock cell leaves the live count alone — `StockTests`
+- [x] The low list is ordered by how far below the line each item is, comparing numbers as numbers — `StockTests`
+- [x] The reorder list is on the day-end report but never on a duplicate — `StockTests`
+- [x] A lane with no stock store bills exactly as before — `StockTests`
+- [x] End to end: listing, the low list, and a hand correction — acceptance
+
+**Two rules these tests exist to hold.** Null is not zero: a shop weighing rice out of a sack is not
+tracking it, and telling a cashier it has run out would be noise about something nobody measures.
+And a sale is never blocked: the shelf decides what a customer can buy, the database only records
+what happened, so a count may go negative and that is information rather than an error to clamp.
+
 **The dashboard is behind a PIN when the shop wants one** — passing
 - [x] The right PIN opens it, a wrong one does not, case matters — `DashboardLockTests`
 - [x] The PIN is never stored; the same PIN stored twice looks nothing alike — `DashboardLockTests`

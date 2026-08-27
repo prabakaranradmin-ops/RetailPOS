@@ -332,7 +332,57 @@ public static class DashboardPage
         p.Append("<p class=\"note\">Voided bills keep their number and stay in the books. They are excluded from every "
                + "other figure on this page, which is what lets the invoice run be checked for gaps.</p>");
         p.Append("</div>");
+
+        WriteLowStock(p, d);
     }
+
+    /// <summary>
+    /// What to reorder.
+    /// </summary>
+    /// <remarks>
+    /// The only block on the page that is about right now rather than about the window, which the
+    /// heading says plainly — a figure that does not follow the same rule as the ones around it has
+    /// to announce itself, or it gets read as part of the period and quietly misleads.
+    ///
+    /// The whole section is absent on a shop that does not count stock, rather than present and
+    /// empty. An empty panel reads as "nothing is low", which is a different and much more
+    /// comforting claim than "nothing is counted".
+    /// </remarks>
+    private static void WriteLowStock(StringBuilder p, DashboardData d)
+    {
+        if (d.LowStock.Count == 0)
+            return;
+
+        p.Append("<div class=\"panel\"><h3>To reorder <span class=\"aside\">as of now, not for the period</span></h3>");
+        p.Append("<div class=\"scroller\"><table class=\"plain\"><thead><tr><th>Item</th><th>Category</th>"
+               + "<th class=\"n\">Have</th><th class=\"n\">Level</th><th class=\"n\">Short by</th></tr></thead><tbody>");
+
+        foreach (var level in d.LowStock)
+        {
+            var state = level.IsOut ? " class=\"out\"" : string.Empty;
+
+            p.Append($"<tr{state}><td>{Escape(level.Name)}</td>");
+            p.Append($"<td class=\"muted\">{Escape(level.Category ?? DashboardQuery.Uncategorised)}</td>");
+            p.Append($"<td class=\"n\">{Quantity(level.Quantity)}</td>");
+            p.Append($"<td class=\"n muted\">{Quantity(level.ReorderLevel ?? 0m)}</td>");
+            p.Append($"<td class=\"n strong\">{(level.ShortBy is { } short_ ? Quantity(short_) : "&mdash;")}</td></tr>");
+        }
+
+        p.Append("</tbody></table></div>");
+
+        var out_ = d.LowStock.Count(l => l.IsOut);
+
+        if (out_ > 0)
+        {
+            p.Append($"<p class=\"note\">{out_} of these say none left. The till still sells them &mdash; the shelf, "
+                   + "not the count, decides what a customer can buy &mdash; so a figure at or below zero means the "
+                   + "count and the shelf have parted company.</p>");
+        }
+
+        p.Append("</div>");
+    }
+
+    private static string Quantity(decimal value) => value.ToString("0.###", India);
 
     private static void WriteCustomers(StringBuilder p, DashboardData d)
     {
@@ -638,17 +688,17 @@ public static class DashboardPage
         <style>
           :root {
             --paper:#F5F7F9; --card:#FFFFFF; --ink:#141A20; --soft:#556570; --faint:#7C8894;
-            --rule:#DFE5EA; --accent:#16628F; --good:#1F7A4D; --shadow:0 1px 2px rgba(20,32,44,.06),0 6px 18px rgba(20,32,44,.06);
+            --rule:#DFE5EA; --accent:#16628F; --good:#1F7A4D; --bad:#B3261E; --shadow:0 1px 2px rgba(20,32,44,.06),0 6px 18px rgba(20,32,44,.06);
           }
           @media (prefers-color-scheme: dark) {
             :root:not([data-theme="light"]) {
               --paper:#0F141A; --card:#161D24; --ink:#E8EEF3; --soft:#98A6B2; --faint:#7A8794;
-              --rule:#28313A; --accent:#58B4F0; --good:#5FCE94; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+              --rule:#28313A; --accent:#58B4F0; --good:#5FCE94; --bad:#F2857B; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
             }
           }
           :root[data-theme="dark"] {
             --paper:#0F141A; --card:#161D24; --ink:#E8EEF3; --soft:#98A6B2; --faint:#7A8794;
-            --rule:#28313A; --accent:#58B4F0; --good:#5FCE94; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+            --rule:#28313A; --accent:#58B4F0; --good:#5FCE94; --bad:#F2857B; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
           }
           *{box-sizing:border-box}
           body{background:var(--paper);color:var(--ink);margin:0;padding:0 20px 80px;
@@ -698,6 +748,13 @@ public static class DashboardPage
           .items td.bar{width:26%;padding-right:0}
           .items td.bar span{display:block;height:8px;border-radius:4px;background:var(--accent);opacity:.75;min-width:2px}
           .plain td{border-top:1px solid var(--rule)}
+          td.muted{color:var(--soft)}
+          /* The reorder list is about now, not about the window every other panel covers, so its
+             heading carries the qualifier rather than leaving the reader to assume. */
+          h3 .aside{font-weight:400;font-size:.72em;color:var(--soft);margin-left:8px;letter-spacing:0}
+          /* An item the count says is finished. Coloured, not hidden: it is the row worth acting on. */
+          tr.out td{color:var(--bad)}
+          tr.out td.strong{font-weight:700}
           .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:baseline}
           .donut{width:160px;height:160px;display:block;margin:0 auto 12px}
           .donut .middle{text-anchor:middle;font-size:13px;font-weight:600;fill:var(--ink)}

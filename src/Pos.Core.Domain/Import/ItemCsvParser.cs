@@ -52,6 +52,8 @@ public static class ItemCsvParser
     /// </summary>
     private const string Category = "category";
     private const string CostPrice = "cost_price";
+    private const string StockQty = "stock_qty";
+    private const string ReorderLevel = "reorder_level";
 
     private static readonly string[] RequiredColumns =
         [Sku, Barcode, Name, Hsn, Unit, Mrp, SellingPrice, GstRate, IsWeighed];
@@ -195,10 +197,37 @@ public static class ItemCsvParser
                 problems.Add(new ImportProblem(line, CostPrice, $"cost price {cost:0.00} is above the selling price of {sellingPrice:0.00}."));
         }
 
+        // The shelf count and the level to reorder at. Both optional on the same terms: an empty
+        // cell means this item is not counted, which is a different thing from none being left.
+        var stockText = Field(row, header, StockQty);
+        var reorderText = Field(row, header, ReorderLevel);
+
+        decimal? stock = null;
+        decimal? reorder = null;
+
+        if (stockText.Length > 0)
+            stock = ParseQuantity(stockText, StockQty, line, problems);
+
+        if (reorderText.Length > 0)
+        {
+            reorder = ParseQuantity(reorderText, ReorderLevel, line, problems);
+
+            // A level with nothing to compare it against never fires, so it is almost certainly a
+            // half-filled row rather than a deliberate choice.
+            if (stockText.Length == 0)
+                problems.Add(new ImportProblem(line, ReorderLevel, "a reorder level needs a stock quantity beside it, or nothing will ever be compared against it."));
+        }
+
         if (unit is null || weighed is null || mrp is null || sellingPrice is null || gstRate is null)
             return null;
 
         if (costText.Length > 0 && cost is null)
+            return null;
+
+        if ((stockText.Length > 0 && stock is null) || (reorderText.Length > 0 && reorder is null))
+            return null;
+
+        if (reorderText.Length > 0 && stockText.Length == 0)
             return null;
 
         return new Item
@@ -214,6 +243,8 @@ public static class ItemCsvParser
             UnitType = unit.Value,
             Category = category.Length == 0 ? null : category,
             CostPrice = cost,
+            StockQty = stock,
+            ReorderLevel = reorder,
             IsActive = true,
         };
     }
@@ -276,6 +307,32 @@ public static class ItemCsvParser
         }
 
         return amount;
+    }
+
+    /// <summary>
+    /// A count of things rather than an amount of money — no currency prefix, and fractions allowed
+    /// because a shop counts rice in kilograms.
+    /// </summary>
+    private static decimal? ParseQuantity(string value, string column, int line, List<ImportProblem> problems)
+    {
+        var cleaned = value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
+
+        if (!decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out var quantity))
+        {
+            problems.Add(new ImportProblem(line, column, $"'{value}' is not a quantity."));
+            return null;
+        }
+
+        // Refused on the way in, though the till may drive a count below zero later. A shop typing
+        // -4 into a spreadsheet meant something else; a till that sold more than the count knew
+        // about is recording what actually happened.
+        if (quantity < 0m)
+        {
+            problems.Add(new ImportProblem(line, column, $"{quantity:0.###} is negative."));
+            return null;
+        }
+
+        return quantity;
     }
 
     private static decimal? ParseGstRate(string value, int line, List<ImportProblem> problems)

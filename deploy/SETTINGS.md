@@ -160,6 +160,34 @@ The defaults are the reference values from the SRS: redeem up to 30% of a bill, 
 50 paise, and one point is earned per ₹50 of the **net** bill after any redemption. Change these
 only with whoever signs off the store's accounts — they affect what customers are owed.
 
+## Composition dealers: `taxMode`
+
+Leave this alone unless the shop is registered under the **composition scheme**. Then:
+
+```json
+"taxMode": "Composition"
+```
+
+A composition dealer has a GSTIN but may not collect tax from the customer. Setting this changes the
+document, not just the screen:
+
+- the bill is headed **BILL OF SUPPLY**, not TAX INVOICE
+- no GST rate appears against any line, and there is no slab table
+- the total line reads **Subtotal** — nothing was taxed, so there is no taxable value
+- the declaration the rules require is printed: *Composition taxable person, not eligible to collect
+  tax on supplies*
+- the till's four tax columns and the CGST/SGST/IGST panel are hidden
+- the day-end report has no tax section
+
+**Do not set this to tidy up the screen on a lane that is charging GST.** A bill of supply from a
+shop that collected tax is the wrong document, and so is a tax invoice showing no tax.
+
+The mode is recorded on every bill as it is issued. If the shop later crosses the turnover threshold
+and switches to `Gst`, everything it sold before that still reprints as the bill of supply it was.
+
+Check it before opening with `pos receipt-preview` — the preview shows the document this lane will
+actually issue.
+
 ## Keeping the dashboard from the cashier
 
 `pos dashboard` shows turnover, margins, cost prices and best sellers. On a lane where a cashier

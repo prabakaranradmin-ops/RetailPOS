@@ -816,7 +816,30 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         ClearSearch();
         RefreshTotals();
 
-        StatusMessage = $"{item.Name} added.";
+        StatusMessage = $"{item.Name} added.{StockNote(item)}";
+    }
+
+    /// <summary>
+    /// What to say about the shelf when an item is rung up, or nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// This is the only place a cashier finds out — they never open a report. It is appended to the
+    /// line they already read rather than given a banner or a dialog, because none of it is worth a
+    /// keystroke: the sale goes through either way, and the shelf rather than the database is the
+    /// authority on what is actually there.
+    ///
+    /// The figure quoted is the one before this sale, which is what the cashier can check against
+    /// what is in their hand.
+    /// </remarks>
+    internal static string StockNote(Item item)
+    {
+        if (!item.IsStockTracked)
+            return string.Empty;
+
+        if (item.IsOutOfStock)
+            return $"  Stock says none left ({item.StockQty:0.###}) — selling anyway.";
+
+        return item.IsLowStock ? $"  Only {item.StockQty:0.###} left." : string.Empty;
     }
 
     private void ClearResults()

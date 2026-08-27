@@ -44,7 +44,47 @@ public sealed class ZReportComposer
     /// </summary>
     public ReceiptLabels Labels { get; }
 
-    public ReceiptBuilder Compose(DayCloseSummary day, bool isReprint = false)
+    /// <param name="lowStock">
+    /// What needs reordering, printed at the foot so the shop has the list on paper without anyone
+    /// running a command. Supplied only when a day is being closed — never on a reprint, because a
+    /// report pulled out months later would otherwise carry today's shelves under last spring's
+    /// takings.
+    /// </param>
+    /// <summary>
+    /// What to reorder, at the foot of the day's report.
+    /// </summary>
+    /// <remarks>
+    /// Capped, and deliberately short. The point is a list somebody can act on before opening
+    /// tomorrow, not an inventory printout — a shop whose whole catalogue has fallen below its
+    /// reorder levels has a problem no length of till roll is going to solve.
+    /// </remarks>
+    private void WriteLowStock(ReceiptBuilder report, IReadOnlyList<StockLevel>? lowStock)
+    {
+        const int most = 15;
+
+        if (lowStock is null || lowStock.Count == 0)
+            return;
+
+        report.Rule();
+        report.Text(Labels.LowStock, bold: true);
+
+        foreach (var level in lowStock.Take(most))
+        {
+            report.Columns(
+                level.Name.Length > 26 ? level.Name[..25] + "…" : level.Name,
+                $"{Quantity(level.Quantity)} / {Quantity(level.ReorderLevel ?? 0m)}");
+        }
+
+        if (lowStock.Count > most)
+            report.Text($"  ... and {lowStock.Count - most} more");
+    }
+
+    private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    public ReceiptBuilder Compose(
+        DayCloseSummary day,
+        bool isReprint = false,
+        IReadOnlyList<StockLevel>? lowStock = null)
     {
         ArgumentNullException.ThrowIfNull(day);
 
@@ -143,6 +183,7 @@ public sealed class ZReportComposer
 
         WriteReconciliation(report, day);
         WriteHeldBills(report, day);
+        WriteLowStock(report, lowStock);
 
         report.Cut();
         return report;

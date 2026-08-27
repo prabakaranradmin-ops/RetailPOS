@@ -249,6 +249,49 @@ report back can never accidentally take one.
 
 ---
 
+## Stock — what is left, and what to order
+
+Only if the catalogue has a `stock_qty` column. Items without one are not counted and never appear
+here, which is right for anything sold loose out of a sack.
+
+**The cashier** sees it without doing anything. Scanning an item that is running low adds a line to
+the message they already read:
+
+```
+Bath Soap 100g added.  Only 3 left.
+```
+
+and if the count has reached zero:
+
+```
+Bath Soap 100g added.  Stock says none left (0) — selling anyway.
+```
+
+**The sale always goes through.** If the till says none are left and the customer is holding one,
+sell it. The shelf is the authority; the count going negative is the software telling you the two
+have parted company, and that is worth knowing rather than arguing with at a counter.
+
+**Whoever orders** uses:
+
+```
+pos stock               everything counted, most depleted first
+pos stock --low         only what is at or below its reorder level
+```
+
+The low list also prints at the foot of the **day-end report**, so the shop has it on paper without
+anyone running a command, and appears on the **dashboard** under *To reorder*.
+
+**After a delivery, a breakage or a recount:**
+
+```
+pos stock --set --sku DAL001 --qty 24 --reason "delivery"
+```
+
+The change and the reason are kept. When a count stops matching the shelf — and it will — that
+history is what lets you find where it went, rather than shrugging and typing a new number.
+
+---
+
 ## The dashboard — and keeping it to yourself
 
 The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, GST by
@@ -309,7 +352,8 @@ Known and deliberate, so nobody wastes time looking:
   note flow is a separate piece of work. Voiding is not a refund — it cancels a sale that has not
   yet been reported on a Z-report, and it stops working once the day is closed.
 - **No opening float tracking.** Count it and write it down.
-- **No stock or inventory.** The catalogue is prices, not quantities.
+- **Stock is a count, not an inventory system.** It tells you what is left and what to reorder. It
+  does not handle purchase orders, suppliers, batches or expiry, and it never stops a sale.
 - **No report other than the Z-report.** No day-range or item-wise sales reports yet.
 - **Nothing is sent anywhere.** The lane is entirely offline by design. Nothing leaves the machine
   except what you copy off it.

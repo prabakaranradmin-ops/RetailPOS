@@ -302,6 +302,10 @@ switch (command)
         var closed = closes.Close(settings.LaneId, DateTimeOffset.Now);
         Console.WriteLine($"Closed. Report no {closed.Id}, {closed.InvoiceCount} invoice(s), net {closed.NetSales:N2}.");
 
+        // What to reorder, gathered now and printed at the foot of this report only. A reprint
+        // months later must not carry today's shelves under last spring's takings.
+        var lowStock = new StockRepository(database).ListLow(50);
+
         // The day's books are worth a snapshot before anyone goes home.
         var backup = new DatabaseBackup(database, Path.Combine(dataDirectory, "backups")).Create(DateTimeOffset.Now);
 
@@ -313,7 +317,7 @@ switch (command)
 
         if (printer.IsConfigured)
         {
-            var outcome = printer.Print(composer.Compose(closed).ToEscPos());
+            var outcome = printer.Print(composer.Compose(closed, isReprint: false, lowStock).ToEscPos());
             Console.WriteLine(outcome.Succeeded ? "Report printed." : $"Report did not print: {outcome.Detail}");
         }
 
@@ -434,7 +438,10 @@ switch (command)
             PeripheralFactory.CreateDrawer(settings.Hardware, PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer)),
             settings.LoyaltyRules,
             TimeProvider.System,
-            log: log);
+            log: log,
+
+            // So a void here puts the goods back on the shelf count, exactly as one at the till does.
+            stock: new StockRepository(database));
 
         var voided = checkout.VoidSale(number, ParseStringOption(args, "--reason"));
 
@@ -555,6 +562,98 @@ switch (command)
         }
 
         log.Info("tool", $"dashboard over {days} days: {data.Range.Bills} bills, read in {data.Elapsed.TotalMilliseconds:N0} ms");
+
+        return 0;
+    }
+
+    case "stock":
+    {
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var stock = new StockRepository(database);
+        var items = new ItemRepository(database);
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        // Correcting a count by hand: a delivery arrived, something broke, somebody recounted.
+        if (flags.Contains("--set"))
+        {
+            var sku = ParseStringOption(args, "--sku");
+            var quantityText = ParseStringOption(args, "--qty");
+
+            if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(quantityText))
+            {
+                Console.Error.WriteLine("Setting a count needs both --sku and --qty.");
+                Console.Error.WriteLine("  pos stock --set --sku RICE5KG --qty 24 --reason \"delivery\"");
+                return 2;
+            }
+
+            if (!decimal.TryParse(quantityText, System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var quantity) || quantity < 0m)
+            {
+                Console.Error.WriteLine($"'{quantityText}' is not a quantity.");
+                return 2;
+            }
+
+            var item = items.FindBySku(sku);
+
+            if (item is null)
+            {
+                Console.Error.WriteLine($"There is no active item with SKU '{sku}'.");
+                return 2;
+            }
+
+            // An item the catalogue never gave a count to has nothing to move. Saying so beats
+            // silently doing nothing and letting somebody believe the shelf is now recorded.
+            if (!item.IsStockTracked)
+            {
+                Console.Error.WriteLine($"{item.Name} is not counted. Add a stock_qty column to the catalogue and re-import to start counting it.");
+                return 2;
+            }
+
+            var before = item.StockQty!.Value;
+            var after = stock.Set(item.Id, quantity, StockReason.Adjust, settings.LaneId, ParseStringOption(args, "--reason"));
+
+            Console.WriteLine();
+            Console.WriteLine($"  {item.Name}");
+            Console.WriteLine($"  {before.ToString("0.###", indian)}  ->  {after?.ToString("0.###", indian)}");
+            log.Info("stock", $"{item.Sku} set to {quantity} (was {before})");
+
+            return 0;
+        }
+
+        var low = flags.Contains("--low");
+        var levels = low
+            ? stock.ListLow(ParseIntOption(args, "--limit") ?? 200)
+            : stock.List(ParseIntOption(args, "--limit") ?? 200);
+
+        Console.WriteLine();
+
+        if (levels.Count == 0)
+        {
+            Console.WriteLine(low
+                ? "  Nothing is at or below its reorder level."
+                : "  No item in this catalogue is counted. Add a stock_qty column and re-import to start.");
+            return 0;
+        }
+
+        Console.WriteLine($"  {"SKU",-16}{"Item",-32}{"Have",8}{"Reorder",12}{"Short by",12}");
+        Console.WriteLine("  " + new string('-', 80));
+
+        foreach (var level in levels)
+        {
+            var name = level.Name.Length > 30 ? level.Name[..29] + "…" : level.Name;
+
+            Console.WriteLine(
+                $"  {level.Sku,-16}{name,-32}" +
+                $"{level.Quantity.ToString("0.###", indian),8}" +
+                $"{(level.ReorderLevel?.ToString("0.###", indian) ?? "—"),12}" +
+                $"{(level.ShortBy?.ToString("0.###", indian) ?? ""),12}" +
+                (level.IsOut ? "  OUT" : level.IsLow ? "  LOW" : string.Empty));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {levels.Count} item(s){(low ? " at or below the reorder level" : " counted")}.");
 
         return 0;
     }
@@ -898,6 +997,17 @@ static void WriteHelp()
               what sells, how customers paid, and GST by slab. Reads the books
               without writing to them, so it can be run while the till is busy.
               Asks for a PIN first if one has been set.
+
+          pos stock [--low] [--limit N]
+              What is left on the shelf, most depleted first. --low lists only
+              what is at or below its reorder level, which is the list to
+              order against. Items with no stock_qty in the catalogue are not
+              counted and never appear.
+
+          pos stock --set --sku <sku> --qty <n> [--reason "..."]
+              Corrects a count by hand after a delivery, a breakage or a
+              recount. The change and the reason are kept, so a count that
+              stops matching the shelf can be traced back to where it went.
 
           pos dashboard-pin [--clear]
               Require a PIN before the dashboard will run, so a cashier cannot

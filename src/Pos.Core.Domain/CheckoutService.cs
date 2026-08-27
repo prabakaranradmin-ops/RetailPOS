@@ -46,7 +46,8 @@ public sealed class CheckoutService(
     IPrinterService? printer = null,
     ReceiptComposer? receipts = null,
     IPosLog? log = null,
-    Func<string?>? cashier = null)
+    Func<string?>? cashier = null,
+    IStockStore? stock = null)
 {
     private readonly IInvoiceStore _invoices = invoices ?? throw new ArgumentNullException(nameof(invoices));
     private readonly ICustomerStore _customers = customers ?? throw new ArgumentNullException(nameof(customers));
@@ -56,6 +57,12 @@ public sealed class CheckoutService(
     private readonly IPrinterService _printer = printer ?? new NoPrinterService();
     private readonly ReceiptComposer? _receipts = receipts;
     private readonly IPosLog _log = log ?? NullLog.Instance;
+
+    /// <summary>
+    /// Where the shelf count lives. Null on a lane that does not count stock, and on every call
+    /// site that predates it — which is most of them, and all of which keep billing unchanged.
+    /// </summary>
+    private readonly IStockStore? _stock = stock;
 
     /// <summary>Who is on the till, read at the moment a sale completes rather than at startup.</summary>
     private readonly Func<string?> _cashier = cashier ?? (() => null);
@@ -144,6 +151,8 @@ public sealed class CheckoutService(
             customer.LoyaltyBalance = newBalance.Value;
         }
 
+        MoveStock(sale.Lines, laneId, invoice.InvoiceNo, StockReason.Sale, sign: -1m);
+
         var printResult = PrintReceipt(invoice);
 
         if (printResult.Status == PrintStatus.Failed)
@@ -155,6 +164,44 @@ public sealed class CheckoutService(
             _log.Warn("drawer", $"the drawer did not open on {invoice.InvoiceNo} ({_drawer.Name})");
 
         return new CheckoutResult(invoice, basket.ChangeDue, pointsRedeemed, pointsEarned, newBalance, drawerResult, printResult);
+    }
+
+    /// <summary>
+    /// Takes the sold quantities off the shelf count, or puts them back when a sale is cancelled.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately after the invoice is saved, and deliberately unable to fail the sale. The books
+    /// of account and the shelf count are different things: a wrong shelf count is a shop ordering
+    /// the wrong quantity, where a lost invoice is a sale the customer paid for and the shop has no
+    /// record of. A till that refused to sell because it could not decrement a number would be
+    /// trading the important one away for the trivial one.
+    ///
+    /// Items with no stock figure are skipped by the store itself, so a catalogue that has never
+    /// carried stock goes through here doing nothing at all.
+    /// </remarks>
+    private void MoveStock(
+        IReadOnlyList<InvoiceLine> lines,
+        string laneId,
+        string invoiceNo,
+        StockReason reason,
+        decimal sign)
+    {
+        if (_stock is null)
+            return;
+
+        foreach (var line in lines)
+        {
+            try
+            {
+                _stock.Move(line.ItemId, sign * line.Quantity, reason, laneId, invoiceNo);
+            }
+            catch (Exception ex)
+            {
+                // Logged and swallowed, per the note above. The next count will be wrong by this
+                // line, and the log says which line and why.
+                _log.Warn("stock", $"{invoiceNo}: could not move stock for {line.NameSnapshot} — {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -201,6 +248,10 @@ public sealed class CheckoutService(
             customer.LoyaltyBalance = newBalance.Value;
             reversed = true;
         }
+
+        // The goods are back on the shelf, so the count has to be too. Same rule as the points:
+        // a sale that no longer exists must not still have taken stock out.
+        MoveStock(voided.Sale.Lines, voided.Sale.LaneId, voided.InvoiceNo, StockReason.Void, sign: +1m);
 
         // Cash taken on the original sale has to come back out of the drawer.
         if (_drawer.IsConfigured && voided.Sale.Payments.Any(p => p.Type == TenderType.Cash))
