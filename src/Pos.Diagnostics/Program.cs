@@ -996,7 +996,8 @@ static void WriteHelp()
               The shop's figures as one HTML page: takings, the hourly rush,
               what sells, how customers paid, and GST by slab. Reads the books
               without writing to them, so it can be run while the till is busy.
-              Asks for a PIN first if one has been set.
+              Defaults to the last 30 days. Asks for a PIN first if one
+              has been set.
 
           pos stock [--low] [--limit N]
               What is left on the shelf, most depleted first. --low lists only
@@ -1014,7 +1015,6 @@ static void WriteHelp()
               read the shop's turnover and margins. Asks for the current PIN
               before changing or clearing one. Keeps somebody out of the
               command; it does not encrypt the database — see SETTINGS.md.
-              Defaults to the last 30 days.
 
           pos receipt-preview [--width N] [--png <path>]
               Renders a sample receipt as text. Touches no hardware, so it works
@@ -1023,10 +1023,12 @@ static void WriteHelp()
               Tamil came out right without using a roll of paper.
 
           pos import-items --file <path> [--update] [--dry-run]
-              Loads a catalogue CSV. Columns: sku, barcode, name, hsn_code,
-              unit (Pcs/Kg), mrp, selling_price, gst_rate, is_weighed — in any
-              order. Nothing is written unless the whole file is clean, so a
-              rejected import leaves the catalogue exactly as it was.
+              Loads a catalogue CSV. Required columns: sku, barcode, name,
+              hsn_code, unit (Pcs/Kg), mrp, selling_price, gst_rate,
+              is_weighed — in any order. Optional: category, cost_price,
+              stock_qty, reorder_level. Nothing is written unless the whole
+              file is clean, so a rejected import leaves the catalogue
+              exactly as it was.
               --update changes items already in the catalogue instead of
               rejecting them, which is what a price revision needs.
 
