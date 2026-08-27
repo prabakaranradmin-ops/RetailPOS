@@ -20,6 +20,12 @@ namespace Pos.Core.Domain;
 /// <param name="CashierName">
 /// Who rang it up. Null when the lane has nobody set — a single-operator counter still bills.
 /// </param>
+/// <param name="TaxMode">
+/// Whether this is a tax invoice or a bill of supply. Recorded with the sale rather than read from
+/// settings at print time, so a shop that later changes mode still reprints this bill as what it
+/// actually was. Appended and defaulted so that adding it did not touch call sites with nothing to
+/// say about it — and <see cref="Pos.Core.Domain.TaxMode.Gst"/> is what every earlier sale was.
+/// </param>
 public sealed record SaleDraft(
     string LaneId,
     DateTimeOffset CreatedAt,
@@ -31,7 +37,8 @@ public sealed record SaleDraft(
     int PointsRedeemed,
     int PointsEarned,
     string? RecalledFromToken,
-    string? CashierName = null);
+    string? CashierName = null,
+    TaxMode TaxMode = TaxMode.Gst);
 
 /// <summary>A sale as it now exists in the database, with the number it was given.</summary>
 /// <param name="VoidedAt">When it was cancelled, or null if it still stands.</param>

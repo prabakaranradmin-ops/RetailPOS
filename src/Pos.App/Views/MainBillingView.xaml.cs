@@ -4,6 +4,7 @@ using System.Windows.Input;
 using Pos.App.Input;
 using Pos.App.ViewModels;
 using Pos.Core.Configuration;
+using Pos.Core.Domain;
 
 namespace Pos.App.Views;
 
@@ -47,10 +48,37 @@ public partial class MainBillingView : Window
         Title = $"RetailPOS — Billing — lane {settings.LaneId}";
         KeyHints.Text = BuildKeyHints(keymap);
 
+        ApplyTaxMode(settings.TaxMode);
+
         viewModel.SearchFocusRequested += (_, _) => FocusSearchBox();
         viewModel.PropertyChanged += (_, e) => OnViewModelPropertyChanged(e.PropertyName);
 
         Loaded += (_, _) => FocusSearchBox();
+    }
+
+    /// <summary>
+    /// Takes the tax columns off the screen on a composition lane.
+    /// </summary>
+    /// <remarks>
+    /// Once at construction rather than bound, because the mode is a property of the lane and does
+    /// not change while the till is running — changing it means editing settings.json and starting
+    /// the till again, which is right for something that decides what document the shop issues.
+    ///
+    /// The columns are collapsed rather than removed so their widths and order stay exactly as
+    /// declared, and so the grid on a GST lane is untouched by any of this.
+    /// </remarks>
+    private void ApplyTaxMode(TaxMode mode)
+    {
+        if (mode != TaxMode.Composition)
+            return;
+
+        foreach (var column in new[] { CgstColumn, SgstColumn, IgstColumn, TaxColumn })
+            column.Visibility = Visibility.Collapsed;
+
+        TaxTotalsBlock.Visibility = Visibility.Collapsed;
+
+        // Nothing was taxed, so there is no taxable value — it is just what the bill comes to.
+        TaxableLabel.Text = "Subtotal";
     }
 
     /// <summary>

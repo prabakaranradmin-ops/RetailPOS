@@ -116,7 +116,12 @@ public sealed class CheckoutService(
             pointsRedeemed,
             pointsEarned,
             recalledFromToken,
-            _cashier());
+            _cashier(),
+
+            // Taken from the bill rather than from settings, so the mode recorded is the one the
+            // lines were actually priced under. A bill parked before a mode change and settled
+            // after it keeps what it was rung up as, which is the rule its prices already follow.
+            bill.TaxMode);
 
         // The sale is durable from here on. Nothing below may throw the invoice away.
         var invoice = _invoices.Save(sale);

@@ -57,7 +57,7 @@ public sealed class ReceiptComposer
         WriteTaxSummary(receipt, sale);
         WritePayments(receipt, sale);
         WriteSavingsAndPoints(receipt, sale);
-        WriteFooter(receipt);
+        WriteFooter(receipt, sale);
 
         return receipt;
     }
@@ -89,7 +89,14 @@ public sealed class ReceiptComposer
             receipt.Text($"Customer Care - {_store.CustomerCarePhone}", TextAlignment.Center);
 
         receipt.Blank();
-        receipt.Text(Labels.TaxInvoice, TextAlignment.Center, bold: true);
+
+        // What the document is called is decided by the sale, not by how the lane is set up today.
+        // A composition dealer who later registers normally must still reprint last year's bills as
+        // the bills of supply they were.
+        receipt.Text(
+            invoice.Sale.TaxMode == TaxMode.Composition ? Labels.BillOfSupply : Labels.TaxInvoice,
+            TextAlignment.Center,
+            bold: true);
 
         // A reprint has to say so on its face, or it can be passed off as a second sale.
         if (isReprint)
@@ -177,9 +184,12 @@ public sealed class ReceiptComposer
                 new ColumnValue(Quantity(line), 6),
                 new ColumnValue(Amount(line.LineTotal), 10));
 
-            // HSN belongs on a GST invoice, and the discount has to be visible or the customer
-            // cannot reconcile the line against the shelf price.
-            var detail = $"  HSN {line.HsnSnapshot}  GST {Rate(line.GstRate)}%";
+            // HSN belongs on a bill of supply as much as on a tax invoice — it identifies the
+            // goods. The rate does not: printing "GST 0%" against a line would say the shop applied
+            // a nil rate, where the truth is that it is not permitted to charge at all.
+            var detail = sale.TaxMode == TaxMode.Composition
+                ? $"  HSN {line.HsnSnapshot}"
+                : $"  HSN {line.HsnSnapshot}  GST {Rate(line.GstRate)}%";
 
             if (line.Discount > 0m)
                 detail += $"  less {Amount(line.Discount)}";
@@ -194,7 +204,10 @@ public sealed class ReceiptComposer
     {
         var totals = sale.Totals;
 
-        receipt.Columns(Labels.TaxableValue, Amount(totals.SubtotalTaxable));
+        // There is no "taxable value" on a bill of supply — nothing was taxed. It is a subtotal.
+        receipt.Columns(
+            sale.TaxMode == TaxMode.Composition ? Labels.Subtotal : Labels.TaxableValue,
+            Amount(totals.SubtotalTaxable));
 
         if (totals.TotalDiscount > 0m)
             receipt.Columns(Labels.Discount, Amount(totals.TotalDiscount));
@@ -217,6 +230,13 @@ public sealed class ReceiptComposer
     /// </summary>
     private void WriteTaxSummary(ReceiptBuilder receipt, SaleDraft sale)
     {
+        // A bill of supply carries no rate-wise breakup. Every line is at zero, so the loop below
+        // would otherwise print a tidy "0%" slab against the full value of the bill — which reads
+        // as a shop declaring it charged nothing on a taxable supply, rather than a shop that is
+        // not permitted to charge at all.
+        if (sale.TaxMode == TaxMode.Composition)
+            return;
+
         var slabs = sale.Lines
             .GroupBy(line => line.GstRate)
             .OrderBy(group => group.Key)
@@ -347,14 +367,59 @@ public sealed class ReceiptComposer
             TextAlignment.Center);
     }
 
-    private void WriteFooter(ReceiptBuilder receipt)
+    private void WriteFooter(ReceiptBuilder receipt, SaleDraft sale)
     {
         receipt.Blank();
+
+        // The declaration the rules require on a bill of supply. It goes above the shop's own
+        // message, and it is not the shop's to edit — it is a phrase from the rules, in English,
+        // on a Tamil bill as much as an English one.
+        if (sale.TaxMode == TaxMode.Composition)
+        {
+            // Wrapped rather than printed as one line: the declaration is 67 characters and the
+            // paper is 48 at its widest, so unwrapped it loses its second half — and the half it
+            // loses is "not eligible to collect tax on supplies", which is the entire point of it.
+            foreach (var line in Wrap(CompositionDeclaration.Text, PaperWidthChars))
+                receipt.Text(line, TextAlignment.Center);
+
+            receipt.Blank();
+        }
 
         if (!string.IsNullOrWhiteSpace(_store.FooterMessage))
             receipt.Text(_store.FooterMessage, TextAlignment.Center);
 
         receipt.Cut();
+    }
+
+    /// <summary>Breaks text on spaces so no line exceeds <paramref name="width"/> characters.</summary>
+    /// <remarks>
+    /// A word longer than the paper is emitted on its own over-long line rather than being chopped
+    /// mid-word. Nothing here produces one, and silently cutting a word is worse than a line that
+    /// wraps in the printer.
+    /// </remarks>
+    private static List<string> Wrap(string text, int width)
+    {
+        var lines = new List<string>();
+        var current = new System.Text.StringBuilder();
+
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (current.Length > 0 && current.Length + 1 + word.Length > width)
+            {
+                lines.Add(current.ToString());
+                current.Clear();
+            }
+
+            if (current.Length > 0)
+                current.Append(' ');
+
+            current.Append(word);
+        }
+
+        if (current.Length > 0)
+            lines.Add(current.ToString());
+
+        return lines;
     }
 
     private static string Amount(decimal value) => value.ToString("N2", CultureInfo.InvariantCulture);

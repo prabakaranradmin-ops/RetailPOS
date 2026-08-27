@@ -122,13 +122,17 @@
                               ElementStyle="{StaticResource NumericCell}" />
           <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="CGST %" Binding="{Binding CgstRate, StringFormat={}{0:0.##}}" Width="Auto"
+          <!--
+            The four tax columns. Named so the code-behind can take them out on a composition lane,
+            where there is no tax to show and a column of zeroes would only invite the question.
+          -->
+          <DataGridTextColumn x:Name="CgstColumn" Header="CGST %" Binding="{Binding CgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="SGST %" Binding="{Binding SgstRate, StringFormat={}{0:0.##}}" Width="Auto"
+          <DataGridTextColumn x:Name="SgstColumn" Header="SGST %" Binding="{Binding SgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="IGST %" Binding="{Binding IgstRate, StringFormat={}{0:0.##}}" Width="Auto"
+          <DataGridTextColumn x:Name="IgstColumn" Header="IGST %" Binding="{Binding IgstRate, StringFormat={}{0:0.##}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Tax" Binding="{Binding TaxAmount, StringFormat={}{0:N2}}" Width="Auto"
+          <DataGridTextColumn x:Name="TaxColumn" Header="Tax" Binding="{Binding TaxAmount, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
           <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
@@ -146,19 +150,22 @@
         -->
         <DockPanel LastChildFill="True">
           <StackPanel DockPanel.Dock="Top">
-            <TextBlock Text="Taxable" Foreground="{StaticResource InkMuted}" FontSize="12" />
+            <TextBlock x:Name="TaxableLabel" Text="Taxable" Foreground="{StaticResource InkMuted}" FontSize="12" />
             <TextBlock Text="{Binding Totals.SubtotalTaxable, StringFormat={}{0:N2}}" FontSize="18" />
 
             <TextBlock Text="Discount" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
             <TextBlock Text="{Binding Totals.TotalDiscount, StringFormat={}{0:N2}}" FontSize="18" />
 
-            <TextBlock Text="CGST / SGST / IGST" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="{Binding Totals.TotalCgst, StringFormat={}{0:N2}}" FontSize="18" />
-              <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-              <TextBlock Text="{Binding Totals.TotalSgst, StringFormat={}{0:N2}}" FontSize="18" />
-              <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-              <TextBlock Text="{Binding Totals.TotalIgst, StringFormat={}{0:N2}}" FontSize="18" />
+            <!-- Hidden on a composition lane, along with the four columns in the grid. -->
+            <StackPanel x:Name="TaxTotalsBlock">
+              <TextBlock Text="CGST / SGST / IGST" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Totals.TotalCgst, StringFormat={}{0:N2}}" FontSize="18" />
+                <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
+                <TextBlock Text="{Binding Totals.TotalSgst, StringFormat={}{0:N2}}" FontSize="18" />
+                <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
+                <TextBlock Text="{Binding Totals.TotalIgst, StringFormat={}{0:N2}}" FontSize="18" />
+              </StackPanel>
             </StackPanel>
 
             <Separator Margin="0,16" Background="{StaticResource Line}" />

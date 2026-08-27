@@ -20,6 +20,7 @@ public static class Migrator
         "006_fiscal_year_sequences.sql",
         "007_dashboard_indexes.sql",
         "008_category_and_cost.sql",
+        "009_stock_and_tax_mode.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

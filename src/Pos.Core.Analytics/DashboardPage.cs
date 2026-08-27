@@ -289,7 +289,15 @@ public static class DashboardPage
 
         p.Append("<div class=\"panel\"><h3>GST by slab</h3>");
 
-        if (d.GstSlabs.Count == 0)
+        // Sales but no tax at all is a composition lane's window — a bill of supply collects none.
+        // Laying out a table of zeroes against a "0%" slab would read as a shop that applied a nil
+        // rate to taxable supplies, so it says what actually happened instead.
+        if (d.GstSlabs.Count > 0 && d.GstSlabs.Sum(s => s.TotalTax) == 0m)
+        {
+            p.Append("<p class=\"empty\">No GST was charged in this window. On a composition lane "
+                + "that is expected &mdash; a bill of supply collects none.</p>");
+        }
+        else if (d.GstSlabs.Count == 0)
         {
             p.Append("<p class=\"empty\">No taxable sales in this window.</p>");
         }

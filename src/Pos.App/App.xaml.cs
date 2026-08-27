@@ -109,12 +109,12 @@ public partial class App : Application
 
         var dayClose = new DayCloseService(
             new DayCloseRepository(database, heldBills),
-            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
+            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage, settings.TaxMode),
             printer,
             new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log));
 
         var viewModel = new BillingViewModel(
-            new InvoiceEngine(settings.OutletStateCode),
+            new InvoiceEngine(settings.OutletStateCode, settings.TaxMode),
             new ItemRepository(database),
             heldBills,
             customers,

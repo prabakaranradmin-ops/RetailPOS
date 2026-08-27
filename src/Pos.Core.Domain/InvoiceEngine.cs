@@ -12,13 +12,21 @@ public sealed class InvoiceEngine
     /// GST state code of the outlet. Compared against the customer's state code to decide
     /// between a CGST/SGST split and a single IGST charge.
     /// </param>
-    public InvoiceEngine(string outletStateCode)
+    /// <param name="taxMode">
+    /// Whether this lane issues tax invoices or bills of supply. Defaults to <see cref="TaxMode.Gst"/>,
+    /// which is what every lane was before the setting existed.
+    /// </param>
+    public InvoiceEngine(string outletStateCode, TaxMode taxMode = TaxMode.Gst)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outletStateCode);
         OutletStateCode = outletStateCode;
+        TaxMode = taxMode;
     }
 
     public string OutletStateCode { get; }
+
+    /// <summary>Whether this bill is a tax invoice or a bill of supply.</summary>
+    public TaxMode TaxMode { get; }
 
     public IReadOnlyList<InvoiceLine> Lines => _lines;
 
@@ -57,7 +65,7 @@ public sealed class InvoiceEngine
         if (!item.IsActive)
             throw new InvalidOperationException($"{item.Name} is not an active item and cannot be billed.");
 
-        var line = InvoiceLine.FromItem(item, quantity, IsInterState);
+        var line = InvoiceLine.FromItem(item, quantity, IsInterState, TaxMode);
         _lines.Add(line);
         return line;
     }

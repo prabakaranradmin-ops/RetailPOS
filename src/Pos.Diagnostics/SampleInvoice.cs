@@ -9,7 +9,15 @@ namespace Pos.Diagnostics;
 /// </summary>
 internal static class SampleInvoice
 {
-    public static SettledInvoice Build(string laneId, InvoiceNumberFormat? numberFormat = null)
+    /// <param name="taxMode">
+    /// What the lane issues. A composition lane must preview the bill of supply it will actually
+    /// print — previewing a tax invoice would show the shopkeeper a document they never issue, and
+    /// this preview is how they check the bill before the shop opens.
+    /// </param>
+    public static SettledInvoice Build(
+        string laneId,
+        InvoiceNumberFormat? numberFormat = null,
+        TaxMode taxMode = TaxMode.Gst)
     {
         var customer = new Customer
         {
@@ -20,12 +28,16 @@ internal static class SampleInvoice
             LoyaltyBalance = 412,
         };
 
+        // On a composition lane the rates go to zero here, the same way the till drops them when it
+        // makes a real line — so the preview's totals are the ones the shop will actually take.
+        var rate = taxMode == TaxMode.Composition ? 0m : 1m;
+
         InvoiceLine[] lines =
         [
-            Line(1, "Toor Dal 1kg", "0713", "8901234567890", 189m, 5m),
-            Line(2, "Sugar Loose", "1701", null, 45m, 5m, quantity: 2.75m, unit: UnitType.Kilogram),
-            Line(3, "Shampoo 340ml", "3305", "8901234567897", 299m, 18m, discount: 49m),
-            Line(4, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", "8901234567901", 1_299m, 5m),
+            Line(1, "Toor Dal 1kg", "0713", "8901234567890", 189m, 5m * rate),
+            Line(2, "Sugar Loose", "1701", null, 45m, 5m * rate, quantity: 2.75m, unit: UnitType.Kilogram),
+            Line(3, "Shampoo 340ml", "3305", "8901234567897", 299m, 18m * rate, discount: 49m),
+            Line(4, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", "8901234567901", 1_299m, 5m * rate),
         ];
 
         var totals = InvoiceTotals.From(lines);
@@ -47,7 +59,9 @@ internal static class SampleInvoice
             ChangeDue: Math.Max(0m, payments.Sum(p => p.Amount) - totals.GrandTotal),
             PointsRedeemed: 200,
             PointsEarned: 32,
-            RecalledFromToken: "H007");
+            RecalledFromToken: "H007",
+            CashierName: null,
+            TaxMode: taxMode);
 
         // Numbered the way this lane actually numbers, so a test print shows the shop what its own
         // bill numbers will look like rather than a placeholder in some other shape.

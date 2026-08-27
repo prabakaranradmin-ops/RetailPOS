@@ -15,13 +15,20 @@ namespace Pos.Core.Domain.Printing;
 public sealed class ZReportComposer
 {
     private readonly StoreProfile _store;
+    private readonly TaxMode _taxMode;
 
+    /// <param name="taxMode">
+    /// What this lane issues. A composition lane's day-end report has no tax section — it collected
+    /// none and may not.
+    /// </param>
     public ZReportComposer(
         StoreProfile store,
         int paperWidthChars = ReceiptBuilder.Width80Mm,
-        ReceiptLanguage language = ReceiptLanguage.English)
+        ReceiptLanguage language = ReceiptLanguage.English,
+        TaxMode taxMode = TaxMode.Gst)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _taxMode = taxMode;
         PaperWidthChars = paperWidthChars;
         Language = language;
         Labels = ReceiptLabels.For(language);
@@ -86,26 +93,37 @@ public sealed class ZReportComposer
         report.Columns(Labels.NetSales, Amount(day.NetSales), bold: true);
         report.Rule();
 
-        report.Text(Labels.Tax, bold: true);
-        report.Columns(Labels.TaxableValue, Amount(day.TaxableValue));
-        report.Columns(Labels.Cgst, Amount(day.TotalCgst));
-        report.Columns(Labels.Sgst, Amount(day.TotalSgst));
-
-        if (day.TotalIgst > 0m)
-            report.Columns(Labels.Igst, Amount(day.TotalIgst));
-
-        report.Columns(Labels.TotalTax, Amount(day.TotalTax));
-
-        if (day.TaxSlabs.Count > 0)
+        // A composition lane collected no tax and is not permitted to. The whole block goes, rather
+        // than printing a column of zeroes and a "0%" slab against the day's entire takings — which
+        // would read as a shop that applied a nil rate to taxable supplies.
+        if (_taxMode == TaxMode.Composition)
         {
-            report.Blank();
-            report.Row(Labels.TaxSummaryRate, new ColumnValue(Labels.TaxSummaryTaxable, 12), new ColumnValue(Labels.TaxSummaryTax, 10));
-
-            foreach (var slab in day.TaxSlabs)
-                report.Row($"{Rate(slab.GstRate)}%", new ColumnValue(Amount(slab.TaxableValue), 12), new ColumnValue(Amount(slab.Tax), 10));
+            report.Columns(Labels.Subtotal, Amount(day.TaxableValue), bold: true);
+            report.Rule();
         }
+        else
+        {
+            report.Text(Labels.Tax, bold: true);
+            report.Columns(Labels.TaxableValue, Amount(day.TaxableValue));
+            report.Columns(Labels.Cgst, Amount(day.TotalCgst));
+            report.Columns(Labels.Sgst, Amount(day.TotalSgst));
 
-        report.Rule();
+            if (day.TotalIgst > 0m)
+                report.Columns(Labels.Igst, Amount(day.TotalIgst));
+
+            report.Columns(Labels.TotalTax, Amount(day.TotalTax));
+
+            if (day.TaxSlabs.Count > 0)
+            {
+                report.Blank();
+                report.Row(Labels.TaxSummaryRate, new ColumnValue(Labels.TaxSummaryTaxable, 12), new ColumnValue(Labels.TaxSummaryTax, 10));
+
+                foreach (var slab in day.TaxSlabs)
+                    report.Row($"{Rate(slab.GstRate)}%", new ColumnValue(Amount(slab.TaxableValue), 12), new ColumnValue(Amount(slab.Tax), 10));
+            }
+
+            report.Rule();
+        }
 
         report.Text(Labels.Tenders, bold: true);
 

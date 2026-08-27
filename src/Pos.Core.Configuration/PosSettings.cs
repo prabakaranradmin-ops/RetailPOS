@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Pos.Core.Domain;
 using Pos.Core.Domain.Printing;
 using Pos.Core.Loyalty;
 
@@ -82,6 +83,18 @@ public sealed class PosSettings
     /// </remarks>
     [JsonPropertyName("receiptLanguage")]
     public ReceiptLanguage ReceiptLanguage { get; set; } = ReceiptLanguage.English;
+
+    /// <summary>
+    /// Whether this lane issues tax invoices or bills of supply.
+    /// </summary>
+    /// <remarks>
+    /// <c>Composition</c> is for a dealer registered under the composition scheme, who has a GSTIN
+    /// but may not collect tax. It changes the document, not just the screen: no tax is charged or
+    /// shown anywhere, and the bill prints as a bill of supply with the declaration the rules
+    /// require. Do not set it to avoid showing tax on a lane that is charging it.
+    /// </remarks>
+    [JsonPropertyName("taxMode")]
+    public TaxMode TaxMode { get; set; } = TaxMode.Gst;
 
     /// <summary>Which peripherals this lane has, and how they are attached.</summary>
     [JsonPropertyName("hardware")]

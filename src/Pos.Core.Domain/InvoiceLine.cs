@@ -172,7 +172,18 @@ public sealed class InvoiceLine
     };
 
     /// <summary>Builds a line from an item master record at quantity 1.</summary>
-    public static InvoiceLine FromItem(Item item, decimal quantity = 1m, bool isInterState = false) => new()
+    /// <remarks>
+    /// On a composition lane the item's GST rate is dropped here, at the moment the line is made,
+    /// rather than being suppressed further down when the bill is printed. The rate is already
+    /// snapshotted onto the line and stored with the invoice, so a line sold under a bill of supply
+    /// carries a zero rate for good — every total, every report and every reprint then agrees
+    /// without any of them having to know which mode the shop was in.
+    /// </remarks>
+    public static InvoiceLine FromItem(
+        Item item,
+        decimal quantity = 1m,
+        bool isInterState = false,
+        TaxMode taxMode = TaxMode.Gst) => new()
     {
         ItemId = item.Id,
         NameSnapshot = item.Name,
@@ -182,7 +193,7 @@ public sealed class InvoiceLine
         Mrp = item.Mrp,
         UnitPrice = item.SellPrice,
         IsTaxInclusive = item.IsTaxInclusive,
-        GstRate = item.GstRate,
+        GstRate = taxMode == TaxMode.Composition ? 0m : item.GstRate,
         Quantity = quantity,
         IsInterState = isInterState,
         CategorySnapshot = item.Category,

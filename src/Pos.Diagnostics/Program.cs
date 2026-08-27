@@ -192,7 +192,7 @@ switch (command)
 
         var heldBills = new HeldBillRepository(database);
         var closes = new DayCloseRepository(database, heldBills);
-        var composer = new ZReportComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage);
+        var composer = new ZReportComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage, settings.TaxMode);
 
         // Looking at a report that has already been taken, rather than taking a new one. Every
         // close is stored — the figures, the tenders, who was on the till — and until these three
@@ -628,7 +628,7 @@ switch (command)
         // gets checked on a bench or against a different paper width.
         var width = ParseWidth(args) ?? settings.Hardware.PrinterPaperWidthChars;
         var receipt = new ReceiptComposer(settings.Store.ToProfile(), width, settings.ReceiptLanguage)
-            .Compose(SampleInvoice.Build(settings.LaneId, settings.InvoiceNumber.ToFormat()));
+            .Compose(SampleInvoice.Build(settings.LaneId, settings.InvoiceNumber.ToFormat(), settings.TaxMode));
 
         Console.WriteLine();
         Console.WriteLine(receipt.ToPlainText());

@@ -26,6 +26,13 @@ public enum ReceiptLanguage
 public sealed record ReceiptLabels
 {
     public required string TaxInvoice { get; init; }
+
+    /// <summary>What a composition dealer's bill is called. Not a tax invoice, in law or in print.</summary>
+    public required string BillOfSupply { get; init; }
+
+    /// <summary>The total before payment on a bill that taxed nothing.</summary>
+    public required string Subtotal { get; init; }
+
     public required string Reprint { get; init; }
     public required string BillNumber { get; init; }
     public required string Date { get; init; }
@@ -110,6 +117,8 @@ public sealed record ReceiptLabels
     public static ReceiptLabels EnglishLabels { get; } = new()
     {
         TaxInvoice = "TAX INVOICE",
+        BillOfSupply = "BILL OF SUPPLY",
+        Subtotal = "Subtotal",
         Reprint = "** REPRINT **",
         BillNumber = "Bill No",
         Date = "Date",
@@ -190,8 +199,13 @@ public sealed record ReceiptLabels
     public static ReceiptLabels TamilLabels { get; } = new()
     {
         // "TAX INVOICE" is left in English: it is the phrase the GST rules use and the one an
-        // inspector looks for, so it is not a label to localise.
+        // inspector looks for, so it is not a label to localise. "BILL OF SUPPLY" is the same
+        // phrase for the same reason — it is what the document is called in law.
         TaxInvoice = "TAX INVOICE",
+        BillOfSupply = "BILL OF SUPPLY",
+        // Not மொத்தம் — that is already Total, and two lines reading the same word on one bill is
+        // worse than a slightly formal word for the one above it.
+        Subtotal = "இடைத்தொகை",
         Reprint = "** REPRINT **",
         BillNumber = "பில் நம்பர்",
         Date = "தேதி",

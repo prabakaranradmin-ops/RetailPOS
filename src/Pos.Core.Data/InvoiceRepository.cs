@@ -95,11 +95,11 @@ public sealed class InvoiceRepository : IInvoiceStore
             INSERT INTO invoices
               (invoice_no, lane_id, created_at, customer_id, status, hold_token,
                subtotal_taxable, total_discount, total_cgst, total_sgst, total_igst, grand_total,
-               points_redeemed, points_earned, change_due, cashier_name)
+               points_redeemed, points_earned, change_due, cashier_name, tax_mode)
             VALUES
               ($invoiceNo, $lane, $createdAt, $customerId, $status, $holdToken,
                $taxable, $discount, $cgst, $sgst, $igst, $grandTotal,
-               $pointsRedeemed, $pointsEarned, $changeDue, $cashier);
+               $pointsRedeemed, $pointsEarned, $changeDue, $cashier, $taxMode);
             SELECT last_insert_rowid();
             """;
 
@@ -120,6 +120,10 @@ public sealed class InvoiceRepository : IInvoiceStore
         command.Parameters.AddWithValue("$pointsEarned", sale.PointsEarned);
         command.Parameters.AddWithValue("$changeDue", sale.ChangeDue);
         command.Parameters.AddWithValue("$cashier", (object?)sale.CashierName ?? DBNull.Value);
+
+        // Stored by name rather than as a number, so somebody reading the table with a SQLite
+        // browser can see which bills were tax invoices without a lookup table in their head.
+        command.Parameters.AddWithValue("$taxMode", sale.TaxMode.ToString());
 
         return Convert.ToInt64(command.ExecuteScalar());
     }
@@ -347,7 +351,7 @@ public sealed class InvoiceRepository : IInvoiceStore
                        i.subtotal_taxable, i.total_discount, i.total_cgst, i.total_sgst,
                        i.total_igst, i.grand_total, i.points_redeemed, i.points_earned, i.change_due,
                        c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code,
-                       i.cashier_name, i.voided_at, i.void_reason
+                       i.cashier_name, i.voided_at, i.void_reason, i.tax_mode
                 FROM invoices i
                 LEFT JOIN customers c ON c.id = i.customer_id
                 WHERE i.invoice_no = $invoiceNo;
@@ -393,7 +397,15 @@ public sealed class InvoiceRepository : IInvoiceStore
                 reader.GetInt32(10),
                 reader.GetInt32(11),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
-                reader.IsDBNull(18) ? null : reader.GetString(18));
+                reader.IsDBNull(18) ? null : reader.GetString(18),
+
+                // Anything unrecognised reads as a tax invoice, which is what every row written
+                // before this column existed was, and the safer reading of a damaged one: a bill
+                // reprinted as a tax invoice can be checked against the tax on its face, where one
+                // wrongly reprinted as a bill of supply hides that it ever charged any.
+                Enum.TryParse<TaxMode>(reader.IsDBNull(21) ? null : reader.GetString(21), out var mode)
+                    ? mode
+                    : TaxMode.Gst);
 
             voidedAt = reader.IsDBNull(19) ? null : reader.GetDateTimeOffset(19);
             voidReason = reader.IsDBNull(20) ? null : reader.GetString(20);

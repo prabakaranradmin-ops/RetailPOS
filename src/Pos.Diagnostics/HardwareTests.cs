@@ -55,7 +55,7 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
         }
 
         var receipt = new ReceiptComposer(_settings.Store.ToProfile(), printer.PaperWidthChars, _settings.ReceiptLanguage)
-            .Compose(SampleInvoice.Build(_settings.LaneId, _settings.InvoiceNumber.ToFormat()));
+            .Compose(SampleInvoice.Build(_settings.LaneId, _settings.InvoiceNumber.ToFormat(), _settings.TaxMode));
 
         output.WriteLine();
         output.WriteLine("  This is what should come out:");
