@@ -72,10 +72,35 @@ foreach ($dir in @($OutputDir, $shots)) {
 if (Test-Path $workspace) { Remove-Item $workspace -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $workspace | Out-Null
 
+# Whether the binaries about to be tested are older than the code they were built from.
+#
+# The default BinDir is the published lane folder, which is only as current as the last publish.
+# A run against a stale exe passes or fails on behaviour nobody has written for weeks, and reads
+# exactly like a run against the working tree — which is how a change can look accepted when it
+# was never in the binary at all.
+# Hand-written source only. `obj` holds generated files — AssemblyInfo among them — that are
+# rewritten by every build and so are always newer than the binaries; counting them would make this
+# warn on every single run, and a warning that is always on is one nobody reads.
+$newestSource = Get-ChildItem -Path (Join-Path $root 'src') -Recurse -Include *.cs, *.xaml, *.sql -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
+    Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+$builtAt = (Get-Item $pos).LastWriteTimeUtc
+$stale = $newestSource -and ($newestSource.LastWriteTimeUtc -gt $builtAt)
+
 Write-Host "RetailPOS acceptance run" -ForegroundColor Cyan
 Write-Host "  binaries : $BinDir"
+Write-Host "  built    : $($builtAt.ToLocalTime().ToString('dd-MM-yyyy HH:mm'))"
 Write-Host "  workspace: $workspace"
 Write-Host "  report   : $(Join-Path $OutputDir 'acceptance-report.html')"
+
+if ($stale) {
+    Write-Host ''
+    Write-Host "  WARNING: these binaries are older than the source." -ForegroundColor Yellow
+    Write-Host "           $($newestSource.Name) changed $($newestSource.LastWriteTimeUtc.ToLocalTime().ToString('dd-MM-yyyy HH:mm'))." -ForegroundColor Yellow
+    Write-Host "           This run tests what was last built, not what is written." -ForegroundColor Yellow
+    Write-Host "           Run publish.ps1, or pass -BinDir, to test current code." -ForegroundColor Yellow
+}
+
 Write-Host ''
 
 # --------------------------------------------------------------------------------------------
@@ -283,6 +308,18 @@ Add-Result -Kind Negative -Feature 'Catalogue' -Name 'A missing catalogue file i
 $r = Invoke-Pos @('void-invoice', '--invoice', 'RM/26-27/9999', '--yes')
 Add-Result -Kind Negative -Feature 'Void' -Name 'Voiding an invoice that does not exist is refused' `
     -Expected 'non-zero exit' -Actual (Short $r.Output) -Passed ($r.ExitCode -ne 0)
+
+# One missing letter used to turn a listing into a close. `--lst` was not recognised, so it was
+# ignored, and close-day went on to do what it does with no options — with --yes alongside meaning
+# it did not stop to ask. A close cannot be undone, so the assertion here is not merely that the
+# command complained: it is that the lane's closes are the same afterwards as before.
+$closesBefore = (Invoke-Pos @('close-day', '--list')).Output -join "`n"
+$r = Invoke-Pos @('close-day', '--yes', '--lst')
+$closesAfter = (Invoke-Pos @('close-day', '--list')).Output -join "`n"
+Add-Result -Kind Negative -Feature 'Day close' -Name 'A mistyped option cannot close the day' `
+    -Expected 'non-zero exit, and no day closed' -Actual (Short $r.Output 3) `
+    -Passed (($r.ExitCode -ne 0) -and ($closesBefore -eq $closesAfter)) `
+    -Detail 'pos close-day --yes --lst. The option is refused by name rather than ignored.'
 
 $damaged = Join-Path $workspace 'damaged.db'
 Set-Content -Path $damaged -Value 'this is not a database' -Encoding ascii
@@ -499,7 +536,8 @@ if (-not $NoUi) {
 . (Join-Path $here 'Write-Report.ps1')
 
 $reportPath = Join-Path $OutputDir 'acceptance-report.html'
-Write-AcceptanceReport -Results $script:results -Shots $shots -Path $reportPath -BinDir $BinDir
+Write-AcceptanceReport -Results $script:results -Shots $shots -Path $reportPath -BinDir $BinDir `
+    -BuiltAt $builtAt.ToLocalTime().ToString('dd-MM-yyyy HH:mm') -Stale ([bool]$stale)
 
 if (-not $KeepWorkspace) {
     Remove-Item $workspace -Recurse -Force -ErrorAction SilentlyContinue

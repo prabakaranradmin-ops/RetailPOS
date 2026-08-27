@@ -39,6 +39,17 @@ if (command is "help" or "--help" or "-h" or "/?")
     return 0;
 }
 
+// A mistyped option must stop the command rather than quietly change what it means — see
+// CommandLine for what that cost. Checked before the settings are even read, so a typo is refused
+// on any lane rather than only on a lane that is set up correctly.
+if (CommandLine.UnknownOption(args, command) is { } offending)
+{
+    Console.Error.WriteLine($"'{offending}' is not an option for '{command}'.");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"Run 'pos help' to see what '{command}' takes.");
+    return 2;
+}
+
 PosSettings settings;
 
 try

@@ -53,7 +53,11 @@ function Write-AcceptanceReport {
         [Parameter(Mandatory)] [object[]] $Results,
         [Parameter(Mandatory)] [string] $Shots,
         [Parameter(Mandatory)] [string] $Path,
-        [string] $BinDir = ''
+        [string] $BinDir = '',
+        # When the tested binaries were built, and whether the source has moved on since. A saved
+        # report outlives the console it scrolled past, so it has to say what it actually tested.
+        [string] $BuiltAt = '',
+        [bool] $Stale = $false
     )
 
     $positive = @($Results | Where-Object { $_.Kind -eq 'Positive' })
@@ -155,6 +159,9 @@ function Write-AcceptanceReport {
              font-weight:600; font-size:15px; }
   .verdict.ok { background:var(--pass-bg); color:var(--pass); }
   .verdict.bad { background:var(--fail-bg); color:var(--fail); }
+  /* A green run against stale binaries is worse than a red one, so it is not allowed to look calm. */
+  .stale { margin:16px 0 0; padding:10px 14px; max-width:62ch; border-left:3px solid var(--fail);
+           background:var(--fail-bg); color:var(--fail); font-size:14px; line-height:1.5; }
   .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:0 0 44px; }
   .tile { background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px 20px; box-shadow:var(--shadow); }
   .tile .n { font-family:Bitter,Georgia,serif; font-size:34px; font-weight:700; line-height:1; }
@@ -197,8 +204,13 @@ function Write-AcceptanceReport {
       <span>Machine <code>$(Escape-Html $env:COMPUTERNAME)</code></span>
       <span>Run <code>$(Get-Date -Format 'yyyy-MM-dd HH:mm')</code></span>
       <span>Binaries <code>$(Escape-Html $BinDir)</code></span>
+$(if ($BuiltAt) { "      <span>Built <code>$(Escape-Html $BuiltAt)</code></span>" })
     </p>
     <span class="verdict $verdictClass">$verdict</span>
+$(if ($Stale) { @"
+    <p class="stale">These binaries are older than the source. This run reports what was last
+    built, not what is currently written.</p>
+"@ })
   </header>
 
   <div class="tiles">

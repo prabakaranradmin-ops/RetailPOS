@@ -222,6 +222,21 @@ window.
 printed sheet was the only way to see a past day's figures. A printer that jams at closing time is
 not a rare event, and a shop should not lose a day's takings to one.
 
+**The command line refuses what it does not understand** — passing
+- [x] A mistyped close-day option is refused rather than treated as a close — `CommandLineTests`
+- [x] A typo alongside `--yes` is still refused — `CommandLineTests`
+- [x] Every command line the runbook tells people to type is accepted — `CommandLineTests`
+- [x] A value that looks like an option is still a value — `CommandLineTests`
+- [x] An option borrowed from another command is refused — `CommandLineTests`
+- [x] An unknown command is not policed for options — `CommandLineTests`
+- [x] End to end: `pos close-day --yes --lst` exits non-zero and the lane's closes are unchanged — acceptance
+
+**Why this was worth adding.** An unrecognised option was ignored, so `close-day --lst` — one
+missing letter — fell through to the ordinary close path, and with `--yes` alongside it would have
+closed a day without asking. A close cannot be undone. The unit tests cover the table; the
+acceptance check is the one that matters, because it asserts on the lane's closes rather than on
+the error message.
+
 **Operational gaps** — passing
 - [x] Voiding: what it does, what it refuses, loyalty reversal, the day-end boundary, the Z-report — `VoidSaleTests`, `VoidAndCashierFlowTests`
 - [x] Logging: entries reach disk, stay on one line, roll by day and by size, prune, never throw — `FileLogTests`

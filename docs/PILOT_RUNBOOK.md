@@ -243,6 +243,10 @@ pos close-day --reprint --id 12      print a duplicate, marked as one
 Leave off `--id` and it takes the most recent. A duplicate says `** REPRINT **` on its face, so it
 cannot be filed as a second day's takings.
 
+**A mistyped option stops the command.** `pos close-day --lst` names the mistake and does nothing —
+it does not fall through to closing the day. That is true of every command, and it means reading a
+report back can never accidentally take one.
+
 ---
 
 ## When something is wrong

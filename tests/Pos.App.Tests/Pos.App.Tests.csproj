@@ -20,6 +20,12 @@
       Tamil rendering tests need a Windows target, and this is the test project that has one.
     -->
     <ProjectReference Include="..\..\src\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
+    <!--
+      The `pos` tool. Referenced so its command line can be tested directly rather than by running
+      the executable and reading its output — the options it accepts decide whether a typo closes
+      a day, and that deserves assertions rather than a shell script.
+    -->
+    <ProjectReference Include="..\..\src\Pos.Diagnostics\Pos.Diagnostics.csproj" />
     <ProjectReference Include="..\Pos.TestSupport\Pos.TestSupport.csproj" />
   </ItemGroup>
 
