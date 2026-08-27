@@ -62,6 +62,8 @@ public class CommandLineTests
     [InlineData("check-db", "--quick")]
     [InlineData("check-db", "--vacuum")]
     [InlineData("dashboard", "--days", "30", "--top", "10", "--out", "dash.html")]
+    [InlineData("dashboard-pin")]
+    [InlineData("dashboard-pin", "--clear")]
     [InlineData("receipt-preview", "--width", "32", "--png", "receipt.png")]
     [InlineData("test-hardware", "--printer", "--drawer", "--scanner", "--scale", "--seconds", "20")]
     public void TheCommandLinesTheRunbookTellsPeopleToTypeAreAccepted(params string[] args)
@@ -126,6 +128,17 @@ public class CommandLineTests
     public void ACommandThatTakesNoOptionsAcceptsNone()
     {
         Assert.Equal("--verbose", CommandLine.UnknownOption(["list-ports", "--verbose"], "list-ports"));
+    }
+
+    /// <summary>
+    /// There is deliberately no --pin. A PIN passed as an option would sit in the shell's history
+    /// and in the process list, where the person it is keeping out can read it.
+    /// </summary>
+    [Fact]
+    public void ThePinCannotBePassedOnTheCommandLine()
+    {
+        Assert.Equal("--pin", CommandLine.UnknownOption(["dashboard", "--pin", "7412"], "dashboard"));
+        Assert.Equal("--pin", CommandLine.UnknownOption(["dashboard-pin", "--pin", "7412"], "dashboard-pin"));
     }
 
     // ---- Not overreaching -------------------------------------------------------------------------

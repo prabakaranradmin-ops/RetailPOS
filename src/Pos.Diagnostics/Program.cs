@@ -495,6 +495,11 @@ switch (command)
 
     case "dashboard":
     {
+        // Turnover, margins, cost prices and best sellers — the figures an owner does not
+        // necessarily want read off the counter screen. Locked only if the shop asked for it.
+        if (!Unlock(settings.Security, log))
+            return 2;
+
         // Read-only, and on its own connection. SQLite in WAL mode lets this run while the till is
         // billing, so a shopkeeper can look at the day's figures from the back room at four o'clock
         // without a cashier noticing.
@@ -520,15 +525,99 @@ switch (command)
 
         File.WriteAllText(outPath, DashboardPage.Render(data, settings.Store.Name), new UTF8Encoding(true));
 
+        // Grouped the way the page itself groups figures, rather than the way this machine happens
+        // to be set up — otherwise the same command prints 2,06,625.29 on one till and 206,625.29
+        // on the next, and the summary disagrees with the page it just wrote.
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
         Console.WriteLine();
-        Console.WriteLine($"  Window        : {days} days to {to:dd MMM yyyy}");
-        Console.WriteLine($"  Bills         : {data.Range.Bills:N0}");
-        Console.WriteLine($"  Net sales     : {data.Range.NetSales:N2}");
-        Console.WriteLine($"  Read in       : {data.Elapsed.TotalMilliseconds:N0} ms");
+        Console.WriteLine($"  Window        : {days} days to {to.ToString("dd MMM yyyy", indian)}");
+        Console.WriteLine($"  Bills         : {data.Range.Bills.ToString("N0", indian)}");
+        Console.WriteLine($"  Net sales     : {data.Range.NetSales.ToString("N2", indian)}");
+        Console.WriteLine($"  Read in       : {data.Elapsed.TotalMilliseconds.ToString("N0", indian)} ms");
         Console.WriteLine();
         Console.WriteLine($"Saved to {outPath}");
 
+        // The lock is on the command, and it cannot follow the page out of it. Saying so is the
+        // difference between an owner who leaves it in the lane folder and one who does not.
+        if (settings.Security.DashboardIsLocked)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  That file is not protected — anyone who can use this computer can");
+            Console.WriteLine("  open it. Use --out to write it somewhere private, and delete it");
+            Console.WriteLine("  when you are done.");
+        }
+        else
+        {
+            Console.WriteLine();
+            Console.WriteLine("  Anyone who can use this computer can run this. To require a PIN:");
+            Console.WriteLine("    pos dashboard-pin");
+        }
+
         log.Info("tool", $"dashboard over {days} days: {data.Range.Bills} bills, read in {data.Elapsed.TotalMilliseconds:N0} ms");
+
+        return 0;
+    }
+
+    case "dashboard-pin":
+    {
+        var clearing = flags.Contains("--clear");
+
+        // Changing or removing the lock requires the current PIN. Without this the lock would be
+        // decorative: anybody shut out by it could simply clear it and run the dashboard.
+        if (settings.Security.DashboardIsLocked && !Unlock(settings.Security, log, "Current PIN: "))
+            return 2;
+
+        if (clearing)
+        {
+            if (!settings.Security.DashboardIsLocked)
+            {
+                Console.WriteLine();
+                Console.WriteLine("The dashboard is not locked, so there is nothing to clear.");
+                return 0;
+            }
+
+            SettingsFile.SetDashboardPin(settingsPath, null);
+            log.Info("tool", "dashboard PIN cleared");
+
+            Console.WriteLine();
+            Console.WriteLine("The dashboard PIN has been removed. Anyone who can use this computer");
+            Console.WriteLine("can now run `pos dashboard`.");
+            return 0;
+        }
+
+        var chosen = ReadSecret("New PIN: ");
+
+        if (chosen is null)
+        {
+            Console.Error.WriteLine("Nothing was entered. The PIN is unchanged.");
+            return 2;
+        }
+
+        if (DashboardLock.Rejection(chosen) is { } why)
+        {
+            Console.Error.WriteLine(why);
+            return 2;
+        }
+
+        // Typed twice because it is never echoed and there is no way to recover it — a mistyped PIN
+        // would lock the owner out of their own figures until they hand-edited settings.json.
+        if (ReadSecret("Again:   ") != chosen)
+        {
+            Console.Error.WriteLine("Those did not match. The PIN is unchanged.");
+            return 2;
+        }
+
+        SettingsFile.SetDashboardPin(settingsPath, DashboardLock.Create(chosen));
+        log.Info("tool", "dashboard PIN set");
+
+        Console.WriteLine();
+        Console.WriteLine($"Set. `pos dashboard` will ask for it from now on, on this lane.");
+        Console.WriteLine();
+        Console.WriteLine("  This keeps somebody from idly reading the shop's figures. It is not a");
+        Console.WriteLine("  safe: whoever can log in to this computer can still open pos.db with");
+        Console.WriteLine("  other software. Real separation needs a second Windows account —");
+        Console.WriteLine("  SETTINGS.md explains how.");
 
         return 0;
     }
@@ -646,6 +735,105 @@ static ITextRasterizer? CreateRasterizer(PosSettings settings, FileLog log)
     }
 }
 
+/// <summary>
+/// Asks for the dashboard PIN, if this lane has one. True when the caller may proceed.
+/// </summary>
+/// <remarks>
+/// Three attempts, then the command stops. A new run starts a fresh three, which is why the count
+/// is not the real protection — the cost of each guess is (see <see cref="DashboardLock"/>). Three
+/// is here so somebody standing at the counter cannot sit and try.
+/// </remarks>
+static bool Unlock(SecuritySettings security, FileLog log, string prompt = "PIN: ")
+{
+    if (!security.DashboardIsLocked)
+        return true;
+
+    const int attempts = 3;
+
+    for (var attempt = 1; attempt <= attempts; attempt++)
+    {
+        var entered = ReadSecret(prompt);
+
+        // No console and nothing piped in. Refusing beats waiting forever for a person who is not
+        // there — this runs from scheduled scripts as well as from a keyboard.
+        if (entered is null)
+        {
+            Console.Error.WriteLine("The dashboard needs a PIN, and there was nothing to read it from.");
+            return false;
+        }
+
+        if (DashboardLock.Verify(entered, security.DashboardPin))
+            return true;
+
+        log.Warn("tool", $"dashboard PIN refused (attempt {attempt} of {attempts})");
+
+        if (attempt < attempts)
+            Console.Error.WriteLine($"That is not the PIN. {attempts - attempt} left.");
+    }
+
+    Console.Error.WriteLine("That is not the PIN.");
+    return false;
+}
+
+/// <summary>
+/// Reads a line without echoing it. Null when there was nothing to read.
+/// </summary>
+static string? ReadSecret(string prompt)
+{
+    Console.Write(prompt);
+
+    // Piped or redirected input has no console to mask, and ReadKey would throw. Reading the line
+    // plainly is right here: what protects a piped PIN is the pipe, not this.
+    if (Console.IsInputRedirected)
+    {
+        var piped = Console.ReadLine();
+        Console.WriteLine();
+        return string.IsNullOrEmpty(piped) ? null : piped;
+    }
+
+    var typed = new System.Text.StringBuilder();
+
+    while (true)
+    {
+        ConsoleKeyInfo key;
+
+        try
+        {
+            key = Console.ReadKey(intercept: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // No console to read keys from — a scheduled task, or a service. Nothing is going to
+            // arrive, so say so rather than looping on an exception forever.
+            Console.WriteLine();
+            return null;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.Enter:
+                Console.WriteLine();
+                return typed.Length == 0 ? null : typed.ToString();
+
+            case ConsoleKey.Escape:
+                Console.WriteLine();
+                return null;
+
+            case ConsoleKey.Backspace:
+                if (typed.Length > 0)
+                    typed.Length--;
+                break;
+
+            default:
+                // Control characters are not PIN material; anything printable is, including
+                // letters and punctuation, because nothing here requires it to be digits.
+                if (!char.IsControl(key.KeyChar))
+                    typed.Append(key.KeyChar);
+                break;
+        }
+    }
+}
+
 static string Describe(CheckResult result) => result switch
 {
     CheckResult.Passed => "passed",
@@ -709,6 +897,13 @@ static void WriteHelp()
               The shop's figures as one HTML page: takings, the hourly rush,
               what sells, how customers paid, and GST by slab. Reads the books
               without writing to them, so it can be run while the till is busy.
+              Asks for a PIN first if one has been set.
+
+          pos dashboard-pin [--clear]
+              Require a PIN before the dashboard will run, so a cashier cannot
+              read the shop's turnover and margins. Asks for the current PIN
+              before changing or clearing one. Keeps somebody out of the
+              command; it does not encrypt the database — see SETTINGS.md.
               Defaults to the last 30 days.
 
           pos receipt-preview [--width N] [--png <path>]

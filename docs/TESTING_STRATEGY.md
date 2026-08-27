@@ -222,6 +222,23 @@ window.
 printed sheet was the only way to see a past day's figures. A printer that jams at closing time is
 not a rare event, and a shop should not lose a day's takings to one.
 
+**The dashboard is behind a PIN when the shop wants one** — passing
+- [x] The right PIN opens it, a wrong one does not, case matters — `DashboardLockTests`
+- [x] The PIN is never stored; the same PIN stored twice looks nothing alike — `DashboardLockTests`
+- [x] A damaged or tampered credential refuses rather than failing open — `DashboardLockTests`
+- [x] Obvious PINs (`0000`, `1234`, `4321`) are refused, near-misses (`1235`) are not — `DashboardLockTests`
+- [x] Setting a PIN disturbs nothing else in settings.json, BOM included — `DashboardLockTests`
+- [x] Settings written before this existed still load, unlocked — `DashboardLockTests`
+- [x] There is no `--pin` option to leak one into shell history — `CommandLineTests`
+- [x] End to end: right PIN writes the page, wrong PIN writes nothing — acceptance
+- [x] End to end: no PIN supplied is refused rather than waited on — acceptance
+- [x] End to end: the PIN cannot be cleared without knowing it — acceptance
+
+**What these tests deliberately do not claim.** The lock keeps somebody out of the command. It does
+not encrypt `pos.db`, and it cannot protect a `dashboard.html` once written. On a shared Windows
+login both are readable with other software, and no test here should be read as saying otherwise —
+the real separation is a second Windows account, which is a deployment matter (`SETTINGS.md`).
+
 **The command line refuses what it does not understand** — passing
 - [x] A mistyped close-day option is refused rather than treated as a close — `CommandLineTests`
 - [x] A typo alongside `--yes` is still refused — `CommandLineTests`

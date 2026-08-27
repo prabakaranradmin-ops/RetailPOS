@@ -160,6 +160,61 @@ The defaults are the reference values from the SRS: redeem up to 30% of a bill, 
 50 paise, and one point is earned per ₹50 of the **net** bill after any redemption. Change these
 only with whoever signs off the store's accounts — they affect what customers are owed.
 
+## Keeping the dashboard from the cashier
+
+`pos dashboard` shows turnover, margins, cost prices and best sellers. On a lane where a cashier
+uses the same computer, you can put a PIN in front of it:
+
+```
+pos dashboard-pin              set or change it — asks for the current one first
+pos dashboard-pin --clear      remove it
+```
+
+It asks twice, never echoes what you type, and stores a salted hash — the PIN itself is not written
+anywhere, so there is no file to read it out of and no way to recover it if you forget it. At least
+4 characters, and it refuses the obvious ones (`0000`, `1234`) because a lock everybody guesses is
+worse than no lock: you believe the figures are private when they are not.
+
+There is deliberately no `--pin` option. A PIN passed on the command line sits in the shell's
+history and in the process list, where the person it is keeping out can read it.
+
+In `settings.json` it looks like this, and it is the only thing in the file worth protecting:
+
+```json
+"security": {
+  "dashboardPin": { "salt": "…", "hash": "…", "iterations": 600000 }
+}
+```
+
+### What this does and does not protect
+
+**It stops a cashier reading the shop's figures out of the till.** That is the realistic risk at a
+counter, and this removes it.
+
+**It is not a safe.** If the cashier logs in to Windows as the same user that runs the till, they
+can open `pos.db` with any SQLite tool and read everything — sales, costs, margins — and none of
+this code is involved. The same goes for any `dashboard.html` left lying about: the lock is on the
+command, and it cannot follow the page out of it. Write the page somewhere private with `--out`,
+and delete it when you are done.
+
+**Real separation is a Windows job, not a settings job.** If the figures genuinely must be out of
+reach:
+
+1. Give the owner their own Windows account, and the cashier a separate one.
+2. Install RetailPOS under the cashier's account for billing. The lane's data lives in that
+   account's `%LOCALAPPDATA%`, so it is already invisible to other non-administrator accounts.
+3. Run the dashboard from the owner's account against a **copy** of the database — not against the
+   live lane. Take one with `pos backup-db`, then put the copy in a folder both accounts can reach
+   (a USB stick will do), **renamed to `pos.db`**, with the lane's `settings.json` beside it. Point
+   the dashboard at that folder:
+
+   ```
+   pos dashboard --data E:\books
+   ```
+
+That costs a login at shift change, which is why most single-outlet shops will not do it. The PIN
+is the proportionate measure for the ones that do not.
+
 ## A warning about laneId
 
 The invoice number is `{laneId}-{year}-{sequence}`, and the lane prefix is the only thing keeping

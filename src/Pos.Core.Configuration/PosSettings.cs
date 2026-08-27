@@ -87,6 +87,13 @@ public sealed class PosSettings
     [JsonPropertyName("hardware")]
     public HardwareSettings Hardware { get; set; } = new();
 
+    /// <summary>
+    /// Who may see what. Empty by default: a one-owner shop should not have to unlock its own
+    /// figures, and a lock nobody asked for is a lock somebody writes on a sticky note.
+    /// </summary>
+    [JsonPropertyName("security")]
+    public SecuritySettings Security { get; set; } = new();
+
     public TimeSpan SearchDebounce => TimeSpan.FromMilliseconds(SearchDebounceMs);
 
     public TimeSpan ScannerMaxKeystrokeGap => TimeSpan.FromMilliseconds(ScannerMaxKeystrokeGapMs);

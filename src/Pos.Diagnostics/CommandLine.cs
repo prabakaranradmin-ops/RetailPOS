@@ -34,6 +34,7 @@ public static class CommandLine
         "void-invoice" => (["--yes"], ["--invoice", "--reason"]),
         "check-db" => (["--quick", "--vacuum"], []),
         "dashboard" => ([], ["--days", "--top", "--out"]),
+        "dashboard-pin" => (["--clear"], []),
         "receipt-preview" => ([], ["--width", "--png"]),
         "test-hardware" => (["--printer", "--drawer", "--scanner", "--scale"], ["--seconds"]),
         _ => ([], []),

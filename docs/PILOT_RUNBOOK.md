@@ -249,6 +249,42 @@ report back can never accidentally take one.
 
 ---
 
+## The dashboard — and keeping it to yourself
+
+The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, GST by
+slab, and — if the catalogue has cost prices — margins.
+
+```
+pos dashboard                       last 30 days, saved next to the database
+pos dashboard --days 90             a longer window
+pos dashboard --out D:\books.html   somewhere else
+```
+
+It **reads without writing**, so it can be run in the middle of the afternoon while the till is
+busy. It is not part of the billing screen on purpose: turnover and margins are not something to
+keep one keystroke away from a customer.
+
+**If a cashier uses this computer**, put a PIN in front of it:
+
+```
+pos dashboard-pin              set or change it
+pos dashboard-pin --clear      remove it
+```
+
+It asks twice, never shows what you type, and stores only a scrambled form of it — **there is no way
+to recover a forgotten PIN**, so pick something you will remember. Changing or clearing it asks for
+the current one first, so being locked out cannot be undone by whoever is locked out.
+
+Two things this does not do, and it is worth knowing which:
+
+- **The saved page is not protected.** The lock is on the command, not on the file it writes. Use
+  `--out` to put it somewhere private, and delete it when you are done.
+- **The database is not encrypted.** Somebody who knows their way around a computer can read
+  `pos.db` directly. If the figures genuinely must be out of reach, that needs a separate Windows
+  account for the owner — `SETTINGS.md` explains how.
+
+---
+
 ## When something is wrong
 
 | What you see | Do this |

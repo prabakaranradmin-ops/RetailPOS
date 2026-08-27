@@ -139,14 +139,28 @@ function Add-Result {
 
 # Runs pos.exe against the run's own data directory and captures everything it said.
 function Invoke-Pos {
-    param([Parameter(Mandatory)] [string[]] $Arguments)
+    param(
+        [Parameter(Mandatory)] [string[]] $Arguments,
+        # Lines to feed the tool on standard input, for the commands that ask something. An empty
+        # array still redirects, from an empty file — which is how "asked, and nothing answered"
+        # is tested without the harness sitting waiting for a keypress.
+        [string[]] $StdIn
+    )
 
     $stdout = Join-Path $workspace 'stdout.txt'
     $stderr = Join-Path $workspace 'stderr.txt'
     $all = @($Arguments) + @('--data', $workspace)
 
+    $redirect = @{}
+
+    if ($PSBoundParameters.ContainsKey('StdIn')) {
+        $stdinFile = Join-Path $workspace 'stdin.txt'
+        Set-Content -Path $stdinFile -Value ($StdIn -join "`n") -Encoding ascii -NoNewline
+        $redirect['RedirectStandardInput'] = $stdinFile
+    }
+
     $process = Start-Process -FilePath $pos -ArgumentList $all -NoNewWindow -Wait -PassThru `
-        -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        -RedirectStandardOutput $stdout -RedirectStandardError $stderr @redirect
 
     # -Encoding UTF8, not the default. Windows PowerShell reads a file in the machine's ANSI code
     # page unless told otherwise, so a Tamil line in the tool's output would arrive here as
@@ -276,6 +290,40 @@ $r = Invoke-Pos @('list-ports')
 Add-Result -Kind Positive -Feature 'Hardware' -Name 'Serial ports can be listed' `
     -Expected 'exit 0' -Actual (Short $r.Output) -Passed ($r.ExitCode -eq 0)
 
+# The dashboard, and the lock in front of it. The order matters: the unlocked run has to happen
+# before a PIN is set, and every run after that has to get past one.
+$dash = Join-Path $workspace 'dashboard.html'
+
+$r = Invoke-Pos @('dashboard', '--days', '30', '--out', $dash)
+Add-Result -Kind Positive -Feature 'Dashboard' -Name 'The dashboard renders from the books' `
+    -Expected 'exit 0, an HTML page written' -Actual (Short $r.Output 5) `
+    -Passed (($r.ExitCode -eq 0) -and (Test-Path $dash)) `
+    -Detail 'Reads without writing to the books, so it can run while the till is billing.'
+
+Remove-Item $dash -Force -ErrorAction SilentlyContinue
+
+$r = Invoke-Pos @('dashboard-pin') -StdIn @('Maligai26', 'Maligai26')
+Add-Result -Kind Positive -Feature 'Dashboard' -Name 'A PIN can be put in front of the dashboard' `
+    -Expected 'exit 0, the PIN stored as a hash' -Actual (Short $r.Output 3) `
+    -Passed ($r.ExitCode -eq 0)
+
+# The PIN itself must never be in the file. If this fails, the lock is worse than useless: it says
+# the figures are private while writing the key next to the lock.
+$settingsText = if (Test-Path (Join-Path $workspace 'settings.json')) {
+    Get-Content (Join-Path $workspace 'settings.json') -Raw -Encoding UTF8
+} else { '' }
+Add-Result -Kind Positive -Feature 'Dashboard' -Name 'The PIN is stored as a hash, never as itself' `
+    -Expected 'settings.json contains a salt and hash, not the PIN' `
+    -Actual "contains 'Maligai26': $($settingsText -match 'Maligai26')" `
+    -Passed (($settingsText -notmatch 'Maligai26') -and ($settingsText -match 'dashboardPin'))
+
+$r = Invoke-Pos @('dashboard', '--out', $dash) -StdIn @('Maligai26')
+Add-Result -Kind Positive -Feature 'Dashboard' -Name 'The right PIN opens it' `
+    -Expected 'exit 0, the page written' -Actual (Short $r.Output 4) `
+    -Passed (($r.ExitCode -eq 0) -and (Test-Path $dash))
+
+Remove-Item $dash -Force -ErrorAction SilentlyContinue
+
 # --------------------------------------------------------------------------------------------
 # 2. Command-line features — negative
 # --------------------------------------------------------------------------------------------
@@ -313,6 +361,26 @@ Add-Result -Kind Negative -Feature 'Void' -Name 'Voiding an invoice that does no
 # ignored, and close-day went on to do what it does with no options — with --yes alongside meaning
 # it did not stop to ask. A close cannot be undone, so the assertion here is not merely that the
 # command complained: it is that the lane's closes are the same afterwards as before.
+# The lock, from the other side. Each of these must leave no dashboard behind: a refusal that still
+# writes the page would hand over exactly what it claimed to withhold.
+$r = Invoke-Pos @('dashboard', '--out', $dash) -StdIn @('9999')
+Add-Result -Kind Negative -Feature 'Dashboard' -Name 'A wrong PIN is refused, and writes nothing' `
+    -Expected 'non-zero exit, no page written' -Actual (Short $r.Output 3) `
+    -Passed (($r.ExitCode -ne 0) -and -not (Test-Path $dash))
+
+$r = Invoke-Pos @('dashboard', '--out', $dash) -StdIn @()
+Add-Result -Kind Negative -Feature 'Dashboard' -Name 'No PIN at all is refused rather than waited on' `
+    -Expected 'non-zero exit, no page written, no hanging' -Actual (Short $r.Output 3) `
+    -Passed (($r.ExitCode -ne 0) -and -not (Test-Path $dash)) `
+    -Detail 'A scheduled run with no console must fail, not sit waiting for somebody to type.'
+
+# Without this the lock would be decorative — anybody shut out could clear it and walk in.
+$r = Invoke-Pos @('dashboard-pin', '--clear') -StdIn @('9999')
+$stillLocked = (Invoke-Pos @('dashboard', '--out', $dash) -StdIn @()).ExitCode -ne 0
+Add-Result -Kind Negative -Feature 'Dashboard' -Name 'The PIN cannot be cleared without knowing it' `
+    -Expected 'non-zero exit, and the dashboard still locked afterwards' -Actual (Short $r.Output 3) `
+    -Passed (($r.ExitCode -ne 0) -and $stillLocked)
+
 $closesBefore = (Invoke-Pos @('close-day', '--list')).Output -join "`n"
 $r = Invoke-Pos @('close-day', '--yes', '--lst')
 $closesAfter = (Invoke-Pos @('close-day', '--list')).Output -join "`n"
