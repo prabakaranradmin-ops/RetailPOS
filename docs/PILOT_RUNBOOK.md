@@ -231,6 +231,18 @@ lost file costs.
 Keep the printed Z-reports in order. They are the day's takings as the till recorded them, and the
 tax breakdown by slab is the shape a GST return wants.
 
+**If a sheet goes missing, or the printer jammed at closing**, the report itself is not lost — every
+close is stored:
+
+```
+pos close-day --list                 the reports this lane has taken
+pos close-day --show --id 12         read one back on screen, no paper
+pos close-day --reprint --id 12      print a duplicate, marked as one
+```
+
+Leave off `--id` and it takes the most recent. A duplicate says `** REPRINT **` on its face, so it
+cannot be filed as a second day's takings.
+
 ---
 
 ## When something is wrong

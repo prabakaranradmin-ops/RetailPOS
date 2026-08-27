@@ -246,6 +246,15 @@ A sale belongs to exactly one Z-report: invoices are stamped with the close that
 rather than being picked up by a time range, so closing twice is harmless and an old report stays
 reproducible.
 
+Every close is kept, so a lost sheet or a printer that jammed at closing time does not put a day's
+takings out of reach:
+
+```
+pos close-day --list                 the reports this lane has taken
+pos close-day --show [--id N]        read one back on screen, no paper
+pos close-day --reprint [--id N]     print a duplicate, marked as one
+```
+
 ## Deploying to a lane
 
 ```

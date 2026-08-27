@@ -183,6 +183,84 @@ switch (command)
         var closes = new DayCloseRepository(database, heldBills);
         var composer = new ZReportComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage);
 
+        // Looking at a report that has already been taken, rather than taking a new one. Every
+        // close is stored — the figures, the tenders, who was on the till — and until these three
+        // existed the printed sheet was the only way to see any of it. A jammed printer at closing
+        // time, or a sheet that goes missing, should not put a day's takings out of reach.
+        if (flags.Contains("--list"))
+        {
+            var entries = closes.List(settings.LaneId, ParseIntOption(args, "--limit") ?? 30);
+
+            Console.WriteLine();
+
+            if (entries.Count == 0)
+            {
+                Console.WriteLine($"Lane {settings.LaneId} has not closed a day yet.");
+                return 0;
+            }
+
+            Console.WriteLine($"  {"No",5}  {"Closed",-17}  {"Bills",7}  {"Net sales",13}  {"Cash",13}");
+
+            // Grouped the way the report itself groups, not the way this machine's locale would.
+            // A listing that says 2,06,625.29 beside a report that says 206,625.29 makes somebody
+            // stop and check whether they are looking at the same figure.
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+            foreach (var entry in entries)
+            {
+                Console.WriteLine(string.Format(invariant,
+                    "  {0,5}  {1:dd-MM-yyyy HH:mm}  {2,7:N0}  {3,13:N2}  {4,13:N2}",
+                    entry.Id, entry.ClosedAt, entry.InvoiceCount, entry.NetSales, entry.CashExpected));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  pos close-day --show --id <no>      read one on screen");
+            Console.WriteLine("  pos close-day --reprint --id <no>   print a duplicate");
+            return 0;
+        }
+
+        if (flags.Contains("--show") || flags.Contains("--reprint"))
+        {
+            var wanted = ParseIntOption(args, "--id");
+
+            var report = wanted is { } id
+                ? closes.FindById(id)
+                : closes.FindLatest(settings.LaneId);
+
+            if (report is null)
+            {
+                Console.Error.WriteLine(wanted is { } missing
+                    ? $"There is no day-end report numbered {missing}."
+                    : $"Lane {settings.LaneId} has not closed a day yet.");
+                return 2;
+            }
+
+            var isReprint = flags.Contains("--reprint");
+
+            Console.WriteLine();
+            Console.WriteLine(composer.Compose(report, isReprint).ToPlainText());
+
+            if (!isReprint)
+                return 0;
+
+            var toPrinter = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
+
+            if (!toPrinter.IsConfigured)
+            {
+                Console.Error.WriteLine("This lane has no printer configured, so there is nothing to print to.");
+                return 2;
+            }
+
+            var duplicate = toPrinter.Print(composer.Compose(report, isReprint: true).ToEscPos(raster: toPrinter.Raster));
+
+            Console.WriteLine(duplicate.Succeeded
+                ? $"Duplicate of report {report.Id} printed, marked as a reprint."
+                : $"Did not print: {duplicate.Detail}");
+
+            log.Info("tool", $"reprinted day-end report {report.Id}");
+            return duplicate.Succeeded ? 0 : 1;
+        }
+
         // Show it before committing to it. A Z-report cannot be taken back.
         var preview = closes.Preview(settings.LaneId, DateTimeOffset.Now);
 
@@ -635,6 +713,16 @@ static void WriteHelp()
               rejected import leaves the catalogue exactly as it was.
               --update changes items already in the catalogue instead of
               rejecting them, which is what a price revision needs.
+
+          pos close-day --list [--limit N]
+              The day-end reports this lane has taken, most recent first.
+
+          pos close-day --show [--id <no>]
+              Reads one back on screen, no paper. Defaults to the last one.
+
+          pos close-day --reprint [--id <no>]
+              Prints a duplicate, marked as a reprint. For a sheet that was
+              lost, or a printer that jammed at closing time.
 
           pos close-day [--preview] [--yes] [--force]
               Prints the lane's Z-report and closes the day. Shows the report

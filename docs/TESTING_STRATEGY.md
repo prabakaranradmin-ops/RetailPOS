@@ -211,6 +211,17 @@ somebody runs rather than something a customer waits at. Migration 007 is what h
 its partial index the aggregates degrade with the size of the history rather than the size of the
 window.
 
+**Day-close history** — passing
+- [x] The listing, most recent first, per lane, with the cap clamped — `DayCloseHistoryTests`
+- [x] A stored report comes back with the figures it was taken with — `DayCloseHistoryTests`
+- [x] A duplicate is marked as one and carries the original figures — `DayCloseHistoryTests`
+- [x] Reprinting prints and closes nothing again — `DayCloseHistoryTests`
+- [x] A Tamil lane's duplicate is in Tamil — `DayCloseHistoryTests`
+
+**Why this was worth adding.** Every close was already stored and none of it was reachable: the
+printed sheet was the only way to see a past day's figures. A printer that jams at closing time is
+not a rare event, and a shop should not lose a day's takings to one.
+
 **Operational gaps** — passing
 - [x] Voiding: what it does, what it refuses, loyalty reversal, the day-end boundary, the Z-report — `VoidSaleTests`, `VoidAndCashierFlowTests`
 - [x] Logging: entries reach disk, stay on one line, roll by day and by size, prune, never throw — `FileLogTests`

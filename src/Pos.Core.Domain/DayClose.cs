@@ -110,4 +110,23 @@ public interface IDayCloseStore
     DayCloseSummary? FindLatest(string laneId);
 
     DayCloseSummary? FindById(long id);
+
+    /// <summary>
+    /// The closes this lane has taken, most recent first.
+    /// </summary>
+    /// <remarks>
+    /// A lighter row than the full report, deliberately. A listing wants a date, a count and a
+    /// figure; reading the tender split, the tax slabs and the cashier breakdown for thirty closes
+    /// in order to print thirty lines is work nobody asked for.
+    /// </remarks>
+    IReadOnlyList<DayCloseEntry> List(string laneId, int limit = 30);
 }
+
+/// <summary>One line of the day-close listing: enough to find the report you meant.</summary>
+public sealed record DayCloseEntry(
+    long Id,
+    DateTimeOffset ClosedAt,
+    DateTimeOffset? OpenedAt,
+    int InvoiceCount,
+    decimal NetSales,
+    decimal CashExpected);

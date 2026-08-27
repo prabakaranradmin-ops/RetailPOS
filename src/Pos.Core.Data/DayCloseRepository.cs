@@ -101,6 +101,39 @@ public sealed class DayCloseRepository : IDayCloseStore
         return Read(connection, id);
     }
 
+    public IReadOnlyList<DayCloseEntry> List(string laneId, int limit = 30)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, closed_at, opened_at, invoice_count, net_sales, cash_expected
+            FROM day_closes
+            WHERE lane_id = $lane
+            ORDER BY closed_at DESC, id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$lane", laneId);
+        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 3650));
+
+        var entries = new List<DayCloseEntry>();
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            entries.Add(new DayCloseEntry(
+                reader.GetInt64(0),
+                reader.GetDateTimeOffset(1),
+                reader.IsDBNull(2) ? null : reader.GetDateTimeOffset(2),
+                reader.GetInt32(3),
+                reader.GetDecimal(4),
+                reader.GetDecimal(5)));
+        }
+
+        return entries;
+    }
+
     // ---- Computing -----------------------------------------------------------------------------
 
     private DayCloseSummary Compute(
