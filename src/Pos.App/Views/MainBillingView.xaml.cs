@@ -46,7 +46,12 @@ public partial class MainBillingView : Window
 
         DataContext = viewModel;
         Title = $"RetailPOS — Billing — lane {settings.LaneId}";
-        KeyHints.Text = BuildKeyHints(keymap);
+        KeyPills.ItemsSource = BuildKeyPills(keymap);
+
+        // The strip along the top. The shop's own name rather than the product's, because the
+        // person reading it works there and already knows what the software is called.
+        ShopName.Text = string.IsNullOrWhiteSpace(settings.Store.Name) ? "—" : settings.Store.Name;
+        LaneLabel.Text = $"Lane {settings.LaneId}";
 
         ApplyTaxMode();
 
@@ -101,19 +106,21 @@ public partial class MainBillingView : Window
     /// The columns are collapsed rather than removed so their widths and order stay exactly as
     /// declared, and so the grid on a GST lane is untouched by any of this.
     /// </remarks>
+    /// <summary>
+    /// What the two builds show differently on this screen, which is now very little.
+    /// </summary>
+    /// <remarks>
+    /// The grid no longer carries per-line tax at all, and the bill card shows only the discount,
+    /// so there are no columns to hide and no figures to suppress. What is left is telling the
+    /// cashier which kind of bill this lane issues — which matters, because it decides what comes
+    /// out of the printer.
+    /// </remarks>
     private void ApplyTaxMode()
     {
         var showing = _viewModel.ShowsTax;
-        var visibility = showing ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var column in new[] { CgstColumn, SgstColumn, IgstColumn, TaxColumn })
-            column.Visibility = visibility;
-
-        TaxTotalsBlock.Visibility = visibility;
-
-        // On a bill of supply nothing was taxed, so there is no taxable value — it is just what the
-        // bill comes to.
-        TaxableLabel.Text = showing ? "Taxable" : "Subtotal";
+        BuildChip.Text = showing ? "GST" : "NO TAX";
+        TaxNote.Text = showing ? "Incl. all taxes" : "Bill of supply — no GST charged";
     }
 
     /// <summary>
@@ -211,35 +218,43 @@ public partial class MainBillingView : Window
         SearchBox.CaretIndex = SearchBox.Text.Length;
     }
 
-    private static string BuildKeyHints(Keymap keymap)
+    /// <summary>One key as the dock renders it.</summary>
+    public sealed record KeyPill(string Key, string Label);
+
+    /// <summary>
+    /// The keys along the bottom, read off the live keymap so a rebound key is described correctly.
+    /// </summary>
+    /// <remarks>
+    /// Pay is deliberately absent: it has its own pill on the right of the dock, apart from the
+    /// keys that only move things around, because it is the one that takes money.
+    /// </remarks>
+    private static List<KeyPill> BuildKeyPills(Keymap keymap)
     {
-        // Read the hints off the live keymap rather than hardcoding them, so a rebound key is
-        // described correctly on screen.
         (PosAction Action, string Label)[] shown =
         [
-            (PosAction.FocusSearch, "search"),
-            (PosAction.EditQuantity, "qty"),
-            (PosAction.EditDiscount, "discount"),
-            (PosAction.DeleteLine, "delete"),
-            (PosAction.HoldBill, "hold"),
-            (PosAction.RecallBill, "recall"),
-            (PosAction.FindCustomer, "customer"),
-            (PosAction.Tender, "pay"),
-            (PosAction.ReprintInvoice, "reprint"),
-            (PosAction.NewBill, "new"),
-            (PosAction.CloseDay, "close day"),
+            (PosAction.FocusSearch, "Search"),
+            (PosAction.EditQuantity, "Qty"),
+            (PosAction.EditDiscount, "Discount"),
+            (PosAction.DeleteLine, "Remove"),
+            (PosAction.HoldBill, "Hold"),
+            (PosAction.RecallBill, "Recall"),
+            (PosAction.FindCustomer, "Customer"),
+            (PosAction.OwnerView, "Owner"),
+            (PosAction.ReprintInvoice, "Reprint"),
+            (PosAction.NewBill, "New"),
+            (PosAction.CloseDay, "Close day"),
         ];
 
-        var parts = new List<string>(shown.Length);
+        var pills = new List<KeyPill>(shown.Length);
 
         foreach (var (action, label) in shown)
         {
             var gesture = keymap.GesturesFor(action).FirstOrDefault();
 
             if (gesture != default)
-                parts.Add($"{gesture} {label}");
+                pills.Add(new KeyPill(gesture.ToString(), label));
         }
 
-        return string.Join("   ", parts);
+        return pills;
     }
 }

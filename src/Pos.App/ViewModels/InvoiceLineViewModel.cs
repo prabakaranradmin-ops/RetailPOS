@@ -1,3 +1,4 @@
+using System.Globalization;
 using Pos.Core.Domain;
 
 namespace Pos.App.ViewModels;
@@ -30,6 +31,29 @@ public sealed class InvoiceLineViewModel(InvoiceLine line) : ObservableObject
     public decimal Mrp => Line.Mrp;
     public decimal UnitRateExclTax => Line.UnitRateExclTax;
     public decimal Discount => Line.Discount;
+
+    /// <summary>
+    /// Money off, or a dash. A column of 0.00 reads as a figure worth checking; a dash reads as
+    /// nothing to check, which is what it is on most lines of most bills.
+    /// </summary>
+    public string DiscountLabel => Line.Discount > 0m
+        ? Line.Discount.ToString("N2", CultureInfo.InvariantCulture)
+        : "—";
+
+    /// <summary>
+    /// Where this line sits on the bill, so a cashier and a customer can point at the same row.
+    /// </summary>
+    /// <remarks>
+    /// Set by the view model that owns the collection rather than read off the domain line, which
+    /// has no idea what position it holds and should not acquire one.
+    /// </remarks>
+    public int LineNumber
+    {
+        get => _lineNumber;
+        set => Set(ref _lineNumber, value);
+    }
+
+    private int _lineNumber;
 
     public decimal CgstRate => Line.CgstRate;
     public decimal SgstRate => Line.SgstRate;

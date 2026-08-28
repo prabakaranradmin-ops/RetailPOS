@@ -4,13 +4,27 @@
   <Application.Resources>
 
     <!-- High contrast on a bright shop floor, and legible at arm's length. -->
-    <SolidColorBrush x:Key="Surface" Color="#FF101418" />
-    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF1A2027" />
-    <SolidColorBrush x:Key="Ink" Color="#FFF2F5F8" />
-    <SolidColorBrush x:Key="InkMuted" Color="#FF93A1B0" />
-    <SolidColorBrush x:Key="Accent" Color="#FF3FA9F5" />
-    <SolidColorBrush x:Key="Positive" Color="#FF4BD07A" />
-    <SolidColorBrush x:Key="Line" Color="#FF2A333D" />
+    <SolidColorBrush x:Key="Surface" Color="#FF0A0D13" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF111722" />
+    <SolidColorBrush x:Key="SurfaceHeader" Color="#FF141C2B" />
+    <SolidColorBrush x:Key="Ink" Color="#FFF8FAFC" />
+    <SolidColorBrush x:Key="InkMuted" Color="#FF94A3B8" />
+    <SolidColorBrush x:Key="InkDim" Color="#FF64748B" />
+    <SolidColorBrush x:Key="Accent" Color="#FF38BDF8" />
+    <SolidColorBrush x:Key="Positive" Color="#FF10B981" />
+    <SolidColorBrush x:Key="Negative" Color="#FFF43F5E" />
+    <SolidColorBrush x:Key="Line" Color="#FF232B38" />
+
+    <!-- The row a scan just landed on, and the tint that separates one row from the next. -->
+    <SolidColorBrush x:Key="RowActive" Color="#FF16283A" />
+    <SolidColorBrush x:Key="RowAlt" Color="#FF141A25" />
+
+    <!--
+      Figures use a monospaced face so a column of them lines up on the decimal point and a digit
+      never shifts as the value changes. Segoe UI and Cascadia Mono are both on every Windows the
+      till runs on, so nothing has to be shipped or installed for this to render.
+    -->
+    <FontFamily x:Key="FigureFont">Cascadia Mono, Consolas, Courier New</FontFamily>
 
     <Style TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource Ink}" />
@@ -52,10 +66,45 @@
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsSelected" Value="True">
-          <Setter Property="Background" Value="{StaticResource Accent}" />
-          <Setter Property="Foreground" Value="#FF06121C" />
+          <!--
+            A tint, not a solid fill.
+
+            The selected row used to be painted solid accent with dark text. That worked for the
+            columns set in plain ink and ruined the ones deliberately set quiet — the HSN and the
+            barcode kept their muted grey and went nearly invisible against bright blue. A tint
+            leaves every column the colour it was chosen to be and still says which row is current.
+          -->
+          <Setter Property="Background" Value="{StaticResource RowActive}" />
         </Trigger>
       </Style.Triggers>
+    </Style>
+
+    <!--
+      The side panel's sections. The bill grid has a heading row that says what each column is; the
+      panel beside it was a bare list of numbers, so the same figures were harder to find there than
+      in the grid. These give it the same structure.
+    -->
+    <Style x:Key="SectionHeading" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,1,10,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Right-aligned and tabular, so a column of figures lines up on the decimal point. -->
+    <Style x:Key="FieldValue" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Margin" Value="0,1,0,1" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <Style TargetType="ListBoxItem">

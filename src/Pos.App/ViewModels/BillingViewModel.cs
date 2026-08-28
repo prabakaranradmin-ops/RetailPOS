@@ -5,6 +5,7 @@ using Pos.Core.Data;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Drawer;
 using Pos.Core.Hardware.Printing;
+using Pos.Core.Loyalty;
 
 namespace Pos.App.ViewModels;
 
@@ -123,6 +124,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         _classifier = new ScannerInputClassifier(clock, maxKeystrokeGap);
         _debouncer = new SearchDebouncer(scheduler, OnDebounceElapsed, debounceWindow);
 
+        Lines.CollectionChanged += (_, _) => Renumber();
+
         RefreshHeldBills();
     }
 
@@ -175,6 +178,20 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     // ---- Grid --------------------------------------------------------------------------------
 
     public ObservableCollection<InvoiceLineViewModel> Lines { get; } = [];
+
+    /// <summary>
+    /// Numbers the rows 1..n after any change to the bill.
+    /// </summary>
+    /// <remarks>
+    /// Done by watching the collection rather than at each of the six places that add or remove a
+    /// line. A row number that is right in five of those places and stale in the sixth is worse
+    /// than none at all, because the one it is wrong on is the row somebody is pointing at.
+    /// </remarks>
+    private void Renumber()
+    {
+        for (var i = 0; i < Lines.Count; i++)
+            Lines[i].LineNumber = i + 1;
+    }
 
     public int SelectedLineIndex
     {
@@ -349,6 +366,90 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     }
 
     public string LastInvoiceNo => _lastSale?.Invoice.InvoiceNo ?? string.Empty;
+
+    // ---- What the side panel shows ------------------------------------------------------------
+
+    /// <summary>
+    /// The bill's own number, or what to say instead while it has none.
+    /// </summary>
+    /// <remarks>
+    /// A bill on the screen has not got a number yet, and this deliberately does not invent one.
+    /// The number is minted inside the same transaction that writes the invoice, which is what
+    /// stops an abandoned sale burning one and leaving a gap in a run somebody has to explain to an
+    /// auditor. Showing "the next number" here would be showing a number that may never be issued.
+    /// </remarks>
+    public string InvoiceNoLabel => _bill.IsEmpty && _lastSale is not null
+        ? _lastSale.Invoice.InvoiceNo
+        : "issued when paid";
+
+    /// <summary>True while the number shown belongs to the sale just settled rather than this one.</summary>
+    public bool ShowingLastInvoiceNo => _bill.IsEmpty && _lastSale is not null;
+
+    /// <summary>Today's date, for the panel.</summary>
+    /// <remarks>
+    /// Not the injected <see cref="IClock"/>: that one is monotonic on purpose, for measuring the
+    /// millisecond gaps that tell a scanner burst from typing, and it has no wall time to give.
+    /// This is a label a cashier glances at, and it re-reads whenever the bill changes.
+    /// </remarks>
+    public string TodayLabel => DateTimeOffset.Now.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+
+    public decimal TenderedCash => TenderedOf(TenderType.Cash);
+    public decimal TenderedCard => TenderedOf(TenderType.Card);
+    public decimal TenderedUpi => TenderedOf(TenderType.Upi);
+    public decimal TenderedCredit => TenderedOf(TenderType.StoreCredit);
+    public decimal TenderedPoints => TenderedOf(TenderType.LoyaltyPoints);
+
+    private decimal TenderedOf(TenderType type) =>
+        Payments.Where(p => p.Type == type).Sum(p => p.Amount);
+
+    /// <summary>Points this bill would earn if it were settled as it stands.</summary>
+    /// <remarks>
+    /// A projection, and labelled as one on the screen. It moves as the bill does, and a customer
+    /// attached after the fact changes it — which is exactly why it must not be presented as
+    /// something already banked.
+    /// </remarks>
+    public int PointsEarning => _bill.Customer is null
+        ? 0
+        : LoyaltyEngine.PointsEarned(
+            Math.Max(0m, GrandTotal - TenderedPoints),
+            _checkout.LoyaltyRules);
+
+    public int PointsRedeemedNow => _pointsRedeemed;
+
+    /// <summary>
+    /// What the customer is saving against the printed price, or nothing when they are not.
+    /// </summary>
+    /// <remarks>
+    /// The same figure the receipt prints as "today's saving": MRP less what is actually charged,
+    /// which is the shelf discount, plus anything taken off the line by hand. Blank rather than
+    /// "Saved 0.00" when there is nothing in it — a zero saving is not worth a line on the screen.
+    /// </remarks>
+    public string SavingsLabel
+    {
+        get
+        {
+            var saved = Lines.Sum(l => (l.Line.Mrp - l.Line.UnitPrice) * l.Line.Quantity)
+                        + Totals.TotalDiscount;
+
+            return saved > 0m ? $"Saved {saved:N2}" : string.Empty;
+        }
+    }
+
+    /// <summary>Raises everything the side panel reads. Called wherever the bill or the basket moves.</summary>
+    private void RefreshSidePanel()
+    {
+        foreach (var name in new[]
+                 {
+                     nameof(InvoiceNoLabel), nameof(ShowingLastInvoiceNo), nameof(TodayLabel),
+                     nameof(TenderedCash), nameof(TenderedCard), nameof(TenderedUpi),
+                     nameof(TenderedCredit), nameof(TenderedPoints),
+                     nameof(PointsEarning), nameof(PointsRedeemedNow), nameof(ChangeDue),
+                     nameof(SavingsLabel),
+                 })
+        {
+            Raise(name);
+        }
+    }
 
     // ---- Actions -----------------------------------------------------------------------------
 
@@ -1516,6 +1617,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Raise(nameof(Totals));
         Raise(nameof(GrandTotal));
         Raise(nameof(MaxRedeemablePoints));
+
+        // The side panel reads the payment split and the projected points off the same state, and
+        // both move whenever the bill does.
+        RefreshSidePanel();
     }
 
     private void RefreshCustomer()
@@ -1525,6 +1630,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Raise(nameof(LoyaltyBalance));
         Raise(nameof(HasCustomer));
         Raise(nameof(MaxRedeemablePoints));
+
+        // Attaching a customer is what makes the bill earn anything at all.
+        Raise(nameof(PointsEarning));
     }
 
     private static int Clamp(int index, int count) =>

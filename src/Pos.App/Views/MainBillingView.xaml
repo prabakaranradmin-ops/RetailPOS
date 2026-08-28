@@ -11,22 +11,89 @@
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <vm:TenderTypeLabelConverter x:Key="TenderLabel" />
 
-    <!-- Money and quantities line up on the decimal point, so a column of figures scans down. -->
+    <!--
+      Money and quantities line up on the decimal point, so a column of figures scans down, and they
+      are set in a monospaced face so a digit does not shift position as the value changes.
+    -->
     <Style x:Key="NumericCell" TargetType="TextBlock">
       <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
+    </Style>
+
+    <!-- The printed price, which is context rather than the figure being charged. -->
+    <Style x:Key="MutedNumericCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+    </Style>
+
+    <!-- What this line comes to: the figure a customer follows down the screen. -->
+    <Style x:Key="TotalCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+      <Setter Property="Foreground" Value="{StaticResource Positive}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Money off, and never the same colour as money taken. -->
+    <Style x:Key="DiscountCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+      <Setter Property="Foreground" Value="{StaticResource Negative}" />
+    </Style>
+
+    <Style x:Key="IndexCell" TargetType="TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
+      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+    </Style>
+
+    <Style x:Key="NameCell" TargetType="TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Codes: present when wanted, quiet when not. -->
+    <Style x:Key="DimCell" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
+      <Setter Property="FontSize" Value="13" />
     </Style>
   </Window.Resources>
 
-  <Grid Margin="16">
+  <Grid Margin="16,10,16,16">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
+    <!--
+      What this lane is. Which build, whose shop, which till, and that nothing it does leaves the
+      machine — the last of which a cashier is entitled to know and nothing else on screen says.
+    -->
+    <Grid Grid.Row="0" Margin="2,0,2,10">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+        <Border Background="#22FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                CornerRadius="4" Padding="7,1" VerticalAlignment="Center">
+          <TextBlock x:Name="BuildChip" Text="GST" FontSize="10" FontWeight="Bold"
+                     Foreground="{StaticResource InkMuted}" />
+        </Border>
+        <TextBlock Text="RetailPOS" Foreground="{StaticResource InkMuted}" FontWeight="SemiBold"
+                   FontSize="12" Margin="9,0,0,0" VerticalAlignment="Center" />
+        <TextBlock Text="·" Foreground="{StaticResource InkDim}" FontSize="12" Margin="7,0"
+                   VerticalAlignment="Center" />
+        <TextBlock x:Name="ShopName" Text="" FontSize="12" FontWeight="SemiBold"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <TextBlock x:Name="LaneLabel" Text="" Foreground="{StaticResource InkMuted}" FontSize="11"
+                   VerticalAlignment="Center" />
+        <Ellipse Width="6" Height="6" Fill="{StaticResource Positive}" Margin="12,0,7,0"
+                 VerticalAlignment="Center" />
+        <TextBlock Text="OFFLINE — NOTHING LEAVES THIS MACHINE" Foreground="{StaticResource Positive}"
+                   FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
+      </StackPanel>
+    </Grid>
+
     <!-- Search: one box for both typed queries and scanner bursts (SRS 2.1). -->
-    <Border Grid.Row="0" Background="{StaticResource SurfaceRaised}" CornerRadius="6" Padding="12">
+    <Border Grid.Row="1" Background="{StaticResource SurfaceRaised}" CornerRadius="6" Padding="12">
       <StackPanel>
         <TextBlock Text="Scan or search" Foreground="{StaticResource InkMuted}" FontSize="12" />
         <TextBox x:Name="SearchBox"
@@ -70,10 +137,13 @@
     </Border>
 
     <!-- Line grid and totals. -->
-    <Grid Grid.Row="1" Margin="0,12,0,0">
+    <Grid Grid.Row="2" Margin="0,12,0,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="320" />
+
+        <!-- Widened when the panel gained its sections: two labelled figures side by side in the
+             payment block do not fit 320 without the numbers touching their own labels. -->
+        <ColumnDefinition Width="360" />
       </Grid.ColumnDefinitions>
 
       <DataGrid x:Name="LineGrid"
@@ -87,8 +157,10 @@
                 Foreground="{StaticResource Ink}"
                 BorderBrush="{StaticResource Line}"
                 HorizontalGridLinesBrush="{StaticResource Line}"
-                FontSize="15"
-                RowHeight="30"
+                AlternationCount="2"
+                AlternatingRowBackground="{StaticResource RowAlt}"
+                FontSize="14"
+                RowHeight="28"
                 ItemsSource="{Binding Lines}"
                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 SelectedIndex="{Binding SelectedLineIndex, Mode=TwoWay}">
@@ -113,34 +185,37 @@
           same way: the name took the room and Disc through Total came out as slivers a few pixels
           wide. The last column below absorbs the slack instead, because an empty column has no
           content to claim room for.)
+
+          There are no per-line tax columns. The rate-wise breakup a GST invoice must carry is on
+          the printed invoice, where the law wants it, and in the day-end report — not on a screen a
+          cashier reads with a customer waiting. Taking them off is what lets both builds share one
+          grid: nothing to hide on the no-tax lane, and four columns less to crowd the figures that
+          are actually read.
         -->
         <DataGrid.Columns>
-          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="Auto" MinWidth="200" MaxWidth="380" />
-          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="Auto" />
-          <DataGridTextColumn Header="Barcode / Batch" Binding="{Binding BarcodeOrBatch}" Width="Auto" />
+          <!-- Line number, so a cashier and a customer can point at the same row. -->
+          <DataGridTextColumn Header="#" Binding="{Binding LineNumber}" Width="Auto"
+                              ElementStyle="{StaticResource IndexCell}" />
+          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="Auto" MinWidth="200" MaxWidth="380"
+                              ElementStyle="{StaticResource NameCell}" />
+          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="Auto"
+                              ElementStyle="{StaticResource DimCell}" />
+          <DataGridTextColumn Header="Barcode / Batch" Binding="{Binding BarcodeOrBatch}" Width="Auto"
+                              ElementStyle="{StaticResource DimCell}" />
           <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="Auto" />
+          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="Auto"
+                              ElementStyle="{StaticResource DimCell}" />
           <DataGridTextColumn Header="MRP" Binding="{Binding Mrp, StringFormat={}{0:N2}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
+                              ElementStyle="{StaticResource MutedNumericCell}" />
           <DataGridTextColumn Header="Rate" Binding="{Binding UnitRateExclTax, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
-          <!--
-            The four tax columns. Named so the code-behind can take them out on a composition lane,
-            where there is no tax to show and a column of zeroes would only invite the question.
-          -->
-          <DataGridTextColumn x:Name="CgstColumn" Header="CGST %" Binding="{Binding CgstRate, StringFormat={}{0:0.##}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn x:Name="SgstColumn" Header="SGST %" Binding="{Binding SgstRate, StringFormat={}{0:0.##}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn x:Name="IgstColumn" Header="IGST %" Binding="{Binding IgstRate, StringFormat={}{0:0.##}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn x:Name="TaxColumn" Header="Tax" Binding="{Binding TaxAmount, StringFormat={}{0:N2}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
+
+          <!-- A dash where there is no discount: a column of 0.00 reads as a figure worth checking. -->
+          <DataGridTextColumn Header="Disc" Binding="{Binding DiscountLabel}" Width="Auto"
+                              ElementStyle="{StaticResource DiscountCell}" />
           <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto"
-                              ElementStyle="{StaticResource NumericCell}" />
+                              ElementStyle="{StaticResource TotalCell}" />
 
           <!--
             Takes up whatever is left over, so the columns reach the edge of the grid.
@@ -170,62 +245,196 @@
         -->
         <DockPanel LastChildFill="True">
           <StackPanel DockPanel.Dock="Top">
-            <TextBlock x:Name="TaxableLabel" Text="Taxable" Foreground="{StaticResource InkMuted}" FontSize="12" />
-            <TextBlock Text="{Binding Totals.SubtotalTaxable, StringFormat={}{0:N2}}" FontSize="18" />
 
-            <TextBlock Text="Discount" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-            <TextBlock Text="{Binding Totals.TotalDiscount, StringFormat={}{0:N2}}" FontSize="18" />
+            <!-- NFR-02: the grand total is the one figure that must read across the counter, so it
+                 takes the top of the panel rather than whatever the other sections leave over. -->
+            <Border Background="#FF090F18" BorderBrush="#5510B981" BorderThickness="1"
+                    CornerRadius="8" Padding="13,10" Margin="0,0,0,8">
+              <StackPanel>
+                <Grid>
+                  <TextBlock Text="TOTAL" Style="{StaticResource SectionHeading}"
+                             Foreground="{StaticResource InkMuted}" HorizontalAlignment="Left" />
+                  <Border Background="#22FFFFFF" CornerRadius="9" Padding="8,1" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding Totals.LineCount, StringFormat={}{0} lines}"
+                               Foreground="{StaticResource InkMuted}" FontSize="11" />
+                  </Border>
+                </Grid>
 
-            <!-- Hidden on a composition lane, along with the four columns in the grid. -->
-            <StackPanel x:Name="TaxTotalsBlock">
-              <TextBlock Text="CGST / SGST / IGST" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding Totals.TotalCgst, StringFormat={}{0:N2}}" FontSize="18" />
-                <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-                <TextBlock Text="{Binding Totals.TotalSgst, StringFormat={}{0:N2}}" FontSize="18" />
-                <TextBlock Text=" / " FontSize="18" Foreground="{StaticResource InkMuted}" />
-                <TextBlock Text="{Binding Totals.TotalIgst, StringFormat={}{0:N2}}" FontSize="18" />
+                <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
+                           Foreground="{StaticResource Positive}"
+                           FontFamily="{StaticResource FigureFont}"
+                           FontSize="36"
+                           FontWeight="Bold"
+                           TextAlignment="Right"
+                           LineHeight="42"
+                           Margin="0,4,0,2"
+                           LineStackingStrategy="BlockLineHeight" />
+
+                <Grid>
+                  <TextBlock x:Name="TaxNote" Text="Incl. all taxes" Foreground="{StaticResource InkDim}"
+                             FontSize="11" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Foreground="{StaticResource Positive}" FontSize="11" FontWeight="SemiBold"
+                             HorizontalAlignment="Right"
+                             Text="{Binding SavingsLabel}" />
+                </Grid>
               </StackPanel>
-            </StackPanel>
-
-            <Separator Margin="0,16" Background="{StaticResource Line}" />
+            </Border>
           </StackPanel>
 
+          <!--
+            Who is on the till, docked to the bottom so a shift change is always in view.
+          -->
           <StackPanel DockPanel.Dock="Bottom">
-            <Separator Margin="0,16" Background="{StaticResource Line}" />
+            <Separator Margin="0,9" Background="{StaticResource Line}" />
 
-            <TextBlock Text="Customer" Foreground="{StaticResource InkMuted}" FontSize="12" />
-            <TextBlock Text="{Binding CustomerLabel}" FontSize="18" />
-            <TextBlock Foreground="{StaticResource Accent}" FontSize="13"
-                       Visibility="{Binding HasCustomer, Converter={StaticResource BoolToVisibility}}"
-                       Text="{Binding LoyaltyBalance, StringFormat={}{0} points}" />
+            <TextBlock Text="LANE" Style="{StaticResource SectionHeading}" Margin="0,0,0,5" />
 
-            <TextBlock Text="Cashier" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,10,0,0" />
-            <TextBlock Text="{Binding CashierLabel}" FontSize="15" />
+            <!--
+              Two compact rows rather than two headed blocks. As headings with large values under
+              them these two took a third of the panel's height, and what they pushed off the
+              bottom was the payment split — the section a cashier actually reads while counting
+              out change.
+            -->
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Customer" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CustomerLabel}"
+                         Style="{StaticResource FieldValue}" FontSize="15" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Cashier" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CashierLabel}"
+                         Style="{StaticResource FieldValue}" FontSize="15" />
+            </Grid>
           </StackPanel>
 
-          <!-- NFR-02: the grand total is the one figure that must read across the counter. -->
-          <StackPanel VerticalAlignment="Top">
-            <TextBlock Text="TOTAL" Foreground="{StaticResource InkMuted}" FontSize="14" />
-            <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
-                       Foreground="{StaticResource Positive}"
-                       FontSize="68"
-                       FontWeight="Bold"
-                       TextAlignment="Right"
-                       LineHeight="74"
-                       LineStackingStrategy="BlockLineHeight" />
+          <!--
+            The sections in the middle scroll.
 
-            <TextBlock Text="{Binding Totals.LineCount, StringFormat={}{0} lines}"
-                       Foreground="{StaticResource InkMuted}"
-                       FontSize="13"
-                       TextAlignment="Right" />
-          </StackPanel>
+            Between them they are taller than the panel on a 1030px window, and the first attempt at
+            this simply let the bottom run off the edge — the points row was cut in half and the
+            cashier's name was gone. The two things that must never be missing are docked outside
+            this: the total above, because NFR-02 makes it the figure that has to read across a
+            counter, and the cashier below, because a bill has to be attributable.
+          -->
+          <!-- Padded on the right so a right-aligned figure does not sit under the scrollbar. -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        Padding="0,0,12,0">
+            <StackPanel>
+
+            <!-- INVOICE -->
+            <TextBlock Text="INVOICE" Style="{StaticResource SectionHeading}" Margin="0,0,0,6" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Bill" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InvoiceNoLabel}" Style="{StaticResource FieldValue}" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Date" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TodayLabel}" Style="{StaticResource FieldValue}" />
+            </Grid>
+
+            <!--
+              BILL
+
+              Discount only. The taxable value and the CGST/SGST split used to sit here and are
+              gone from this screen entirely, along with the four per-line tax columns: the
+              rate-wise figures a GST return is filed from live on the printed invoice and in the
+              day-end report, which is where they are needed and checked. What a cashier needs at
+              the counter is what came off the price.
+            -->
+            <TextBlock Text="BILL" Style="{StaticResource SectionHeading}" Margin="0,11,0,5" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <TextBlock Grid.Column="0" Text="Discount" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Column="1" Style="{StaticResource FieldValue}"
+                         Foreground="{StaticResource Negative}"
+                         Text="{Binding Totals.TotalDiscount, StringFormat={}{0:N2}}" />
+            </Grid>
+
+            <Separator Margin="0,10" Background="{StaticResource Line}" />
+
+            <!-- PAYMENT -->
+            <TextBlock Text="PAYMENT" Style="{StaticResource SectionHeading}" Margin="0,0,0,6" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Cash" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource FieldValue}" Margin="0,1,14,1"
+                         Text="{Binding TenderedCash, StringFormat={}{0:N2}}" />
+              <TextBlock Grid.Row="0" Grid.Column="2" Text="UPI" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource FieldValue}"
+                         Text="{Binding TenderedUpi, StringFormat={}{0:N2}}" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Card" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource FieldValue}" Margin="0,1,14,1"
+                         Text="{Binding TenderedCard, StringFormat={}{0:N2}}" />
+              <TextBlock Grid.Row="1" Grid.Column="2" Text="Credit" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource FieldValue}"
+                         Text="{Binding TenderedCredit, StringFormat={}{0:N2}}" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="Change" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource FieldValue}"
+                         Foreground="{StaticResource Positive}"
+                         Text="{Binding ChangeDue, StringFormat={}{0:N2}}" />
+            </Grid>
+
+            <!-- POINTS -->
+            <TextBlock Text="POINTS" Style="{StaticResource SectionHeading}" Margin="0,11,0,5" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <TextBlock Grid.Column="0" Text="Earning" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Column="1" Text="{Binding PointsEarning}" Style="{StaticResource FieldValue}" Margin="0,1,14,1" />
+              <TextBlock Grid.Column="2" Text="Balance" Style="{StaticResource FieldLabel}" />
+              <TextBlock Grid.Column="3" Text="{Binding LoyaltyBalance}" Style="{StaticResource FieldValue}" />
+            </Grid>
+
+            </StackPanel>
+          </ScrollViewer>
         </DockPanel>
       </Border>
     </Grid>
 
     <!-- In-place editor for the two editable cells. -->
-    <Border Grid.Row="2" Margin="0,12,0,0" Padding="12"
+    <Border Grid.Row="3" Margin="0,12,0,0" Padding="12"
             Background="{StaticResource SurfaceRaised}" CornerRadius="6"
             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
       <StackPanel Orientation="Horizontal">
@@ -241,18 +450,63 @@
       </StackPanel>
     </Border>
 
-    <!-- Status line. -->
-    <Grid Grid.Row="3" Margin="0,12,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="Auto" />
-      </Grid.ColumnDefinitions>
-      <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Foreground="{StaticResource Accent}" />
-      <TextBlock x:Name="KeyHints" Grid.Column="1" Foreground="{StaticResource InkMuted}" FontSize="12" />
+    <!--
+      Status line, and the keys.
+
+      The keys were one long run of text along the bottom, which reads as a sentence and scans as
+      nothing. As separated pills each key is findable at a glance, and F12 sits apart at the right
+      because it is the one that takes money.
+    -->
+    <Grid Grid.Row="4" Margin="0,10,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Text="{Binding StatusMessage}" Foreground="{StaticResource Accent}"
+                 Margin="2,0,0,8" TextTrimming="CharacterEllipsis" />
+
+      <Border Grid.Row="1" Background="{StaticResource SurfaceRaised}" CornerRadius="6" Padding="8,6">
+        <Grid>
+          <ItemsControl x:Name="KeyPills" HorizontalAlignment="Left">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#14FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                        CornerRadius="4" Padding="7,3" Margin="0,0,6,0">
+                  <StackPanel Orientation="Horizontal">
+                    <Border Background="#FF1E293B" CornerRadius="3" Padding="5,0">
+                      <TextBlock Text="{Binding Key}" Foreground="{StaticResource Accent}"
+                                 FontFamily="{StaticResource FigureFont}" FontSize="10.5" FontWeight="Bold" />
+                    </Border>
+                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource InkMuted}"
+                               FontSize="11.5" FontWeight="SemiBold" Margin="6,0,0,0" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- The one that takes money, kept apart from the ones that do not. -->
+          <Border Background="#2610B981" BorderBrush="#6610B981" BorderThickness="1"
+                  CornerRadius="4" Padding="8,3" HorizontalAlignment="Right">
+            <StackPanel Orientation="Horizontal">
+              <Border Background="{StaticResource Positive}" CornerRadius="3" Padding="5,0">
+                <TextBlock Text="F12" Foreground="#FF04121C" FontFamily="{StaticResource FigureFont}"
+                           FontSize="10.5" FontWeight="Bold" />
+              </Border>
+              <TextBlock Text="Pay &amp; Print" Foreground="{StaticResource Ink}" FontSize="11.5"
+                         FontWeight="Bold" Margin="6,0,0,0" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
     </Grid>
 
     <!-- Tender pane, over the whole screen while taking payment (SRS 2.4). -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsTendering, Converter={StaticResource BoolToVisibility}}">
       <Border Width="760" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -341,7 +595,7 @@
     </Border>
 
     <!-- Customer lookup by mobile number. -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsFindingCustomer, Converter={StaticResource BoolToVisibility}}">
       <Border Width="520" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -362,7 +616,7 @@
     </Border>
 
     <!-- Reprint a past invoice. -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsReprinting, Converter={StaticResource BoolToVisibility}}">
       <Border Width="600" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -385,7 +639,7 @@
     </Border>
 
     <!-- Void a settled sale. -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsVoiding, Converter={StaticResource BoolToVisibility}}">
       <Border Width="620" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -408,7 +662,7 @@
     </Border>
 
     <!-- Who is on the till. -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsSettingCashier, Converter={StaticResource BoolToVisibility}}">
       <Border Width="520" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -431,7 +685,7 @@
     </Border>
 
     <!-- Recall list, over the whole screen while choosing a parked bill (SRS 2.5). -->
-    <Border Grid.Row="0" Grid.RowSpan="4"
+    <Border Grid.Row="0" Grid.RowSpan="5"
             Background="#E6101418"
             Visibility="{Binding IsRecalling, Converter={StaticResource BoolToVisibility}}">
       <Border Width="640" MaxHeight="440" VerticalAlignment="Center" HorizontalAlignment="Center"
