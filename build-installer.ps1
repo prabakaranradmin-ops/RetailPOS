@@ -126,8 +126,17 @@ foreach ($field in @('name', 'gstin', 'fssaiNumber')) {
     }
 }
 
-if (Test-Path $output) { Remove-Item $output -Recurse -Force }
+# Clear only this variant's installers, not the whole folder.
+#
+# Wiping everything made sense when there was one installer. With two it means building both in
+# turn leaves only the second one on disk, so `ship -SkipBuild` — which exists precisely to
+# reassemble without a ten-minute rebuild — cannot find the first. Removing by name still stops a
+# stale installer of this variant being picked up, which is what the wipe was for.
+$suffixToClear = if ($Variant -eq 'NoTax') { '-NoTax' } else { '-GST' }
+
 New-Item -ItemType Directory -Force -Path $output | Out-Null
+Get-ChildItem $output -Filter "RetailPOS$suffixToClear-Setup-*.exe" -ErrorAction SilentlyContinue |
+    Remove-Item -Force
 
 # Read back what the published payload actually is, before wrapping it in an installer that will
 # claim a variant on its label. The stamp is inside the executable; the tool prints it, so asking

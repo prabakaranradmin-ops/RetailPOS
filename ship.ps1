@@ -319,13 +319,45 @@ foreach ($file in Get-ChildItem $ship -Recurse -File | Sort-Object FullName) {
 
 if (-not $NoZip) {
     $zip = Join-Path $OutputRoot "$folderName.zip"
-    if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
 
     Write-Host ''
     Write-Host 'Zipping...' -ForegroundColor Cyan
-    Compress-Archive -Path $ship -DestinationPath $zip -CompressionLevel Optimal
 
-    Write-Host ("  {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor Green
+    # Retried, and the stale one destroyed if it cannot be replaced.
+    #
+    # Shipping both variants in one run once failed here: the previous zip was still held open —
+    # a hundred megabytes takes a moment to let go of, and an indexer or a scanner is often still
+    # reading it — so Remove-Item threw and the run stopped. What it left behind was the dangerous
+    # part: a freshly assembled folder sitting next to LAST build's zip, both named for this
+    # version. Somebody sends the zip.
+    $zipped = $false
+
+    foreach ($attempt in 1..4) {
+        try {
+            if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
+
+            Compress-Archive -Path $ship -DestinationPath $zip -CompressionLevel Optimal
+            $zipped = $true
+            break
+        }
+        catch {
+            if ($attempt -eq 4) {
+                # Better no zip than a stale one wearing this version's name.
+                Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+
+                throw "Could not write $zip after $attempt attempts: $($_.Exception.Message). " +
+                      'Any older zip of this name has been deleted so it cannot be sent by mistake; ' +
+                      "the folder at $ship is complete and can be sent as it is."
+            }
+
+            Write-Host "  attempt $attempt could not write the zip; retrying..." -ForegroundColor DarkYellow
+            Start-Sleep -Seconds 3
+        }
+    }
+
+    if ($zipped) {
+        Write-Host ("  {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor Green
+    }
 }
 
 Write-Host ''
