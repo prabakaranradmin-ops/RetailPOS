@@ -108,6 +108,11 @@
           difference out of the last two columns instead — Tax and Total were squeezed to slivers.
           Bounding the name means the widths always sum to what the columns actually need, and if
           that exceeds the screen the grid scrolls sideways rather than crushing anything.
+
+          (Tried again after the no-tax build made the leftover space obvious, and it failed the
+          same way: the name took the room and Disc through Total came out as slivers a few pixels
+          wide. The last column below absorbs the slack instead, because an empty column has no
+          content to claim room for.)
         -->
         <DataGrid.Columns>
           <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="Auto" MinWidth="200" MaxWidth="380" />
@@ -136,6 +141,21 @@
                               ElementStyle="{StaticResource NumericCell}" />
           <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto"
                               ElementStyle="{StaticResource NumericCell}" />
+
+          <!--
+            Takes up whatever is left over, so the columns reach the edge of the grid.
+
+            Without it the widths stop where the content stops and WPF fills the remainder with a
+            strip of its own that belongs to no column: it carries neither the header shading nor
+            the selected row's highlight, so the row appears to end in an empty cell. Four fewer
+            columns on the no-tax build made a narrow gap into an obvious one.
+
+            Empty on purpose. A * column claims the leftover width before the Auto columns have
+            finished measuring, which is what crushed Tax and Total when the *name* was starred —
+            a column with nothing in it has no content to claim room for, so it can only ever take
+            what is genuinely spare.
+          -->
+          <DataGridTextColumn Header="" Width="*" />
         </DataGrid.Columns>
       </DataGrid>
 
