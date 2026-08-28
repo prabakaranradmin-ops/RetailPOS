@@ -103,7 +103,10 @@ if (-not $Compiler) {
 
 if (-not $SkipPublish) {
     Write-Host 'Publishing the payload first...' -ForegroundColor Cyan
-    & (Join-Path $here 'publish.ps1')
+
+    # The same version the installer is about to carry, so the executables inside it agree with the
+    # setup file's name rather than reporting 1.0.0.0 forever.
+    & (Join-Path $here 'publish.ps1') -Version $Version
     if ($LASTEXITCODE -ne 0) { throw 'Publishing failed; the installer would have carried a stale payload.' }
     Write-Host ''
 }

@@ -22,13 +22,31 @@
 [CmdletBinding()]
 param(
     [string] $Output,
-    [switch] $SkipTests
+    [switch] $SkipTests,
+
+    # What to stamp the executables with. Without it they report 1.0.0.0 whatever the release is,
+    # so somebody checking a lane's file properties to find out which build it is running gets the
+    # same answer forever. Defaults to the current tag.
+    [string] $Version
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
 $solution = Join-Path $root 'RetailPos.sln'
+
+if (-not $Version) {
+    $tag = & git -C $root describe --tags --abbrev=0 2>$null
+
+    if ($LASTEXITCODE -eq 0 -and $tag) {
+        $Version = ($tag -replace '^v', '')
+    }
+}
+
+# The file version fields take four numbers and nothing else, so a pre-release suffix is trimmed
+# for that one field only. The full string still goes into InformationalVersion, which is where
+# anyone reading it will find the whole truth.
+$numeric = if ($Version -match '^(\d+)\.(\d+)\.(\d+)') { "$($Matches[1]).$($Matches[2]).$($Matches[3]).0" } else { $null }
 
 if (-not $Output) {
     $Output = Join-Path $root 'artifacts\lane'
@@ -51,6 +69,22 @@ $projects = @(
     @{ Name = 'pos tool';  Path = Join-Path $root 'src\Pos.Diagnostics\Pos.Diagnostics.csproj' }
 )
 
+$stamp = @()
+
+if ($numeric) {
+    $stamp = @(
+        "-p:Version=$Version",
+        "-p:AssemblyVersion=$numeric",
+        "-p:FileVersion=$numeric",
+        "-p:InformationalVersion=$Version"
+    )
+
+    Write-Host "Stamping the executables as $Version (file version $numeric)." -ForegroundColor Cyan
+}
+else {
+    Write-Warning "No version to stamp; the executables will report 1.0.0.0."
+}
+
 foreach ($project in $projects) {
     Write-Host "Publishing $($project.Name)..." -ForegroundColor Cyan
 
@@ -62,6 +96,7 @@ foreach ($project in $projects) {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:PublishTrimmed=false `
         -p:PublishReadyToRun=true `
+        @stamp `
         --output $Output `
         --nologo
 
