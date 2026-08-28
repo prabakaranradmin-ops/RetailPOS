@@ -162,7 +162,10 @@ only with whoever signs off the store's accounts — they affect what customers 
 
 ## Composition dealers: `taxMode`
 
-Leave this alone unless the shop is registered under the **composition scheme**. Then:
+**Easiest from the till:** `Ctrl+D`, then Settings. It asks before it changes anything, applies
+straight away without a restart, and writes the setting below for you.
+
+Leave it alone unless the shop is registered under the **composition scheme**. In the file it reads:
 
 ```json
 "taxMode": "Composition"
@@ -188,10 +191,15 @@ and switches to `Gst`, everything it sold before that still reprints as the bill
 Check it before opening with `pos receipt-preview` — the preview shows the document this lane will
 actually issue.
 
-## Keeping the dashboard from the cashier
+## Keeping the figures from the cashier
 
-`pos dashboard` shows turnover, margins, cost prices and best sellers. On a lane where a cashier
-uses the same computer, you can put a PIN in front of it:
+The owner's screen (`Ctrl+D` at the till) and `pos dashboard` both show turnover, margins, cost
+prices and best sellers. On a lane where a cashier uses the same computer, put a PIN in front of
+them — the same PIN covers both.
+
+**From the till:** `Ctrl+D`, Settings, *Save PIN*.
+
+**Or from the command line:**
 
 ```
 pos dashboard-pin              set or change it — asks for the current one first

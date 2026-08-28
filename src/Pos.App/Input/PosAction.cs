@@ -50,4 +50,9 @@ public enum PosAction
 
     /// <summary>Say who is on the till, at the start of a shift or when it changes.</summary>
     SetCashier,
+
+    /// <summary>
+    /// Open the owner's screen: the figures, what needs reordering, and the lane's settings.
+    /// </summary>
+    OwnerView,
 }

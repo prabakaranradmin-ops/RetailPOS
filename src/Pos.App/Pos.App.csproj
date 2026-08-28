@@ -13,6 +13,12 @@
     <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />
     <ProjectReference Include="..\Pos.Core.Tax\Pos.Core.Tax.csproj" />
     <ProjectReference Include="..\Pos.Core.Logging\Pos.Core.Logging.csproj" />
+
+    <!--
+      The figures behind the owner's screen. The same queries the HTML report is built from, so the
+      two cannot drift into disagreeing about what the shop took.
+    -->
+    <ProjectReference Include="..\Pos.Core.Analytics\Pos.Core.Analytics.csproj" />
     <ProjectReference Include="..\Pos.Core.Hardware.Windows\Pos.Core.Hardware.Windows.csproj" />
   </ItemGroup>
 

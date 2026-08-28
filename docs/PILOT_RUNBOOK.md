@@ -117,6 +117,7 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `F12` | **Take payment** |
 | `Ctrl+P` | Reprint a bill |
 | `Ctrl+U` | Say who is on the till |
+| `Ctrl+D` | **The owner's screen** — figures, stock, settings |
 | `Ctrl+N` | Start over (asks twice) |
 | `Ctrl+Shift+V` | **Void a settled sale** (asks twice) |
 | `Shift+F12` | **Close the day** (asks twice) |
@@ -246,6 +247,31 @@ cannot be filed as a second day's takings.
 **A mistyped option stops the command.** `pos close-day --lst` names the mistake and does nothing —
 it does not fall through to closing the day. That is true of every command, and it means reading a
 report back can never accidentally take one.
+
+---
+
+## The owner's screen
+
+**`Ctrl+D` at the till.** Everything an owner needs is here, and none of it needs a command line.
+
+| Section | | |
+|---|---|---|
+| **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, which departments earn, and GST by slab. Pick 7, 30 or 90 days at the top. |
+| **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
+| **Settings** | `Ctrl+3` | Whether this lane issues a tax invoice or a bill of supply, and the PIN in front of this screen. |
+
+`F5` re-reads the figures. `Esc` goes back to billing.
+
+**Put a PIN on it** if a cashier uses this computer — Settings, then *Save PIN*. The screen then asks
+for it before it opens. It is stored scrambled and **cannot be recovered**, so pick something you
+will remember. This keeps a cashier out of the figures; it does not encrypt the database.
+
+**Changing what kind of bill the lane issues** is under Settings too. It asks before it changes
+anything, and it is refused while a bill is on the screen — finish or clear that first. Bills
+already issued do not change: each one records the kind of document it was issued as.
+
+*(The same things are still reachable from the command line — `pos dashboard`, `pos stock`,
+`pos dashboard-pin` — for support and for scripting. Nobody running a shop needs them.)*
 
 ---
 

@@ -724,6 +724,59 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         StatusMessage = "Type the cashier's name. Every sale from here on is recorded against it.";
     }
 
+    /// <summary>Raised when the owner's screen should open. The view owns the window; this does not.</summary>
+    public event EventHandler? OwnerViewRequested;
+
+    /// <summary>
+    /// Opens the owner's screen &mdash; the figures, what to reorder, and the lane's settings.
+    /// </summary>
+    /// <remarks>
+    /// Refused mid-payment. Everything behind it is read-only or a settings change, but a cashier
+    /// halfway through taking money should not have another window take the keyboard.
+    /// </remarks>
+    public void OwnerView()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (Mode == BillingMode.Tender)
+        {
+            StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        OwnerViewRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Whether the tax columns belong on the screen. False on a composition lane.</summary>
+    public bool ShowsTax => _bill.TaxMode == TaxMode.Gst;
+
+    /// <summary>
+    /// Changes what kind of bill this lane issues.
+    /// </summary>
+    /// <returns>Null when it worked, or why it did not.</returns>
+    public string? TrySetTaxMode(TaxMode mode)
+    {
+        try
+        {
+            _bill.SetTaxMode(mode);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex.Message;
+        }
+
+        // The grid's tax columns and the totals panel follow this.
+        Raise(nameof(ShowsTax));
+        RefreshTotals();
+
+        StatusMessage = mode == TaxMode.Composition
+            ? "This lane now issues a BILL OF SUPPLY. No tax is charged."
+            : "This lane now issues a TAX INVOICE. GST is charged and shown.";
+
+        return null;
+    }
+
     // ---- Search internals --------------------------------------------------------------------
 
     private void OnDebounceElapsed(string text)

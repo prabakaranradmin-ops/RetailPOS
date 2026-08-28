@@ -27,6 +27,9 @@ public interface IBillingActions
     void CloseDay();
     void VoidInvoice();
     void SetCashier();
+
+    /// <summary>Open the owner's screen: the figures, the reorder list and the lane's settings.</summary>
+    void OwnerView();
 }
 
 /// <summary>
@@ -89,6 +92,7 @@ public sealed class KeyboardRouter
             case PosAction.CloseDay: _target.CloseDay(); break;
             case PosAction.VoidInvoice: _target.VoidInvoice(); break;
             case PosAction.SetCashier: _target.SetCashier(); break;
+            case PosAction.OwnerView: _target.OwnerView(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a
             // debug run beats a key that silently does nothing at the till.

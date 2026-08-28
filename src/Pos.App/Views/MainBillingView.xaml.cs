@@ -48,12 +48,46 @@ public partial class MainBillingView : Window
         Title = $"RetailPOS — Billing — lane {settings.LaneId}";
         KeyHints.Text = BuildKeyHints(keymap);
 
-        ApplyTaxMode(settings.TaxMode);
+        ApplyTaxMode();
 
         viewModel.SearchFocusRequested += (_, _) => FocusSearchBox();
-        viewModel.PropertyChanged += (_, e) => OnViewModelPropertyChanged(e.PropertyName);
+        viewModel.OwnerViewRequested += (_, _) => OpenOwnerView();
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            // The owner can switch what this lane issues from their own screen, so the columns
+            // follow the view model rather than a value read once at startup.
+            if (e.PropertyName is null or nameof(BillingViewModel.ShowsTax))
+                ApplyTaxMode();
+
+            OnViewModelPropertyChanged(e.PropertyName);
+        };
 
         Loaded += (_, _) => FocusSearchBox();
+    }
+
+    /// <summary>
+    /// How the owner's screen is built when it is asked for. Set by the composition root, and
+    /// returns null when the PIN in front of it was not answered.
+    /// </summary>
+    public Func<Window?>? OwnerViewFactory { get; set; }
+
+    private void OpenOwnerView()
+    {
+        if (OwnerViewFactory is null)
+            return;
+
+        var window = OwnerViewFactory();
+
+        if (window is null)
+            return;
+
+        window.Owner = this;
+        window.ShowDialog();
+
+        // Back to billing with the caret where the next scan lands, and with the columns matching
+        // whatever the owner may have just changed.
+        ApplyTaxMode();
+        FocusSearchBox();
     }
 
     /// <summary>
@@ -67,18 +101,19 @@ public partial class MainBillingView : Window
     /// The columns are collapsed rather than removed so their widths and order stay exactly as
     /// declared, and so the grid on a GST lane is untouched by any of this.
     /// </remarks>
-    private void ApplyTaxMode(TaxMode mode)
+    private void ApplyTaxMode()
     {
-        if (mode != TaxMode.Composition)
-            return;
+        var showing = _viewModel.ShowsTax;
+        var visibility = showing ? Visibility.Visible : Visibility.Collapsed;
 
         foreach (var column in new[] { CgstColumn, SgstColumn, IgstColumn, TaxColumn })
-            column.Visibility = Visibility.Collapsed;
+            column.Visibility = visibility;
 
-        TaxTotalsBlock.Visibility = Visibility.Collapsed;
+        TaxTotalsBlock.Visibility = visibility;
 
-        // Nothing was taxed, so there is no taxable value — it is just what the bill comes to.
-        TaxableLabel.Text = "Subtotal";
+        // On a bill of supply nothing was taxed, so there is no taxable value — it is just what the
+        // bill comes to.
+        TaxableLabel.Text = showing ? "Taxable" : "Subtotal";
     }
 
     /// <summary>

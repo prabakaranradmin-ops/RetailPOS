@@ -3,6 +3,7 @@ using System.Windows;
 using Pos.App.Input;
 using Pos.App.ViewModels;
 using Pos.App.Views;
+using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
@@ -133,10 +134,87 @@ public partial class App : Application
 
         viewModelRef = viewModel;
 
-        MainWindow = new MainBillingView(viewModel, keymap, settings);
+        var billingView = new MainBillingView(viewModel, keymap, settings);
+
+        // The owner's screen, built fresh each time it is opened so its figures are current. The
+        // PIN is checked here rather than inside the window, so a refused attempt never gets far
+        // enough to read anything.
+        billingView.OwnerViewFactory = () =>
+            PinPrompt.Passes(billingView, settings.Security)
+                ? new OwnerView(BuildOwnerViewModel(settings, database, viewModel))
+                : null;
+
+        MainWindow = billingView;
         MainWindow.Show();
 
         _log.Info("startup", $"till ready, cashier {viewModel.CashierLabel}");
+    }
+
+    /// <summary>
+    /// Wires the owner's screen to the lane: where its figures come from, and what its two settings
+    /// actually change.
+    /// </summary>
+    /// <remarks>
+    /// The tax mode is applied through the billing view model rather than written straight to the
+    /// file, because the engine holding the open bill has to agree with what the file says. Writing
+    /// only the file would leave the till issuing one kind of document and the settings claiming
+    /// another until somebody restarted it.
+    /// </remarks>
+    private OwnerViewModel BuildOwnerViewModel(PosSettings settings, PosDatabase database, BillingViewModel billing)
+    {
+        var settingsPath = Path.Combine(DataDirectory, "settings.json");
+        var stock = new StockRepository(database);
+
+        return new OwnerViewModel(
+            settings.LaneId,
+            days =>
+            {
+                var to = System.DateTimeOffset.Now;
+                var from = new DateTimeOffset(to.Date.AddDays(-(days - 1)), to.Offset);
+
+                return new DashboardQuery(database).Gather(settings.LaneId, from, to, topItems: 10);
+            },
+            stock,
+            settings.TaxMode,
+            settings.Security.DashboardIsLocked,
+
+            applyTaxMode: mode =>
+            {
+                // The engine first: it is the one that can refuse, because a bill may be open.
+                if (billing.TrySetTaxMode(mode) is { } refused)
+                    return refused;
+
+                try
+                {
+                    settings.TaxMode = mode;
+                    SettingsFile.SetTaxMode(settingsPath, mode);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the tax mode", ex);
+                    return $"Changed for this session, but it could not be saved: {ex.Message}";
+                }
+
+                _log?.Info("settings", $"tax mode set to {mode}");
+                return null;
+            },
+
+            applyPin: credential =>
+            {
+                try
+                {
+                    SettingsFile.SetDashboardPin(settingsPath, credential);
+                    settings.Security.DashboardPin = credential;
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the dashboard PIN", ex);
+                    return $"Could not save it: {ex.Message}";
+                }
+
+                _log?.Info("settings", credential is null ? "dashboard PIN cleared" : "dashboard PIN set");
+                return null;
+            });
     }
 
     /// <summary>

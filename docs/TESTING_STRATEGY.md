@@ -222,6 +222,23 @@ window.
 printed sheet was the only way to see a past day's figures. A printer that jams at closing time is
 not a rare event, and a shop should not lose a day's takings to one.
 
+**The owner has a screen, not a command line** — passing
+- [x] Ctrl+D asks for it; refused while a payment is being taken — `OwnerScreenTests`
+- [x] The owner can switch the lane to bills of supply and back, and the next line follows — `OwnerScreenTests`
+- [x] The switch is refused with a bill on screen, and nothing moves when it is — `OwnerScreenTests`
+- [x] Switching does not rewrite what has already been sold — `OwnerScreenTests`
+- [x] The screen is told when the mode changes, so the tax columns can follow — `OwnerScreenTests`
+- [x] The reorder list, and an empty one that says which kind of empty it is — `OwnerViewModelTests`
+- [x] Correcting a count writes through the ledger with its reason; nonsense is refused — `OwnerViewModelTests`
+- [x] A refused switch leaves the screen saying what is actually true — `OwnerViewModelTests`
+- [x] A PIN can be set and removed; obvious ones are refused before storage — `OwnerViewModelTests`
+- [x] A failure to read the figures is a message on the screen, not a crash — `OwnerViewModelTests`
+
+**Why the refusal tests are the interesting ones.** Every line already carries the tax it was rung
+up with, so switching mid-bill would leave one bill holding lines priced two ways and a total that
+reconciles with neither. And a screen that shows the new mode after the till refused it would be
+lying about what the shop is issuing — which is worse than not offering the switch at all.
+
 **A composition lane issues bills of supply** — passing
 - [x] No tax is charged even on an item carrying a rate, and the price on the shelf is the whole bill — `CompositionBillTests`
 - [x] An out-of-state customer still produces no IGST — `CompositionBillTests`

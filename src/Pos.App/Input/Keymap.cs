@@ -59,6 +59,11 @@ public sealed class Keymap
         [new(Key.F12, ModifierKeys.Shift)] = PosAction.CloseDay,
 
         [new(Key.N, ModifierKeys.Control)] = PosAction.NewBill,
+
+        // The owner's screen. Not awkward on purpose — it changes nothing by opening, and an owner
+        // who has to remember a hard chord will go back to asking somebody else for the figures.
+        // What is behind it is protected by the dashboard PIN, not by an obscure key.
+        [new(Key.D, ModifierKeys.Control)] = PosAction.OwnerView,
     });
 
     public IReadOnlyDictionary<KeyStroke, PosAction> Bindings => _bindings;

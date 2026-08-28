@@ -26,7 +26,28 @@ public sealed class InvoiceEngine
     public string OutletStateCode { get; }
 
     /// <summary>Whether this bill is a tax invoice or a bill of supply.</summary>
-    public TaxMode TaxMode { get; }
+    public TaxMode TaxMode { get; private set; }
+
+    /// <summary>
+    /// Changes what kind of bill this lane issues, from the owner's screen.
+    /// </summary>
+    /// <remarks>
+    /// Refused while a bill is on the screen. Every line already carries the tax it was rung up
+    /// with, so switching mid-bill would leave one bill holding lines priced two different ways and
+    /// a total that reconciles with neither. Clearing the screen first is a one-line rule the owner
+    /// can act on; silently re-pricing what a customer is standing there watching is not.
+    ///
+    /// Bills already settled are untouched: each records its own mode, so the shop's history stays
+    /// exactly as it was issued.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A bill is open.</exception>
+    public void SetTaxMode(TaxMode mode)
+    {
+        if (!IsEmpty)
+            throw new InvalidOperationException("Finish or clear the bill on screen before changing what kind of bill this lane issues.");
+
+        TaxMode = mode;
+    }
 
     public IReadOnlyList<InvoiceLine> Lines => _lines;
 
