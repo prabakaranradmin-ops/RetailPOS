@@ -52,6 +52,22 @@
       <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
       <Setter Property="FontSize" Value="13" />
     </Style>
+
+    <!--
+      The trailing filler column's header, with its right-hand border taken off.
+
+      Every header carries a separator on its right, which is what tells one column from the next.
+      On the filler that separator lands at the far edge of the grid and closes a box around the
+      empty space, so a column that exists only to absorb leftover width reads as a column somebody
+      forgot to name. Without it the header bar simply runs on past the last real column, which is
+      what it is doing.
+
+      The bottom edge stays, so the line under the headers still reaches the edge of the grid.
+    -->
+    <Style x:Key="FillerHeader" TargetType="DataGridColumnHeader"
+           BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
   </Window.Resources>
 
   <Grid Margin="16,10,16,16">
@@ -230,7 +246,7 @@
             a column with nothing in it has no content to claim room for, so it can only ever take
             what is genuinely spare.
           -->
-          <DataGridTextColumn Header="" Width="*" />
+          <DataGridTextColumn Header="" Width="*" HeaderStyle="{StaticResource FillerHeader}" />
         </DataGrid.Columns>
       </DataGrid>
 
