@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Pos.App.ViewModels;
+using Pos.Core.Configuration;
 using Pos.Core.Domain;
 
 namespace Pos.App.Views;
@@ -42,6 +43,13 @@ public partial class OwnerView : Window
         Loaded += (_, _) =>
         {
             _viewModel.Refresh();
+
+            // On the no-tax build there is no choice to show: it cannot issue a tax invoice, so the
+            // chooser is replaced by a statement of what this build does.
+            var switchable = !ProductVariant.ChargesNoTax;
+
+            TaxModeCard.Visibility = switchable ? Visibility.Visible : Visibility.Collapsed;
+            NoTaxCard.Visibility = switchable ? Visibility.Collapsed : Visibility.Visible;
 
             ModeGst.IsChecked = _viewModel.TaxMode == TaxMode.Gst;
             ModeComposition.IsChecked = _viewModel.TaxMode == TaxMode.Composition;

@@ -26,15 +26,34 @@
 #ifndef AppVersionNumeric
   #define AppVersionNumeric "0.0.0"
 #endif
+; Which of the two builds this is packaging. "NoTax" issues bills of supply and cannot charge GST;
+; anything else is the ordinary GST build.
+;
+; It changes the setup file's name and what Add/Remove Programs shows, so a shop can tell which one
+; it has without opening the till. It deliberately does NOT change AppId: the two are the same
+; product, so installing one over the other upgrades in place and the lane keeps its database,
+; settings and backups rather than ending up with two copies fighting over one data folder.
+#ifndef Variant
+  #define Variant "Gst"
+#endif
+
+#if Variant == "NoTax"
+  #define VariantSuffix "-NoTax"
+  #define VariantLabel  " (no tax)"
+#else
+  #define VariantSuffix "-GST"
+  #define VariantLabel  " (GST)"
+#endif
+
 #define TillExe        "Pos.App.exe"
 #define ToolExe        "pos.exe"
 #define Payload        "..\..\artifacts\lane"
 
 [Setup]
 AppId={{75A3C612-99E2-4A24-8A82-1A5C7E990FB1}
-AppName={#AppName}
+AppName={#AppName}{#VariantLabel}
 AppVersion={#AppVersion}
-AppVerName={#AppName} {#AppVersion}
+AppVerName={#AppName}{#VariantLabel} {#AppVersion}
 AppPublisher={#AppPublisher}
 VersionInfoVersion={#AppVersionNumeric}
 
@@ -51,13 +70,13 @@ DisableProgramGroupPage=yes
 AllowNoIcons=yes
 
 OutputDir=..\..\artifacts\installer
-OutputBaseFilename={#AppName}-Setup-{#AppVersion}
+OutputBaseFilename={#AppName}{#VariantSuffix}-Setup-{#AppVersion}
 
 ; No SetupIconFile: that wants a .ico to embed, and the only icon we have is inside a 174MB
 ; executable. The installed shortcuts and the uninstall entry take their icon from the executable
 ; itself, which is where it already lives.
 UninstallDisplayIcon={app}\{#TillExe}
-UninstallDisplayName={#AppName} {#AppVersion}
+UninstallDisplayName={#AppName}{#VariantLabel} {#AppVersion}
 
 ; The payload is two 174MB executables that compress well. Solid compression across both of them
 ; takes the setup from roughly 350MB to something that fits on a memory stick and copies in a

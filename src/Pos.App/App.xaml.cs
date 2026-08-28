@@ -75,6 +75,10 @@ public partial class App : Application
             _log.Error("fatal", "unobserved task exception", e.Exception);
 
         var settings = PosSettings.LoadOrDefault(Path.Combine(DataDirectory, "settings.json"));
+
+        // The no-tax build never charges tax, whatever the settings file says. A settings file
+        // copied from a GST lane must not be able to make this build start issuing tax invoices.
+        settings.TaxMode = ProductVariant.Resolve(settings.TaxMode);
         var keymap = Keymap.LoadOrDefault(Path.Combine(DataDirectory, "keymap.json"));
 
         var database = new PosDatabase(Path.Combine(DataDirectory, "pos.db"));

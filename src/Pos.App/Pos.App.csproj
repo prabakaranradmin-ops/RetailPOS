@@ -5,7 +5,18 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>Pos.App</RootNamespace>
     <UseWPF>true</UseWPF>
+
+    <!--
+      Which build this is: Gst or NoTax. Set on the command line by publish.ps1
+      (-p:Variant=NoTax) and stamped into the assembly below, so the executable itself knows what
+      kind of document the shop issues rather than trusting a settings file beside it.
+    -->
+    <Variant Condition="'$(Variant)' == ''">Gst</Variant>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="Variant" Value="$(Variant)" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />

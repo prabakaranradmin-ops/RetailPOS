@@ -12,7 +12,14 @@
     <RootNamespace>Pos.Diagnostics</RootNamespace>
     <!-- Invoked as `pos test-hardware`. -->
     <AssemblyName>pos</AssemblyName>
+
+    <!-- The same stamp the till carries, so the tool and the till agree about what this lane is. -->
+    <Variant Condition="'$(Variant)' == ''">Gst</Variant>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="Variant" Value="$(Variant)" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Core.Configuration\Pos.Core.Configuration.csproj" />

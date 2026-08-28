@@ -25,7 +25,13 @@ param(
     # Skips rebuilding the installer and uses whatever is already in artifacts\installer.
     [switch] $SkipBuild,
 
-    [switch] $NoZip
+    [switch] $NoZip,
+
+    # Which builds to ship. Both by default: the shop that charges GST and the shop that does not
+    # are two different products to whoever receives them, and shipping only one means somebody has
+    # to remember to build the other.
+    [ValidateSet('Gst', 'NoTax', 'Both')]
+    [string] $Variant = 'Both'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,26 +41,44 @@ $here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvoca
 
 if (-not $OutputRoot) { $OutputRoot = Join-Path $here 'artifacts\ship' }
 
+# Ship both by recursing once per variant, so a single run cannot produce one and forget the other.
+if ($Variant -eq 'Both') {
+    foreach ($one in @('Gst', 'NoTax')) {
+        Write-Host ''
+        Write-Host "==================== $one ====================" -ForegroundColor Magenta
+        Write-Host ''
+
+        & $MyInvocation.MyCommand.Path `
+            -Version $Version -OutputRoot $OutputRoot -Variant $one `
+            -IncludeLoose:$IncludeLoose -SkipBuild:$SkipBuild -NoZip:$NoZip
+    }
+
+    return
+}
+
+$noTax = $Variant -eq 'NoTax'
+$suffix = if ($noTax) { '-NoTax' } else { '-GST' }
+
 if (-not $SkipBuild) {
-    Write-Host 'Building the installer first...' -ForegroundColor Cyan
-    & (Join-Path $here 'build-installer.ps1')
+    Write-Host "Building the $Variant installer first..." -ForegroundColor Cyan
+    & (Join-Path $here 'build-installer.ps1') -Variant $Variant
     if ($LASTEXITCODE -ne 0) { throw 'The installer build failed; there is nothing to ship.' }
     Write-Host ''
 }
 
-$installer = Get-ChildItem (Join-Path $here 'artifacts\installer') -Filter 'RetailPOS-Setup-*.exe' -ErrorAction SilentlyContinue |
+$installer = Get-ChildItem (Join-Path $here 'artifacts\installer') -Filter "RetailPOS$suffix-Setup-*.exe" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-if (-not $installer) { throw 'No installer found. Run build-installer first, or drop -SkipBuild.' }
+if (-not $installer) { throw "No $Variant installer found. Run build-installer first, or drop -SkipBuild." }
 
 # The version comes off the installer itself rather than being asked for again. If the two ever
 # disagreed, the one stamped into the executable is the one a lane would actually report.
 if (-not $Version) {
-    if ($installer.Name -notmatch 'RetailPOS-Setup-(.+)\.exe$') { throw "Cannot read a version from $($installer.Name)." }
+    if ($installer.Name -notmatch "RetailPOS$suffix-Setup-(.+)\.exe$") { throw "Cannot read a version from $($installer.Name)." }
     $Version = $Matches[1]
 }
 
-$folderName = "RetailPOS-$Version"
+$folderName = "RetailPOS$suffix-$Version"
 $ship = Join-Path $OutputRoot $folderName
 
 if (Test-Path $ship) { Remove-Item -LiteralPath $ship -Recurse -Force }
@@ -93,6 +117,27 @@ if ($IncludeLoose) {
     Write-Host '  copy-and-run payload included' -ForegroundColor DarkGray
 }
 
+# The no-tax shipment's templates say so. The executable forces it either way, so this changes no
+# behaviour — but a template that quietly said nothing about tax, next to an installer named
+# NoTax, would leave somebody guessing which one was telling the truth.
+if ($noTax) {
+    foreach ($name in @('settings.json', 'settings.pilot-tamil.json')) {
+        $path = Join-Path $ship "templates\$name"
+        $json = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json
+
+        $json | Add-Member -NotePropertyName 'taxMode' -NotePropertyValue 'Composition' -Force
+
+        # With the byte-order mark, like every other settings file this project writes: without it
+        # Notepad reads a Tamil shop name in the machine's ANSI code page and saves back mojibake.
+        [System.IO.File]::WriteAllText(
+            $path,
+            ($json | ConvertTo-Json -Depth 10),
+            (New-Object System.Text.UTF8Encoding($true)))
+    }
+
+    Write-Host '  settings templates marked as bills of supply' -ForegroundColor DarkGray
+}
+
 # The templates must keep their byte-order marks across the copy, or a shopkeeper editing one on
 # the lane gets the mojibake this whole guard exists to prevent.
 foreach ($name in @('settings.json', 'settings.pilot-tamil.json', 'catalog_template.csv')) {
@@ -110,10 +155,44 @@ foreach ($name in @('settings.json', 'settings.pilot-tamil.json', 'catalog_templ
 # nothing installed, which is the exact state of the machine it is being read on.
 # ---------------------------------------------------------------------------------------------
 
+$whichBuild = if ($noTax) {
+@"
+THIS IS THE NO-TAX BUILD
+
+  Every bill this lane issues is headed BILL OF SUPPLY and carries
+  the declaration the composition scheme requires. It charges no
+  GST, shows none on the screen, and none on the day-end report.
+
+  It CANNOT be switched to charge GST. If the shop registers
+  normally, install the GST build instead - RetailPOS-GST-Setup.
+  The lane keeps its database, settings and backups, and bills
+  already issued keep the document they were issued as.
+
+  Use this build only if the shop is registered under the
+  composition scheme. A bill of supply from a shop that collected
+  GST is the wrong document.
+
+"@
+} else {
+@"
+THIS IS THE GST BUILD
+
+  Bills are headed TAX INVOICE. GST is extracted from the shelf
+  price and shown on the bill, on the screen and on the day-end
+  report.
+
+  If the shop is registered under the composition scheme and may
+  not collect tax, install the no-tax build instead -
+  RetailPOS-NoTax-Setup.
+
+"@
+}
+
 $startHere = @"
 RetailPOS $Version
 ==================================================================
 
+$whichBuild
 WHAT IS IN THIS FOLDER
 
   $($installer.Name)
@@ -211,7 +290,12 @@ REPORTING A PROBLEM
 Set-Content -Path (Join-Path $ship 'START-HERE.txt') -Value $startHere -Encoding ascii
 
 # A hundred megabytes crossing a memory stick is worth being able to prove intact.
-$lines = @("RetailPOS $Version", "Built $(Get-Date -Format 'yyyy-MM-dd HH:mm')", '', 'SHA-256:')
+$lines = @(
+    "RetailPOS $Version",
+    "Variant: $(if ($noTax) { 'no tax - issues bills of supply' } else { 'GST - issues tax invoices' })",
+    "Built $(Get-Date -Format 'yyyy-MM-dd HH:mm')",
+    '',
+    'SHA-256:')
 
 foreach ($file in Get-ChildItem $ship -Recurse -File | Where-Object { $_.Name -ne 'CHECKSUMS.txt' } | Sort-Object FullName) {
     $relative = $file.FullName.Substring($ship.Length + 1)

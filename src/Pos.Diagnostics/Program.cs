@@ -62,8 +62,15 @@ catch (InvalidOperationException ex)
     return 2;
 }
 
+// The no-tax build never charges tax, whatever the settings file says — so a preview or a
+// reprint from this tool shows the same document the till would actually issue.
+settings.TaxMode = ProductVariant.Resolve(settings.TaxMode);
+
 Console.WriteLine($"RetailPOS diagnostics — lane {settings.LaneId}");
 Console.WriteLine($"Settings: {(File.Exists(settingsPath) ? settingsPath : "defaults (no settings file found)")}");
+
+if (ProductVariant.ChargesNoTax)
+    Console.WriteLine("Build: no-tax — this lane issues a BILL OF SUPPLY.");
 
 // The tool writes to the same log as the till, so a lane's history reads as one story rather than
 // two — a restore or a void shows up alongside the sales around it.

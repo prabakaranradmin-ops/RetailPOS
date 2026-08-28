@@ -27,7 +27,13 @@ param(
     # What to stamp the executables with. Without it they report 1.0.0.0 whatever the release is,
     # so somebody checking a lane's file properties to find out which build it is running gets the
     # same answer forever. Defaults to the current tag.
-    [string] $Version
+    [string] $Version,
+
+    # Which of the two builds this is. Gst charges GST and issues tax invoices; NoTax issues bills
+    # of supply and cannot be made to charge tax. Stamped into the executables, so a lane reports
+    # what it was built as rather than what a settings file beside it claims.
+    [ValidateSet('Gst', 'NoTax')]
+    [string] $Variant = 'Gst'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,20 +75,21 @@ $projects = @(
     @{ Name = 'pos tool';  Path = Join-Path $root 'src\Pos.Diagnostics\Pos.Diagnostics.csproj' }
 )
 
-$stamp = @()
+$stamp = @("-p:Variant=$Variant")
 
 if ($numeric) {
-    $stamp = @(
+    $stamp += @(
         "-p:Version=$Version",
         "-p:AssemblyVersion=$numeric",
         "-p:FileVersion=$numeric",
         "-p:InformationalVersion=$Version"
     )
 
-    Write-Host "Stamping the executables as $Version (file version $numeric)." -ForegroundColor Cyan
+    Write-Host "Stamping the executables as $Version (file version $numeric), variant $Variant." -ForegroundColor Cyan
 }
 else {
     Write-Warning "No version to stamp; the executables will report 1.0.0.0."
+    Write-Host "Variant: $Variant" -ForegroundColor Cyan
 }
 
 foreach ($project in $projects) {

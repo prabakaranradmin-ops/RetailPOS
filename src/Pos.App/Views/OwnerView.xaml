@@ -408,7 +408,12 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel MaxWidth="900" HorizontalAlignment="Left">
 
-            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+            <!--
+              Absent on the no-tax build. That build cannot issue a tax invoice, so offering the
+              choice would be offering something it will not do — and a control that quietly does
+              nothing is worse than no control.
+            -->
+            <Border x:Name="TaxModeCard" Style="{StaticResource Card}" Margin="0,0,0,16">
               <StackPanel>
                 <TextBlock Text="WHAT KIND OF BILL THIS LANE ISSUES" Style="{StaticResource Heading}" />
 
@@ -438,6 +443,17 @@
                                Text="A bill of supply from a shop that collected GST is the wrong document, and so is a tax invoice showing no tax. Bills already issued do not change — each one records the mode it was issued under, so your history stays as it was. The bill on screen must be finished or cleared before this can change." />
                   </StackPanel>
                 </Border>
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="NoTaxCard" Style="{StaticResource Card}" Margin="0,0,0,16" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="WHAT KIND OF BILL THIS LANE ISSUES" Style="{StaticResource Heading}" />
+                <TextBlock Text="Bill of supply — this build never charges GST" FontSize="15" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="780" Margin="0,6,0,0"
+                           Text="Every bill this lane issues is headed BILL OF SUPPLY and carries the declaration the composition scheme requires. There is nothing to switch here: this is the no-tax build, and it cannot issue a tax invoice." />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="780" Margin="0,10,0,0"
+                           Text="If the shop registers normally and starts collecting GST, install the GST build instead. Its installer is named RetailPOS-GST-Setup. Your database, settings and backups are kept — bills already issued keep the document they were issued as." />
               </StackPanel>
             </Border>
 

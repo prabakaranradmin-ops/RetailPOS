@@ -35,7 +35,12 @@ param(
 
     # Builds even though the working tree has uncommitted changes. What comes out is then not the
     # tagged release it claims to be, so it is refused unless asked for by name.
-    [switch] $AllowDirty
+    [switch] $AllowDirty,
+
+    # Which of the two builds to package. Gst charges GST and issues tax invoices; NoTax issues
+    # bills of supply and cannot be made to charge tax.
+    [ValidateSet('Gst', 'NoTax')]
+    [string] $Variant = 'Gst'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,9 +109,9 @@ if (-not $Compiler) {
 if (-not $SkipPublish) {
     Write-Host 'Publishing the payload first...' -ForegroundColor Cyan
 
-    # The same version the installer is about to carry, so the executables inside it agree with the
-    # setup file's name rather than reporting 1.0.0.0 forever.
-    & (Join-Path $here 'publish.ps1') -Version $Version
+    # The same version and variant the installer is about to carry, so the executables inside it
+    # agree with the setup file's name rather than reporting 1.0.0.0 and the wrong build forever.
+    & (Join-Path $here 'publish.ps1') -Version $Version -Variant $Variant
     if ($LASTEXITCODE -ne 0) { throw 'Publishing failed; the installer would have carried a stale payload.' }
     Write-Host ''
 }
@@ -124,14 +129,44 @@ foreach ($field in @('name', 'gstin', 'fssaiNumber')) {
 if (Test-Path $output) { Remove-Item $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
+# Read back what the published payload actually is, before wrapping it in an installer that will
+# claim a variant on its label. The stamp is inside the executable; the tool prints it, so asking
+# the tool is the only check that proves the build is what the name is about to say it is.
+$probe = Join-Path $env:TEMP ("variant-probe-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Force -Path $probe | Out-Null
+
+try {
+    $announced = & (Join-Path $here 'artifacts\lane\pos.exe') list-ports --data $probe 2>&1 | Out-String
+}
+finally {
+    Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$builtNoTax = $announced -match 'Build: no-tax'
+
+if ($Variant -eq 'NoTax' -and -not $builtNoTax) {
+    throw 'The payload does not announce itself as the no-tax build. The variant stamp did not take, and this installer would have shipped a GST build under a no-tax name.'
+}
+
+if ($Variant -eq 'Gst' -and $builtNoTax) {
+    throw 'The payload announces itself as the no-tax build, but this is the GST installer.'
+}
+
+Write-Host "  payload variant checked: $Variant" -ForegroundColor DarkGray
+
 Write-Host "Building the installer with $Compiler..." -ForegroundColor Cyan
-& $Compiler $script "/DAppVersion=$Version" "/DAppVersionNumeric=$numeric" /Q
+& $Compiler $script "/DAppVersion=$Version" "/DAppVersionNumeric=$numeric" "/DVariant=$Variant" /Q
 
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
 
-$setup = Get-ChildItem $output -Filter *.exe | Select-Object -First 1
+# By name, not "the first exe in the folder". Both variants land here, and picking whichever was
+# written first would happily verify one installer and ship the other.
+$suffix = if ($Variant -eq 'NoTax') { '-NoTax' } else { '-GST' }
+$expected = "RetailPOS$suffix-Setup-$Version.exe"
 
-if (-not $setup) { throw 'Inno Setup reported success but produced no installer.' }
+$setup = Get-ChildItem $output -Filter $expected | Select-Object -First 1
+
+if (-not $setup) { throw "Inno Setup reported success but produced no $expected." }
 
 # Read back what was actually stamped, rather than trusting that passing it in worked. This is the
 # check that would have caught the hard-coded version, and it costs nothing.
