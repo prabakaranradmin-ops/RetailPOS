@@ -1001,8 +1001,9 @@ static void WriteHelp()
 
           pos dashboard [--days N] [--top N] [--out <path>]
               The shop's figures as one HTML page: takings, the hourly rush,
-              what sells, how customers paid, and GST by slab. Reads the books
-              without writing to them, so it can be run while the till is busy.
+              what sells, how customers paid, and — where tax was charged —
+              GST by slab. Reads the books without writing to them, so it can
+              be run while the till is busy.
               Defaults to the last 30 days. Asks for a PIN first if one
               has been set.
 
