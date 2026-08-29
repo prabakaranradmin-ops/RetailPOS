@@ -57,7 +57,10 @@ function Write-AcceptanceReport {
         # When the tested binaries were built, and whether the source has moved on since. A saved
         # report outlives the console it scrolled past, so it has to say what it actually tested.
         [string] $BuiltAt = '',
-        [bool] $Stale = $false
+        [bool] $Stale = $false,
+        # Which of the two builds was driven. Both ship, they differ in the kind of document they
+        # issue, and a report that does not say which one it exercised proves half of what is sent.
+        [string] $Variant = ''
     )
 
     $positive = @($Results | Where-Object { $_.Kind -eq 'Positive' })
@@ -205,6 +208,7 @@ function Write-AcceptanceReport {
       <span>Run <code>$(Get-Date -Format 'yyyy-MM-dd HH:mm')</code></span>
       <span>Binaries <code>$(Escape-Html $BinDir)</code></span>
 $(if ($BuiltAt) { "      <span>Built <code>$(Escape-Html $BuiltAt)</code></span>" })
+$(if ($Variant) { "      <span>Variant <code>$(Escape-Html $Variant)</code></span>" })
     </p>
     <span class="verdict $verdictClass">$verdict</span>
 $(if ($Stale) { @"

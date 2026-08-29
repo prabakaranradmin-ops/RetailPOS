@@ -28,6 +28,11 @@ param(
 
     [switch] $NoZip,
 
+    # Ships without driving the acceptance run. It needs an interactive desktop to photograph the
+    # till, so this is the escape hatch for a build agent — at the cost of the shipment going out
+    # with no evidence that this build of it was ever run.
+    [switch] $SkipAcceptance,
+
     # Which builds to ship. Both by default: the shop that charges GST and the shop that does not
     # are two different products to whoever receives them, and shipping only one means somebody has
     # to remember to build the other.
@@ -51,7 +56,8 @@ if ($Variant -eq 'Both') {
 
         & $MyInvocation.MyCommand.Path `
             -Version $Version -OutputRoot $OutputRoot -Variant $one `
-            -IncludeLoose:$IncludeLoose -SkipBuild:$SkipBuild -NoZip:$NoZip
+            -IncludeLoose:$IncludeLoose -SkipBuild:$SkipBuild -NoZip:$NoZip `
+            -SkipAcceptance:$SkipAcceptance
     }
 
     return
@@ -92,7 +98,6 @@ Write-Host "Assembling $folderName..." -ForegroundColor Cyan
 Copy-Item $installer.FullName (Join-Path $ship $installer.Name)
 
 $documents = @(
-    @{ From = 'deploy\FEATURES.html';         To = 'docs\FEATURES.html' },
     @{ From = 'deploy\settings.json';         To = 'templates\settings.json' },
     @{ From = 'deploy\settings.pilot-tamil.json'; To = 'templates\settings.pilot-tamil.json' },
     @{ From = 'deploy\catalog_template.csv';  To = 'templates\catalog_template.csv' }
@@ -120,6 +125,33 @@ $guides = @(
 }
 
 & (Join-Path $here 'tools\docs\Convert-Docs.ps1') -Path $guides -OutputDir (Join-Path $ship 'docs') -Version $Version
+
+# The feature report is the acceptance run, driven against the payload this installer wraps, and it
+# is generated here rather than kept in the repository. A checked-in copy goes stale silently: the
+# one this replaced still said v1.1.0 and still showed a billing screen four releases old, and it
+# had been going out in every shipment since. Generating it means the report either describes what
+# is in the box or the ship fails.
+#
+# The run must pass. A shipment whose own evidence says a check failed is not one to send, and
+# noticing that at the shop is too late.
+if (-not $SkipAcceptance) {
+    Write-Host ''
+    Write-Host "Driving the $Variant build end to end..." -ForegroundColor Cyan
+
+    $acceptance = Join-Path $here "artifacts\acceptance$suffix"
+
+    & (Join-Path $here 'tools\acceptance\Run-Acceptance.ps1') -OutputDir $acceptance
+    if ($LASTEXITCODE -ne 0) { throw "The acceptance run failed for the $Variant build. Nothing shipped." }
+
+    $report = Join-Path $acceptance 'acceptance-report.html'
+    if (-not (Test-Path $report)) { throw "The acceptance run left no report at $report." }
+
+    Copy-Item $report (Join-Path $ship 'docs\FEATURES.html')
+    Write-Host ''
+}
+else {
+    Write-Host '  acceptance skipped; this shipment carries no feature report' -ForegroundColor Yellow
+}
 
 if ($IncludeLoose) {
     $lane = Join-Path $here 'artifacts\lane'
@@ -220,7 +252,9 @@ WHAT IS IN THIS FOLDER
   docs\SETTINGS.html         Every setting, and which four must be right.
   docs\CATALOGUE_FORMAT.html The item list format, column by column.
   docs\HARDWARE_SIGNOFF.html Bench sheet. Print it and tick it.
-  docs\FEATURES.html         What the software does.
+  docs\FEATURES.html         Every feature, driven end to end on this exact
+                             build, photographed at each step. What it does,
+                             and what it refuses to do.
 
   templates\settings.pilot-tamil.json    <-- copy THIS one for a Tamil lane
   templates\settings.json                 the generic English template

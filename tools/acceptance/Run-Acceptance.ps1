@@ -175,6 +175,22 @@ function Invoke-Pos {
     }
 }
 
+# Which build is under test. Both variants ship, and a handful of checks below are about the kind
+# of document the lane issues -- which is the one thing that legitimately differs between them.
+#
+# Asserting "TAX INVOICE" unconditionally does not test the no-tax build, it fails it: that build
+# is correct to head its bills "BILL OF SUPPLY", and a harness that calls the correct behaviour a
+# failure trains everyone to skim past a red line. The tool announces its variant on every run, so
+# the harness reads it rather than being told.
+function Get-BuildVariant {
+    $banner = (Invoke-Pos @('--version')).Output
+
+    if ($banner -match 'no-tax')  { return 'NoTax' }
+    if ($banner -match 'GST|tax invoice') { return 'Gst' }
+
+    throw "pos.exe did not say which build it is. Banner was:`n$banner"
+}
+
 function Short {
     param([string] $Text, [int] $Lines = 3)
 
@@ -254,6 +270,11 @@ Set-Content -Path (Join-Path $workspace 'bad-catalogue.csv') -Value $badCatalogu
 # 1. Command-line features — positive
 # --------------------------------------------------------------------------------------------
 
+$variant = Get-BuildVariant
+$variantLabel = if ($variant -eq 'NoTax') { 'no tax — issues bills of supply' } else { 'GST — issues tax invoices' }
+Write-Host "  build    : $variantLabel" -ForegroundColor DarkGray
+Write-Host ''
+
 Write-Host 'Command line' -ForegroundColor Cyan
 
 $r = Invoke-Pos @('import-items', '--file', (Join-Path $workspace 'catalogue.csv'), '--dry-run')
@@ -264,10 +285,21 @@ $r = Invoke-Pos @('import-items', '--file', (Join-Path $workspace 'catalogue.csv
 Add-Result -Kind Positive -Feature 'Catalogue' -Name 'A clean catalogue imports' `
     -Expected 'exit 0, four items loaded' -Actual (Short $r.Output) -Passed ($r.ExitCode -eq 0)
 
+$heading = if ($variant -eq 'NoTax') { 'BILL OF SUPPLY' } else { 'TAX INVOICE' }
+
 $r = Invoke-Pos @('receipt-preview')
-$previewOk = $r.ExitCode -eq 0 -and $r.Output -match 'RM/26-27/' -and $r.Output -match 'TAX INVOICE'
+$previewOk = $r.ExitCode -eq 0 -and $r.Output -match 'RM/26-27/' -and $r.Output -match $heading
 Add-Result -Kind Positive -Feature 'Receipt' -Name 'Receipt preview renders with a fiscal-year number' `
-    -Expected 'RM/26-27/... and TAX INVOICE present' -Actual (Short $r.Output 6) -Passed $previewOk
+    -Expected "RM/26-27/... and $heading present" -Actual (Short $r.Output 6) -Passed $previewOk `
+    -Detail "This is the $variant build, so the bill is headed $heading."
+
+# The other build's heading must be absent, not merely un-checked. A lane that printed both, or the
+# wrong one, would pass the check above on the strength of the right one being somewhere on the page.
+$wrongHeading = if ($variant -eq 'NoTax') { 'TAX INVOICE' } else { 'BILL OF SUPPLY' }
+Add-Result -Kind Negative -Feature 'Receipt' -Name 'The other build''s heading is nowhere on the bill' `
+    -Expected "no '$wrongHeading' anywhere in the rendered bill" `
+    -Actual $(if ($r.Output -match $wrongHeading) { "found '$wrongHeading'" } else { 'not present' }) `
+    -Passed ($r.Output -notmatch $wrongHeading)
 
 $previewPng = Join-Path $shots 'receipt-preview.png'
 $r = Invoke-Pos @('receipt-preview', '--png', $previewPng)
@@ -627,7 +659,8 @@ if (-not $NoUi) {
 
 $reportPath = Join-Path $OutputDir 'acceptance-report.html'
 Write-AcceptanceReport -Results $script:results -Shots $shots -Path $reportPath -BinDir $BinDir `
-    -BuiltAt $builtAt.ToLocalTime().ToString('dd-MM-yyyy HH:mm') -Stale ([bool]$stale)
+    -BuiltAt $builtAt.ToLocalTime().ToString('dd-MM-yyyy HH:mm') -Stale ([bool]$stale) `
+    -Variant $variantLabel
 
 if (-not $KeepWorkspace) {
     Remove-Item $workspace -Recurse -Force -ErrorAction SilentlyContinue
