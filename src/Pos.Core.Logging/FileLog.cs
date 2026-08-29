@@ -111,7 +111,12 @@ public sealed class FileLog : IPosLog, IDisposable
     /// </summary>
     private string ResolvePath(DateTimeOffset now)
     {
-        var today = DateOnly.FromDateTime(now.LocalDateTime);
+        // The date this timestamp already carries, not whatever date the machine's own timezone
+        // would call the same instant. LocalDateTime re-converts, which throws away the offset the
+        // clock handed over: a lane trading up to midnight on a machine whose timezone is set to
+        // something other than the shop's would put both sides of midnight in one file. The day a
+        // log entry belongs to is the shop's day, not the operating system's opinion of it.
+        var today = DateOnly.FromDateTime(now.DateTime);
 
         if (_currentPath is null || today != _currentDay)
         {

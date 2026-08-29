@@ -151,6 +151,43 @@ public class FileLogTests : IDisposable
         Assert.Contains("after midnight", File.ReadAllText(Path.Combine(_directory, "pos-20260827.log")));
     }
 
+    /// <summary>
+    /// <para>
+    /// The file is named for the date the timestamp carries, whatever timezone the machine
+    /// happens to be set to.
+    /// </para>
+    /// <para>
+    /// The rollover test above only catches this on a machine that is not in IST: it feeds
+    /// +05:30 timestamps, so on an Indian lane the buggy conversion and the correct one agree
+    /// and the test passes without proving anything. It went green on the build machine and red
+    /// on CI, which runs in UTC, for a year of commits.
+    /// </para>
+    /// <para>
+    /// Every case here is the same wall-clock time on the same date, written with a different
+    /// offset, and every one must produce the same filename. Reading the machine's timezone
+    /// instead of the timestamp's own can satisfy at most the one case that happens to match the
+    /// machine, so this fails somewhere no matter where it is run.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(-8)]
+    [InlineData(0)]
+    [InlineData(5.5)]
+    [InlineData(13)]
+    public void TheFileIsNamedForTheTimestampsOwnDayNotTheMachines(double offsetHours)
+    {
+        var clock = new FakeTimeProvider(
+            new DateTimeOffset(2026, 8, 26, 23, 59, 0, TimeSpan.FromHours(offsetHours)));
+
+        using var log = New(clock: clock);
+
+        log.Info("x", "late on the twenty-sixth");
+
+        Assert.Equal(
+            "pos-20260826.log",
+            Path.GetFileName(new DirectoryInfo(_directory).EnumerateFiles().Single().FullName));
+    }
+
     /// <summary>An unusually busy day must not grow one file without limit.</summary>
     [Fact]
     public void ABigDayRollsToAnotherPart()
