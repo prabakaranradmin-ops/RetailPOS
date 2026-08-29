@@ -1,0 +1,106 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--good:#1E7A4D}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--good:#54B98A}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--good:#54B98A}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:52px 24px 110px}
+header{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:30px}
+.eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+.tagline{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h2{font-size:24px;margin:46px 0 6px;letter-spacing:-.01em}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+.lede{color:var(--soft);max-width:60ch}
+.builds{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin:26px 0 0}
+.build{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:22px 24px 24px}
+.build h3{margin:0;font-size:20px;display:flex;align-items:baseline;gap:10px}
+.ver{font-family:Consolas,monospace;font-size:12px;color:var(--faint);font-weight:400}
+.build p{color:var(--soft);font-size:15px;margin:8px 0 16px}
+.build ul{list-style:none;padding:0;margin:0 0 18px;border-top:1px solid var(--rule)}
+.build li{border-bottom:1px solid var(--rule)}
+.build li a{display:block;padding:9px 2px;text-decoration:none;font-size:15px}
+.build li a:hover{background:var(--accent-soft)}
+.build li .what{display:block;font-size:12.5px;color:var(--faint)}
+.dl{display:inline-block;background:var(--accent);color:var(--paper);text-decoration:none;
+padding:9px 16px;border-radius:7px;font-size:14.5px;font-weight:600}
+.dl:hover{opacity:.9}
+.dl .sz{opacity:.75;font-weight:400}
+.pass{color:var(--good);font-weight:600}
+footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--rule);
+color:var(--faint);font-size:14px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">MaaranSoft</p>
+    <h1>RetailPOS</h1>
+    <p class="tagline">Offline point of sale for Indian retail. Nothing on a lane leaves the machine.</p>
+  </header>
+
+  <p class="lede">Two builds ship. They are the same till in every respect except the kind of
+  document they issue, so pick by whether the shop charges GST. Everything below is the
+  documentation that goes in the box, published from the shipment itself.</p>
+
+  <div class="builds">
+    <div class="build">
+      <h3>GST <span class="ver">1.4.3</span></h3>
+      <p>Issues a tax invoice. CGST/SGST within the state, IGST outside it.</p>
+      <ul>
+        <li><a href="gst/PILOT_RUNBOOK.html">Runbook<span class="what">Opening, billing, the owner screen, closing the day</span></a></li>
+        <li><a href="gst/FEATURES.html">Feature report<span class="what">Every feature driven end to end, photographed</span></a></li>
+        <li><a href="gst/SETTINGS.html">Settings<span class="what">Every setting, and the four that must be right</span></a></li>
+        <li><a href="gst/CATALOGUE_FORMAT.html">Catalogue format<span class="what">The item list, column by column</span></a></li>
+        <li><a href="gst/HARDWARE_SIGNOFF.html">Hardware sign-off<span class="what">Bench sheet. Print it and tick it.</span></a></li>
+      </ul>
+      <a class="dl" href="https://github.com/prabakaranradmin-ops/RetailPOS/raw/main/artifacts/ship/RetailPOS-GST-1.4.3/RetailPOS-GST-Setup-1.4.3.exe">Download the installer <span class="sz">99 MB</span></a>
+    </div>
+    <div class="build">
+      <h3>No tax <span class="ver">1.4.3</span></h3>
+      <p>Issues a bill of supply. No GST is charged and there is no switch to turn it on.</p>
+      <ul>
+        <li><a href="no-tax/PILOT_RUNBOOK.html">Runbook<span class="what">Opening, billing, the owner screen, closing the day</span></a></li>
+        <li><a href="no-tax/FEATURES.html">Feature report<span class="what">Every feature driven end to end, photographed</span></a></li>
+        <li><a href="no-tax/SETTINGS.html">Settings<span class="what">Every setting, and the four that must be right</span></a></li>
+        <li><a href="no-tax/CATALOGUE_FORMAT.html">Catalogue format<span class="what">The item list, column by column</span></a></li>
+        <li><a href="no-tax/HARDWARE_SIGNOFF.html">Hardware sign-off<span class="what">Bench sheet. Print it and tick it.</span></a></li>
+      </ul>
+      <a class="dl" href="https://github.com/prabakaranradmin-ops/RetailPOS/raw/main/artifacts/ship/RetailPOS-NoTax-1.4.3/RetailPOS-NoTax-Setup-1.4.3.exe">Download the installer <span class="sz">99 MB</span></a>
+    </div>
+  </div>
+
+  <h2>About the feature report</h2>
+  <p class="lede">It is not written by hand. Each shipment's report is an end-to-end run against
+  that exact installer's payload &mdash; the till driven the way a cashier drives it, screenshotted
+  at every step, with what must work and what must be refused counted separately.
+  <span class="pass">Both builds pass all 54 checks.</span> If a run fails, the build does not ship.</p>
+
+  <h2>Installing</h2>
+  <p class="lede">The installer needs no admin rights and installs for the current user only. The
+  machine needs nothing beforehand, not even the .NET runtime. Read the runbook first &mdash; the
+  lane's <code>settings.json</code> has four fields that must be right before the first sale, and one
+  of them cannot be changed afterwards.</p>
+
+  <footer>
+    Built from the shipment in <a href="https://github.com/prabakaranradmin-ops/RetailPOS">the repository</a>, 2026-08-29.
+    This page and the guides it links are generated; the Markdown sources are the originals.
+  </footer>
+</div>
+</body>
+</html>

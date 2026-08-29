@@ -1,0 +1,178 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalogue file format â€” RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--warn:#A63D2F}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 110px}
+.doc-head{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+.doc-head .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+.doc-head .meta{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+h2{font-size:26px;margin:44px 0 10px;letter-spacing:-.01em;border-top:1px solid var(--rule);
+padding-top:30px}
+h3{font-size:19px;margin:28px 0 6px}
+h4{font-size:16.5px;margin:20px 0 4px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+/* A section heading draws its own rule, so a --- written just above one in the
+   source would print two rules a few pixels apart. */
+hr+h2{border-top:0;padding-top:0;margin-top:34px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 17px;
+overflow-x:auto;margin:16px 0;font-family:Consolas,monospace;font-size:13px;line-height:1.6}
+pre code{background:none;padding:0;color:var(--ink)}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+li.check{list-style:none;margin-left:-22px;margin-bottom:9px}
+.box{display:inline-block;width:15px;height:15px;border:1.5px solid var(--rule-hard);
+border-radius:3px;margin-right:10px;vertical-align:-2px}
+.box.done{border-color:var(--accent);color:var(--accent);font-size:11px;line-height:11px;
+text-align:center}
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0;min-width:420px}
+th,td{text-align:left;padding:8px 14px 8px 0;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
+border-bottom:1px solid var(--rule-hard)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--card);border-left:3px solid var(--warn);
+border-radius:0 8px 8px 0;color:var(--soft)}
+blockquote p:last-child{margin:0}
+@media print{body{background:#fff;color:#000;font-size:11pt}.wrap{padding:0;max-width:none}
+h2{page-break-after:avoid}pre,table,blockquote{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="doc-head">
+  <p class="eyebrow">RetailPOS 1.4.3</p>
+  <h1>Catalogue file format</h1>
+  <p class="meta">Offline point of sale for Indian retail. Nothing on this lane leaves the machine.</p>
+</div>
+<p>The importer reads a CSV. Give this page to whoever produces the store's item export.</p>
+<p>Columns may be in <strong>any order</strong> and <strong>any case</strong>. The first nine must be present; the last two are optional and may be left out altogether.</p>
+<div class="scroller"><table><thead><tr>
+<th>Column</th>
+<th>Required</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>sku</code></td>
+<td>yes</td>
+<td>Your own item code. Must be unique. Case-insensitive, so <code>DAL001</code> and <code>dal001</code> are the same item.</td>
+</tr>
+<tr>
+<td><code>barcode</code></td>
+<td>column yes, value no</td>
+<td>Leave blank for loose goods with no printed barcode. Must be unique where present.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>yes</td>
+<td>What prints on the receipt and what the cashier searches.</td>
+</tr>
+<tr>
+<td><code>hsn_code</code></td>
+<td>yes</td>
+<td>Required on a GST invoice for every line.</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>yes</td>
+<td><code>Pcs</code> or <code>Kg</code>. <code>L</code> and <code>M</code> are also accepted.</td>
+</tr>
+<tr>
+<td><code>mrp</code></td>
+<td>yes</td>
+<td>Printed maximum retail price.</td>
+</tr>
+<tr>
+<td><code>selling_price</code></td>
+<td>yes</td>
+<td>What you actually charge. May not exceed <code>mrp</code>.</td>
+</tr>
+<tr>
+<td><code>gst_rate</code></td>
+<td>yes</td>
+<td>One of <code>0</code>, <code>5</code>, <code>12</code>, <code>18</code>, <code>28</code>. A trailing <code>%</code> is fine.</td>
+</tr>
+<tr>
+<td><code>is_weighed</code></td>
+<td>yes</td>
+<td><code>true</code>/<code>false</code>, <code>yes</code>/<code>no</code>, <code>1</code>/<code>0</code>. Must agree with <code>unit</code>.</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>no</td>
+<td>Which part of the shop it belongs to — <code>Staples</code>, <code>Dairy</code>, <code>Household</code>. Free text; whatever you type becomes a slice of the dashboard's department chart.</td>
+</tr>
+<tr>
+<td><code>cost_price</code></td>
+<td>no</td>
+<td>What you pay for one, tax inclusive like <code>selling_price</code>. Must be between <code>0</code> and <code>selling_price</code>.</td>
+</tr>
+<tr>
+<td><code>stock_qty</code></td>
+<td>no</td>
+<td>How many are on the shelf now. Leave blank for anything you do not count.</td>
+</tr>
+<tr>
+<td><code>reorder_level</code></td>
+<td>no</td>
+<td>Warn when the shelf reaches this. Needs a <code>stock_qty</code> beside it.</td>
+</tr>
+</tbody></table></div>
+<h2 id="the-four-optional-columns">The four optional columns</h2>
+<p><code>category</code>, <code>cost_price</code>, <code>stock_qty</code> and <code>reorder_level</code> may be left out of the file entirely, and a catalogue written before they existed imports unchanged. Individual cells may be blank too — a blank means <em>you have not said</em>, which is not the same as zero and is treated differently everywhere it matters.</p>
+<p>The first two exist for the dashboard. Without <code>category</code> every sale lands in one bucket called <strong>Uncategorised</strong>; without <code>cost_price</code> there is no margin, so the shop can be told what it sold but not what it earned. Neither affects billing, a receipt, or a GST return.</p>
+<h3 id="counting-stock">Counting stock</h3>
+<p><code>stock_qty</code> starts a count. From then on every sale takes off it, every void puts back, and <code>pos stock --low</code> says what to order. <code>reorder_level</code> is the line below which it warns — the cashier sees <em>"Only 3 left"</em> when the item is scanned, and the figure goes on the day-end report and the dashboard.</p>
+<p><strong>Leave <code>stock_qty</code> blank for anything you do not count.</strong> Loose rice out of a sack, vegetables sold by weight — a blank means the item is not counted, and it never appears in a stock list or produces a warning. That is different from <code>0</code>, which means you counted and there are none.</p>
+<p><strong>A count is never a barrier.</strong> If the till says none are left and the customer is holding one, the sale goes through and the count goes negative. The shelf is the authority; a negative figure is the software telling you the count and the shelf have parted company.</p>
+<p><strong>Re-importing does not reset your counts.</strong> A blank <code>stock_qty</code> on a re-import leaves the live figure alone, so changing prices with the same file you first loaded will not quietly restore every count to what it was weeks ago. To restate a count deliberately, put the new figure in the cell — or correct one item with:</p>
+<pre><code>pos stock --set --sku DAL001 --qty 24 --reason "delivery"</code></pre>
+<p><strong>Both are recorded onto the bill at the moment of sale.</strong> Move an item to another department or renegotiate its cost tomorrow, and last month's figures stay as they were — the same rule the price and the tax already follow. The practical consequence is that adding them fills the charts in <em>from that day forward</em>, not backwards. Nobody knew an item's cost last March, and the software will not pretend it did.</p>
+<p>Adding them to a catalogue that is already loaded is an ordinary re-import:</p>
+<pre><code>pos import-items --file catalogue.csv --update</code></pre>
+<h2 id="what-gets-rejected">What gets rejected</h2>
+<p>The import is <strong>all or nothing</strong>. If anything is wrong, nothing is written and you get the full list of problems with line numbers — fix the file and run it again.</p>
+<ul>
+<li>A <code>gst_rate</code> that is not one of the five slabs. Almost always a typo, and a typo here misprices every sale of that item until somebody notices.</li>
+<li>A <code>selling_price</code> above <code>mrp</code>. Selling above the printed price is not allowed.</li>
+<li>A <code>barcode</code> whose check digit does not add up. This catches a mistyped or transposed digit — which would otherwise match a completely different product. Only applies to 8, 12 and 13 digit numeric codes; your own internal codes are accepted as-is.</li>
+<li>The same <code>sku</code> or <code>barcode</code> on two rows, or a <code>barcode</code> already belonging to a different item.</li>
+<li><code>unit</code> and <code>is_weighed</code> contradicting each other. They say the same thing, so if they disagree one of them is wrong and there is no way to tell which.</li>
+<li>A negative <code>stock_qty</code> or <code>reorder_level</code>. A count below zero is something the till records after a sale, not something a spreadsheet declares.</li>
+<li>A <code>reorder_level</code> with no <code>stock_qty</code> beside it — there is nothing to compare it against, so it would never fire, and a half-filled row is nearly always a mistake rather than a choice.</li>
+<li>A <code>cost_price</code> above the <code>selling_price</code>. Either it is a typo, or the shop is losing money on every scan of that item — and both are worth stopping the import over rather than finding in a margin report months later. A negative cost is refused for the same reason.</li>
+</ul>
+<h2 id="things-that-are-handled-for-you">Things that are handled for you</h2>
+<ul>
+<li>Commas inside a quoted field: <code>"Basmati Rice, Premium, 5kg"</code> stays one name.</li>
+<li>Thousands separators and currency prefixes: <code>"1,299.00"</code> and <code>Rs.1299</code> both work.</li>
+<li>A byte order mark, which Excel adds when you "Save as CSV UTF-8".</li>
+</ul>
+<h2 id="loading-it">Loading it</h2>
+<pre><code>pos import-items --file catalogue.csv --dry-run    check it without writing anything
+pos import-items --file catalogue.csv              first load
+pos import-items --file catalogue.csv --update     later price revisions</code></pre>
+<p><code>--update</code> changes items already in the catalogue. Without it, an existing SKU is reported as an error — which is what you want on a first load, and not what you want on a price change.</p>
+<h2 id="a-note-on-product-names">A note on product names</h2>
+<p>Receipts print in plain ASCII, so the printer's code page cannot corrupt them. Accented letters are folded (<code>Café</code> prints as <code>Cafe</code>) and the rupee sign is spelled out. <strong>Names in Tamil, Devanagari or other non-Latin scripts will print as question marks</strong> — a thermal printer has no font for them. If the store needs names in a local script on its receipts, that is a printer with the right font and a matching code page, and it needs deciding before the pilot rather than after.</p>
+
+</div>
+</body>
+</html>
