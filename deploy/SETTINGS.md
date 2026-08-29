@@ -160,12 +160,21 @@ The defaults are the reference values from the SRS: redeem up to 30% of a bill, 
 50 paise, and one point is earned per ₹50 of the **net** bill after any redemption. Change these
 only with whoever signs off the store's accounts — they affect what customers are owed.
 
-## Composition dealers: `taxMode`
+## Which build you have, and `taxMode`
 
-**Easiest from the till:** `Ctrl+D`, then Settings. It asks before it changes anything, applies
-straight away without a restart, and writes the setting below for you.
+**Two installers ship, and they are not interchangeable.**
 
-Leave it alone unless the shop is registered under the **composition scheme**. In the file it reads:
+| Installer | For | What the bill says |
+|---|---|---|
+| `RetailPOS-GST-Setup` | A shop that collects GST | **TAX INVOICE**, with the rate-wise breakup |
+| `RetailPOS-NoTax-Setup` | A **composition dealer**, who has a GSTIN but may not collect tax | **BILL OF SUPPLY**, with the declaration the rules require |
+
+**On the no-tax build there is nothing to set.** It issues a bill of supply whatever `taxMode` says,
+and its owner screen has no tax chooser — a build that cannot issue a tax invoice does not offer to.
+A `settings.json` copied from a GST lane cannot make it start charging.
+
+**On the GST build** the shop can switch itself to bills of supply: `Ctrl+D`, then Settings. It asks
+before it changes anything, applies straight away without a restart, and writes:
 
 ```json
 "taxMode": "Composition"

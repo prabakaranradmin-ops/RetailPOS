@@ -5,6 +5,22 @@ this repository.
 
 Every command below is run from the folder the lane software was copied into.
 
+## Which build is this?
+
+There are two, and a handful of paragraphs below depend on which one is installed:
+
+| | Bills it issues | Tax on the bill |
+|---|---|---|
+| **No-tax build** | Bill of supply | None. The switch is not there, and settings asking for GST are ignored. |
+| **GST build** | Tax invoice, or a bill of supply if set to | CGST/SGST within the state, IGST outside it |
+
+The installer's own filename says which, and so does the owner's screen under Settings (`Ctrl+D`,
+then `Ctrl+3`). Everything else in this runbook — opening, billing, closing, stock, the drawer — is
+the same on both.
+
+A shop that registers for GST later installs the GST build over the top. Its database, settings and
+backups are kept, and bills already issued keep the kind of document they were issued as.
+
 ---
 
 ## Before the first day
@@ -229,8 +245,11 @@ lost file costs.
 
 ### 7. File the report
 
-Keep the printed Z-reports in order. They are the day's takings as the till recorded them, and the
-tax breakdown by slab is the shape a GST return wants.
+Keep the printed Z-reports in order. They are the day's takings as the till recorded them.
+
+On the **GST build** the report also breaks tax down by slab, which is the shape a GST return wants.
+On the **no-tax build** there is no slab section, because no tax was charged — the report is takings,
+tenders and the drawer count.
 
 **If a sheet goes missing, or the printer jammed at closing**, the report itself is not lost — every
 close is stored:
@@ -256,9 +275,9 @@ report back can never accidentally take one.
 
 | Section | | |
 |---|---|---|
-| **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, which departments earn, and GST by slab. Pick 7, 30 or 90 days at the top. |
+| **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
-| **Settings** | `Ctrl+3` | Whether this lane issues a tax invoice or a bill of supply, and the PIN in front of this screen. |
+| **Settings** | `Ctrl+3` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 
@@ -266,9 +285,14 @@ report back can never accidentally take one.
 for it before it opens. It is stored scrambled and **cannot be recovered**, so pick something you
 will remember. This keeps a cashier out of the figures; it does not encrypt the database.
 
-**Changing what kind of bill the lane issues** is under Settings too. It asks before it changes
-anything, and it is refused while a bill is on the screen — finish or clear that first. Bills
-already issued do not change: each one records the kind of document it was issued as.
+**Changing what kind of bill the lane issues** is under Settings too — **on the GST build only**. It
+asks before it changes anything, and it is refused while a bill is on the screen; finish or clear
+that first. Bills already issued do not change: each one records the kind of document it was issued
+as.
+
+On the **no-tax build** there is no chooser. That build issues a bill of supply and cannot be made to
+charge GST, so the Settings tab says what it does instead of offering a switch it will not honour.
+A shop that registers normally installs the GST build, keeping its database, settings and backups.
 
 *(The same things are still reachable from the command line — `pos dashboard`, `pos stock`,
 `pos dashboard-pin` — for support and for scripting. Nobody running a shop needs them.)*
@@ -320,8 +344,8 @@ history is what lets you find where it went, rather than shrugging and typing a 
 
 ## The dashboard — and keeping it to yourself
 
-The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, GST by
-slab, and — if the catalogue has cost prices — margins.
+The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, and — if
+the catalogue has cost prices — margins. On the GST build it carries GST by slab too.
 
 ```
 pos dashboard                       last 30 days, saved next to the database
