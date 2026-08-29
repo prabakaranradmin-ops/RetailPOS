@@ -129,6 +129,10 @@ padding:9px 16px;border-radius:7px;font-size:14.5px;font-weight:600}
 .dl:hover{opacity:.9}
 .dl .sz{opacity:.75;font-weight:400}
 .pass{color:var(--good);font-weight:600}
+.try{display:inline-block;margin:22px 0 8px;background:var(--accent);color:var(--paper);
+text-decoration:none;padding:12px 22px;border-radius:8px;font-size:16px;font-weight:600}
+.try:hover{opacity:.9}
+.trynote{color:var(--faint);font-size:14px;max-width:62ch;margin:0}
 footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--rule);
 color:var(--faint);font-size:14px}
 code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
@@ -190,6 +194,12 @@ $css
   document they issue, so pick by whether the shop charges GST. Everything below is the
   documentation that goes in the box, published from the shipment itself.</p>
 
+  <a class="try" href="demo.html">Try the till in your browser &rarr;</a>
+  <p class="trynote">A working model of the billing screen and the owner's dashboard &mdash; scan
+  items, discount a line, take payment, read the figures. It is a demonstration: the real software
+  is a Windows desktop application, and nothing in the browser can print a bill, open a drawer or
+  read a weighing scale.</p>
+
   <div class="builds">
 $($cards -join "`n")
   </div>
@@ -218,6 +228,14 @@ $($cards -join "`n")
 # UTF-8 with a byte-order mark, like everything else this project writes, so a Tamil shop name in
 # a quoted example survives a reader that guesses the encoding.
 [System.IO.File]::WriteAllText((Join-Path $Output 'index.html'), $index, (New-Object System.Text.UTF8Encoding $true))
+
+# The working model of the two screens. It is a hand-written page rather than anything generated
+# from the application, because the application is WPF and cannot run in a browser at all -- so
+# this is the one file on the site that CAN drift from what ships. Its own banner says it is a
+# demonstration for exactly that reason.
+$demo = Join-Path $here 'demo.html'
+if (-not (Test-Path $demo)) { throw "Missing: $demo" }
+Copy-Item $demo (Join-Path $Output 'demo.html') -Force
 
 # Pages runs Jekyll over the output unless told not to, and Jekyll skips files and folders whose
 # names begin with an underscore. Nothing here needs building.

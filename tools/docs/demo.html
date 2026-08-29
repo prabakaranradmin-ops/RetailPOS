@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RetailPOS demo</title>
+<style>
+/*
+  A working model of the two screens a shop uses, so somebody can decide whether they want the
+  software without installing 99 MB first.
+
+  It is a model, not the till. The arithmetic is real -- MRP is tax-inclusive and the GST is
+  extracted out of it, the same way the application does it -- but nothing here prints, opens a
+  drawer, reads a scale or is written down anywhere. Reload and it is gone.
+*/
+:root{
+  --surface:#0A0D13; --panel:#0F141D; --card:#131A26; --line:#1E2836; --line-soft:#172030;
+  --ink:#E8EDF5; --soft:#96A1B4; --faint:#6B7688;
+  --accent:#38BDF8; --positive:#10B981; --negative:#F43F5E; --amber:#F59E0B;
+  --row-alt:#0D121B; --row-active:#152233;
+  --mono:"Cascadia Mono",Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:#05070B;color:var(--ink);
+  font-family:"Segoe UI",-apple-system,system-ui,sans-serif;font-size:15px;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit}
+
+/* ---------- demo chrome (not part of the application) ---------- */
+.chrome{max-width:1500px;margin:0 auto;padding:18px 20px 0}
+.chrome-bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+  background:#0E1420;border:1px solid var(--line);border-left:3px solid var(--amber);
+  border-radius:9px;padding:12px 16px}
+.chrome-note{font-size:13.5px;color:var(--soft);line-height:1.5}
+.chrome-note b{color:var(--amber);font-weight:600}
+.chrome-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:6px 13px;font-size:13px;cursor:pointer;color:var(--soft)}
+.seg button[aria-pressed=true]{background:var(--accent);color:#04121B;font-weight:600}
+.ghost{background:transparent;border:1px solid var(--line);border-radius:7px;padding:6px 13px;
+  font-size:13px;cursor:pointer;color:var(--soft)}
+.ghost:hover{border-color:var(--accent);color:var(--accent)}
+a.home{color:var(--accent);font-size:13px;text-decoration:none}
+a.home:hover{text-decoration:underline}
+
+/* ---------- the application window ---------- */
+.app{max-width:1500px;margin:14px auto 40px;background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  display:flex;flex-direction:column;min-height:720px}
+.titlebar{background:#0C1119;border-bottom:1px solid var(--line);padding:7px 14px;
+  font-size:13px;color:var(--soft);display:flex;align-items:center;gap:9px}
+.titlebar .dot{width:11px;height:11px;border-radius:2px;background:var(--accent);opacity:.8}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:13px 18px;border-bottom:1px solid var(--line-soft)}
+.brand{display:flex;align-items:center;gap:12px;font-size:15px}
+.badge{background:#1B2434;color:var(--soft);border-radius:4px;padding:3px 9px;
+  font-size:11.5px;letter-spacing:.09em;font-weight:700}
+.brand .store{font-weight:600}
+.brand .sep{color:var(--faint)}
+.offline{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--soft)}
+.offline .live{width:8px;height:8px;border-radius:50%;background:var(--positive)}
+.offline b{color:var(--positive);letter-spacing:.05em;font-size:11.5px}
+
+.scanwrap{padding:14px 18px 4px}
+.scanwrap label{display:block;font-size:13px;color:var(--soft);margin-bottom:7px}
+#scan{width:100%;background:#080B10;border:1px solid var(--accent);border-radius:6px;
+  color:var(--ink);padding:13px 14px;font-size:16px;outline:none;font-family:var(--mono)}
+#scan::placeholder{color:#4A5464}
+
+.stage{display:flex;gap:14px;padding:12px 18px 0;flex:1;min-height:0}
+.gridwrap{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;
+  display:flex;flex-direction:column;overflow:hidden}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead th{background:#0C1119;text-align:left;font-size:13.5px;font-weight:600;
+  padding:11px 10px;border-bottom:1px solid var(--line);color:var(--ink);white-space:nowrap}
+tbody td{padding:9px 10px;border-bottom:1px solid var(--line-soft);font-size:14px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tbody tr:nth-child(even){background:var(--row-alt)}
+tbody tr.sel{background:var(--row-active)}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.num{color:var(--faint);font-family:var(--mono)}
+td.name{font-weight:600}
+td.mrp{color:var(--faint)}
+td.total{color:var(--positive);font-weight:600}
+td.disc{color:var(--negative);text-align:right;font-family:var(--mono)}
+.empty-grid{padding:44px 16px;text-align:center;color:var(--faint);font-size:14px}
+
+/* the side panel */
+.side{width:330px;flex:none;display:flex;flex-direction:column;gap:12px}
+.totalcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:15px 17px}
+.totalcard .row1{display:flex;justify-content:space-between;align-items:center}
+.totalcard .lbl{font-size:11.5px;letter-spacing:.11em;color:var(--soft);font-weight:700}
+.pill{background:#1B2434;color:var(--soft);border-radius:20px;padding:2px 10px;font-size:11.5px}
+.grand{font-family:var(--mono);font-size:42px;line-height:1.1;color:var(--positive);
+  text-align:right;font-weight:700;margin:6px 0 4px;font-variant-numeric:tabular-nums}
+.totalcard .foot{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.totalcard .doc{font-size:12.5px;color:var(--soft)}
+.totalcard .saved{font-size:12.5px;color:var(--positive)}
+.sect{font-size:11.5px;letter-spacing:.11em;color:var(--accent);font-weight:700;margin:4px 0 6px}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:3px 0}
+.kv .k{color:var(--soft)}
+.kv .v{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.kv .v.word{font-family:inherit}
+.kv .v.neg{color:var(--negative)}
+.paygrid{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 10px;font-size:14px;align-items:baseline}
+.paygrid .k{color:var(--soft)}
+.paygrid .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.sidescroll{overflow-y:auto;padding-right:4px}
+hr.sep{border:0;border-top:1px solid var(--line-soft);margin:12px 0}
+
+.status{padding:10px 18px 2px;font-size:14px;color:var(--accent);min-height:34px}
+.status.warn{color:var(--amber)}
+.status.bad{color:var(--negative)}
+
+.keys{display:flex;flex-wrap:wrap;gap:7px;padding:12px 18px 16px;border-top:1px solid var(--line-soft)}
+.key{display:flex;align-items:center;gap:8px;background:#0E1420;border:1px solid var(--line);
+  border-radius:7px;padding:7px 12px;font-size:13.5px;cursor:pointer;color:var(--soft)}
+.key:hover{border-color:var(--accent)}
+.key kbd{font-family:var(--mono);font-size:12px;background:#1B2434;border-radius:4px;
+  padding:2px 6px;color:var(--ink)}
+.key.pay{margin-left:auto;background:rgba(16,185,129,.13);border-color:var(--positive);color:var(--positive);font-weight:600}
+.key.pay kbd{background:var(--positive);color:#04120C}
+
+/* ---------- owner ---------- */
+.owner{display:none;flex-direction:column;flex:1;min-height:0}
+.owner.on{display:flex}
+.billing.off{display:none}
+.ownerhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 22px 0}
+.ownerhead h2{margin:0;font-size:30px;font-weight:400;letter-spacing:-.01em}
+.ownerhead .sub{color:var(--soft);font-size:13px;margin-top:3px}
+.period{display:flex;align-items:center;gap:13px;font-size:14px;color:var(--soft)}
+.period label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--ink)}
+.refresh{background:#1B2434;border:1px solid var(--line);border-radius:7px;padding:9px 18px;cursor:pointer}
+.tabs{display:flex;gap:6px;padding:16px 22px 0;border-bottom:1px solid var(--line-soft)}
+.tab{background:transparent;border:0;border-bottom:2px solid transparent;padding:10px 16px;
+  font-size:15.5px;cursor:pointer;color:var(--soft)}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none;padding:20px 22px;overflow-y:auto;flex:1}
+.panel.on{display:block}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.fig{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:16px 18px}
+.fig .lbl{font-size:11.5px;letter-spacing:.1em;color:var(--soft);font-weight:700}
+.fig .big{font-family:var(--mono);font-size:34px;margin:6px 0 4px;font-variant-numeric:tabular-nums}
+.fig .big.g{color:var(--positive)}
+.fig .note{font-size:12.5px;color:var(--faint)}
+.block{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:16px 18px;margin-top:14px}
+.block h4{margin:0 0 14px;font-size:11.5px;letter-spacing:.1em;color:var(--soft);font-weight:700}
+.hours{display:flex;align-items:flex-end;gap:3px;height:130px}
+.hours .h{flex:1;background:linear-gradient(180deg,var(--accent),#1E5F80);border-radius:2px 2px 0 0;min-height:2px}
+.hourlabels{display:flex;gap:3px;margin-top:6px}
+.hourlabels span{flex:1;text-align:center;font-size:10px;color:var(--faint);font-family:var(--mono)}
+.blocknote{font-size:13px;color:var(--soft);margin-top:12px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px}
+.bars{display:flex;flex-direction:column;gap:9px}
+.bar{display:grid;grid-template-columns:1fr 62px;gap:10px;align-items:center;font-size:14px}
+.bar .track{background:#0A0F17;border-radius:4px;height:24px;position:relative;overflow:hidden}
+.bar .fill{position:absolute;inset:0 auto 0 0;background:rgba(56,189,248,.28);border-right:2px solid var(--accent)}
+.bar .who{position:relative;padding:3px 9px;font-size:13px}
+.bar .amt{font-family:var(--mono);text-align:right;font-size:13px;color:var(--soft)}
+.stockhead{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.stockhead .head{font-size:17px}
+.stockhead .filters{display:flex;gap:16px;font-size:14px}
+.stockhead label{display:flex;align-items:center;gap:6px;cursor:pointer}
+tr.out td{color:var(--negative)}
+.adjust{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:16px 18px;margin-top:18px}
+.adjust .pick{font-weight:600;margin:0 0 12px}
+.adjrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.adjrow input{background:#080B10;border:1px solid var(--line);border-radius:6px;color:var(--ink);
+  padding:9px 11px;font-size:14px;outline:none}
+.adjrow input:focus{border-color:var(--accent)}
+#adjQty{width:110px}
+#adjWhy{flex:1;min-width:200px}
+.apply{background:#1B2434;border:1px solid var(--line);border-radius:7px;padding:9px 22px;cursor:pointer}
+.apply:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.apply:disabled{opacity:.45;cursor:not-allowed}
+.setcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:16px 18px;
+  margin-bottom:14px;max-width:900px}
+.setcard .lbl{font-size:11.5px;letter-spacing:.1em;color:var(--soft);font-weight:700;margin-bottom:10px}
+.setcard .lead{font-size:17px;font-weight:600;margin:0 0 10px}
+.setcard p{font-size:13.5px;color:var(--soft);line-height:1.6;margin:0 0 9px;padding-left:14px}
+.ownerfoot{padding:12px 22px;border-top:1px solid var(--line-soft);text-align:right;
+  font-size:13.5px;color:var(--accent)}
+
+/* ---------- receipt ---------- */
+.veil{position:fixed;inset:0;background:rgba(3,5,9,.72);display:none;align-items:center;
+  justify-content:center;padding:24px;z-index:50}
+.veil.on{display:flex}
+.receipt{background:#F7F5EF;color:#14161A;border-radius:6px;padding:26px 30px;width:400px;
+  max-height:86vh;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+.receipt h3{text-align:center;margin:0 0 2px;font-size:16px;font-family:"Segoe UI",sans-serif}
+.receipt .ctr{text-align:center}
+.receipt .rule{border-top:1px dashed #9A958A;margin:9px 0}
+.receipt .li{display:flex;justify-content:space-between;gap:10px}
+.receipt .li .r{font-variant-numeric:tabular-nums}
+.receipt .big{font-size:15px;font-weight:700}
+.receipt .decl{font-size:11px;margin-top:10px;line-height:1.5}
+.close{display:block;margin:16px auto 0;background:#14161A;color:#F7F5EF;border:0;
+  border-radius:6px;padding:9px 22px;cursor:pointer;font-family:"Segoe UI",sans-serif}
+.tender{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.tender button{flex:1;min-width:96px;background:#0E1420;border:1px solid var(--line);
+  border-radius:7px;padding:12px 8px;cursor:pointer;font-size:14px}
+.tender button:hover{border-color:var(--positive);color:var(--positive)}
+.paybox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px;width:420px}
+.paybox h3{margin:0 0 4px;font-size:20px}
+.paybox .due{font-family:var(--mono);font-size:34px;color:var(--positive);text-align:right;margin:8px 0 0}
+.paybox .hint{font-size:13px;color:var(--soft)}
+
+@media (max-width:1000px){
+  .stage{flex-direction:column}
+  .side{width:auto}
+  th.hidesm,td.hidesm{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <div class="chrome-bar">
+    <div class="chrome-note">
+      <b>This is a demonstration, not the till.</b> The arithmetic is real, but nothing here prints,
+      opens a drawer, reads a scale or is saved anywhere. Reload and it is gone.
+      <a class="home" href="./">&larr; back to the documentation</a>
+    </div>
+    <div class="chrome-controls">
+      <span style="font-size:12.5px;color:var(--faint)">Preview build</span>
+      <div class="seg" role="group">
+        <button id="vNoTax" aria-pressed="true">No tax</button>
+        <button id="vGst" aria-pressed="false">GST</button>
+      </div>
+      <button class="ghost" id="btnReset">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="titlebar"><span class="dot"></span><span id="winTitle">RetailPOS — Billing — lane L1</span></div>
+
+  <!-- ============ BILLING ============ -->
+  <div class="billing" id="billing" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="topbar">
+      <div class="brand">
+        <span class="badge" id="modeBadge">NO TAX</span>
+        <span class="store">RetailPOS</span>
+        <span class="sep">·</span>
+        <span class="store">Ravi Stores</span>
+      </div>
+      <div class="offline">
+        <span>Lane L1</span><span class="live"></span>
+        <b>OFFLINE — NOTHING LEAVES THIS MACHINE</b>
+      </div>
+    </div>
+
+    <div class="scanwrap">
+      <label for="scan">Scan or search</label>
+      <input id="scan" autocomplete="off" spellcheck="false"
+             placeholder="Type a barcode, an SKU, or part of a name — then Enter">
+    </div>
+
+    <div class="stage">
+      <div class="gridwrap">
+        <table>
+          <colgroup>
+            <col style="width:44px"><col><col style="width:64px" class="hidesm">
+            <col style="width:132px" class="hidesm"><col style="width:66px"><col style="width:52px">
+            <col style="width:86px" class="hidesm"><col style="width:86px">
+            <col style="width:74px"><col style="width:96px">
+          </colgroup>
+          <thead><tr>
+            <th class="n">#</th><th>Item</th><th class="hidesm">HSN</th><th class="hidesm">Barcode</th>
+            <th class="n">Qty</th><th>Unit</th><th class="n hidesm">MRP</th><th class="n">Rate</th>
+            <th class="n">Disc</th><th class="n">Total</th>
+          </tr></thead>
+          <tbody id="lines"></tbody>
+        </table>
+        <div class="empty-grid" id="emptyGrid">
+          Nothing on the bill yet. Scan <code>8901234567890</code>, or just type <b>dal</b>.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="totalcard">
+          <div class="row1"><span class="lbl">TOTAL</span><span class="pill" id="lineCount">0 lines</span></div>
+          <div class="grand" id="grand">0.00</div>
+          <div class="foot">
+            <span class="doc" id="docKind">Bill of supply — no GST charged</span>
+            <span class="saved" id="saved"></span>
+          </div>
+        </div>
+
+        <div class="sidescroll">
+          <div class="sect">INVOICE</div>
+          <div class="kv"><span class="k">Bill</span><span class="v word">issued when paid</span></div>
+          <div class="kv"><span class="k">Date</span><span class="v" id="today"></span></div>
+
+          <hr class="sep">
+          <div class="sect">BILL</div>
+          <div id="taxRows"></div>
+          <div class="kv"><span class="k">Discount</span><span class="v neg" id="discTotal">0.00</span></div>
+
+          <hr class="sep">
+          <div class="sect">PAYMENT</div>
+          <div class="paygrid">
+            <span class="k">Cash</span><span class="v" id="pCash">0.00</span>
+            <span class="k">UPI</span><span class="v" id="pUpi">0.00</span>
+            <span class="k">Card</span><span class="v" id="pCard">0.00</span>
+            <span class="k">Credit</span><span class="v" id="pCredit">0.00</span>
+          </div>
+
+          <hr class="sep">
+          <div class="sect">LANE</div>
+          <div class="kv"><span class="k">Customer</span><span class="v word">Walk-in</span></div>
+          <div class="kv"><span class="k">Cashier</span><span class="v word">Demo</span></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="status" id="status">Ready. The lane is open.</div>
+
+    <div class="keys">
+      <div class="key" data-act="search"><kbd>F2</kbd> Search</div>
+      <div class="key" data-act="qty"><kbd>F3</kbd> Qty</div>
+      <div class="key" data-act="disc"><kbd>F4</kbd> Discount</div>
+      <div class="key" data-act="del"><kbd>Del</kbd> Remove</div>
+      <div class="key" data-act="hold"><kbd>F5</kbd> Hold</div>
+      <div class="key" data-act="recall"><kbd>F6</kbd> Recall</div>
+      <div class="key" data-act="owner"><kbd>Ctrl+D</kbd> Owner</div>
+      <div class="key" data-act="new"><kbd>Ctrl+N</kbd> New</div>
+      <div class="key pay" data-act="pay"><kbd>F12</kbd> Pay &amp; Print</div>
+    </div>
+  </div>
+
+  <!-- ============ OWNER ============ -->
+  <div class="owner" id="owner">
+    <div class="ownerhead">
+      <div>
+        <h2>Owner</h2>
+        <div class="sub">Lane L1 &nbsp;·&nbsp; read in <span id="readMs">14</span> ms</div>
+      </div>
+      <div class="period">
+        <span>Period</span>
+        <label><input type="radio" name="per" value="7">7 days</label>
+        <label><input type="radio" name="per" value="30" checked>30 days</label>
+        <label><input type="radio" name="per" value="90">90 days</label>
+        <button class="refresh" id="btnRefresh">Refresh</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab" id="tab1" aria-selected="true">The figures &nbsp;(Ctrl+1)</button>
+      <button class="tab" id="tab2" aria-selected="false">Stock &nbsp;(Ctrl+2)</button>
+      <button class="tab" id="tab3" aria-selected="false">Settings &nbsp;(Ctrl+3)</button>
+    </div>
+
+    <div class="panel on" id="p1">
+      <div class="figs">
+        <div class="fig"><div class="lbl">NET SALES, THE PERIOD</div>
+          <div class="big g" id="fNet">0.00</div><div class="note" id="fNetNote">0 bills</div></div>
+        <div class="fig"><div class="lbl">TODAY</div>
+          <div class="big" id="fToday">0.00</div><div class="note" id="fTodayNote">0 bills since midnight</div></div>
+        <div class="fig"><div class="lbl">CASH TAKEN</div>
+          <div class="big" id="fCash">0.00</div><div class="note">what the drawer should hold, less your float</div></div>
+        <div class="fig"><div class="lbl">CARD, UPI AND CREDIT</div>
+          <div class="big" id="fBank">0.00</div><div class="note">what should reach the bank</div></div>
+      </div>
+
+      <div class="block">
+        <h4>WHEN THE SHOP IS BUSY</h4>
+        <div class="hours" id="hours"></div>
+        <div class="hourlabels" id="hourLabels"></div>
+        <p class="blocknote">The quiet hours are as useful as the busy ones — they are when a
+          delivery or a stock count fits.</p>
+      </div>
+
+      <div class="two">
+        <div class="block"><h4>WHAT SELLS — BY WHAT IT BRINGS IN</h4><div class="bars" id="sells"></div></div>
+        <div class="block"><h4>HOW CUSTOMERS PAID</h4><div class="bars" id="paid"></div></div>
+      </div>
+    </div>
+
+    <div class="panel" id="p2">
+      <div class="stockhead">
+        <div class="head" id="stockHead"></div>
+        <div class="filters">
+          <label><input type="radio" name="stk" value="low" checked> Needs reordering</label>
+          <label><input type="radio" name="stk" value="all"> Everything counted</label>
+        </div>
+      </div>
+      <table>
+        <colgroup><col><col style="width:110px"><col style="width:150px"><col style="width:90px">
+          <col style="width:110px"><col style="width:100px"></colgroup>
+        <thead><tr><th>Item</th><th>SKU</th><th>Category</th>
+          <th class="n">Have</th><th class="n">Reorder at</th><th class="n">Short by</th></tr></thead>
+        <tbody id="stockRows"></tbody>
+      </table>
+
+      <div class="adjust">
+        <div class="lbl" style="font-size:11.5px;letter-spacing:.1em;color:var(--soft);font-weight:700;margin-bottom:10px">
+          CORRECT A COUNT — AFTER A DELIVERY, A BREAKAGE OR A RECOUNT</div>
+        <p class="pick" id="adjPick">Pick an item from the list.</p>
+        <div class="adjrow">
+          <span style="color:var(--soft)">New count</span>
+          <input id="adjQty" type="number" min="0" step="1" disabled>
+          <span style="color:var(--soft)">Why</span>
+          <input id="adjWhy" placeholder="delivery, breakage, recount" disabled>
+          <button class="apply" id="btnApply" disabled>Apply</button>
+        </div>
+        <p style="font-size:13px;color:var(--soft);margin:12px 0 0">The change and the reason are
+          kept, so a count that stops matching the shelf can be traced back to where it went.</p>
+      </div>
+    </div>
+
+    <div class="panel" id="p3">
+      <div class="setcard" id="setBill"></div>
+      <div class="setcard">
+        <div class="lbl">WHO MAY OPEN THIS SCREEN</div>
+        <p class="lead">No PIN is set. Anyone at this till can open this screen and read the shop's figures.</p>
+        <div class="adjrow" style="padding-left:14px">
+          <span style="color:var(--soft)">PIN</span>
+          <input type="password" style="width:170px" disabled>
+          <span style="color:var(--soft)">again</span>
+          <input type="password" style="width:170px" disabled>
+          <button class="apply" disabled>Save PIN</button>
+        </div>
+        <p style="margin-top:12px">At least 4 characters, and not something everybody tries first. It
+          is stored scrambled, so there is no way to recover a forgotten one. This keeps a cashier out
+          of the figures; it does not encrypt the database.</p>
+        <p style="color:var(--amber)">Disabled in this demonstration — there is nothing here to protect.</p>
+      </div>
+    </div>
+
+    <div class="ownerfoot">Esc closes this and goes back to billing</div>
+  </div>
+</div>
+
+<div class="veil" id="veil"></div>
+
+<script>
+'use strict';
+
+// The template catalogue that ships with the software, so the barcodes printed in the runbook work
+// here too. MRP is what the label says; price is what the shop charges.
+const CATALOGUE = [
+  {sku:'DAL001', barcode:'8901234567890', name:'Toor Dal 1kg',        hsn:'0713', unit:'pc', mrp:189,  price:189,  gst:5,  weighed:false, cat:'Staples',       stock:40, reorder:10},
+  {sku:'RICE01', barcode:'8901234567920', name:'Basmati Rice, Premium, 5kg', hsn:'1006', unit:'pc', mrp:1299, price:1249, gst:5,  weighed:false, cat:'Staples',  stock:12, reorder:4},
+  {sku:'SUG001', barcode:'8901234567906', name:'Sugar Loose',         hsn:'1701', unit:'kg', mrp:45,   price:45,   gst:5,  weighed:true,  cat:'Staples',       stock:0,  reorder:0},
+  {sku:'ATT001', barcode:'8901234567937', name:'Wheat Atta Loose',    hsn:'1101', unit:'kg', mrp:42,   price:42,   gst:0,  weighed:true,  cat:'Staples',       stock:0,  reorder:0},
+  {sku:'SHM001', barcode:'8901234567944', name:'Shampoo 340ml',       hsn:'3305', unit:'pc', mrp:299,  price:279,  gst:18, weighed:false, cat:'Personal Care', stock:25, reorder:6},
+  {sku:'CHO001', barcode:'8901234567913', name:'Chocolate Bar 50g',   hsn:'1806', unit:'pc', mrp:60,   price:60,   gst:28, weighed:false, cat:'Snacks',        stock:3,  reorder:12},
+  {sku:'OIL5L',  barcode:'8901234500019', name:'Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin', hsn:'1508', unit:'pc', mrp:1899, price:1849, gst:5, weighed:false, cat:'Staples', stock:8, reorder:3},
+  {sku:'BIS001', barcode:'8901234567951', name:'Biscuits Pack',       hsn:'1905', unit:'pc', mrp:30,   price:30,   gst:18, weighed:false, cat:'Snacks',        stock:0,  reorder:24},
+  {sku:'MLK001', barcode:'8901234567968', name:'Milk 500ml',          hsn:'0401', unit:'pc', mrp:28,   price:28,   gst:0,  weighed:false, cat:'Dairy',         stock:9,  reorder:20},
+  {sku:'SOA001', barcode:'8901234567975', name:'Bath Soap',           hsn:'3401', unit:'pc', mrp:48,   price:44,   gst:18, weighed:false, cat:'Personal Care', stock:3,  reorder:10}
+];
+
+const money = n => n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const $ = id => document.getElementById(id);
+
+let state;
+
+function fresh() {
+  return {
+    noTax: true,
+    lines: [],
+    sel: -1,
+    held: null,
+    stock: Object.fromEntries(CATALOGUE.map(i => [i.sku, i.stock])),
+    stockFilter: 'low',
+    stockPick: null,
+    period: 30
+  };
+}
+
+/* ---------------- billing ---------------- */
+
+// MRP in India is tax-inclusive, so the tax is extracted out of the price rather than added to it.
+// On the no-tax build the rate is dropped at the line, which is why the totals agree without any
+// part of the screen needing to know which build it is.
+function lineOf(item, qty, discount) {
+  const gst = state.noTax ? 0 : item.gst;
+  const gross = round2(item.price * qty);
+  const net = round2(gross - discount);
+  const taxable = round2(net / (1 + gst / 100));
+  return {
+    sku: item.sku, name: item.name, hsn: item.hsn, barcode: item.barcode,
+    unit: item.unit, mrp: item.mrp, rate: item.price, weighed: item.weighed,
+    gst, qty, discount, gross, net, taxable, tax: round2(net - taxable)
+  };
+}
+
+function reprice() {
+  state.lines = state.lines.map(l => {
+    const item = CATALOGUE.find(i => i.sku === l.sku);
+    return lineOf(item, l.qty, l.discount);
+  });
+}
+
+function totals() {
+  const net = round2(state.lines.reduce((s, l) => s + l.net, 0));
+  const tax = round2(state.lines.reduce((s, l) => s + l.tax, 0));
+  const disc = round2(state.lines.reduce((s, l) => s + l.discount, 0));
+  const mrpSum = round2(state.lines.reduce((s, l) => s + l.mrp * l.qty, 0));
+  return {net, tax, taxable: round2(net - tax), disc, saved: round2(mrpSum - net)};
+}
+
+function say(msg, kind) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function renderBill() {
+  const tb = $('lines');
+  tb.innerHTML = '';
+
+  state.lines.forEach((l, i) => {
+    const tr = document.createElement('tr');
+    if (i === state.sel) tr.className = 'sel';
+    tr.onclick = () => { state.sel = i; renderBill(); };
+    const qty = l.weighed ? l.qty.toFixed(3) : String(l.qty);
+    tr.innerHTML =
+      '<td class="num n">' + (i + 1) + '</td>' +
+      '<td class="name" title="' + l.name + '">' + l.name + '</td>' +
+      '<td class="hidesm">' + l.hsn + '</td>' +
+      '<td class="hidesm num">' + l.barcode + '</td>' +
+      '<td class="n">' + qty + '</td>' +
+      '<td>' + l.unit + '</td>' +
+      '<td class="n mrp hidesm">' + money(l.mrp) + '</td>' +
+      '<td class="n">' + money(l.rate) + '</td>' +
+      '<td class="disc">' + (l.discount ? '-' + money(l.discount) : '—') + '</td>' +
+      '<td class="n total">' + money(l.net) + '</td>';
+    tb.appendChild(tr);
+  });
+
+  $('emptyGrid').style.display = state.lines.length ? 'none' : 'block';
+
+  const t = totals();
+  $('grand').textContent = money(t.net);
+  $('lineCount').textContent = state.lines.length + (state.lines.length === 1 ? ' line' : ' lines');
+  $('discTotal').textContent = money(t.disc);
+  $('saved').textContent = t.saved > 0 ? 'Saved ' + money(t.saved) : '';
+
+  // Tax is shown per bill, never per line: the Bill card carries the discount and, on the GST
+  // build, what was extracted. The no-tax build has nothing to put here.
+  const rows = $('taxRows');
+  if (state.noTax) {
+    rows.innerHTML = '';
+  } else {
+    const half = round2(t.tax / 2);
+    rows.innerHTML =
+      '<div class="kv"><span class="k">Taxable</span><span class="v">' + money(t.taxable) + '</span></div>' +
+      '<div class="kv"><span class="k">CGST</span><span class="v">' + money(half) + '</span></div>' +
+      '<div class="kv"><span class="k">SGST</span><span class="v">' + money(round2(t.tax - half)) + '</span></div>';
+  }
+}
+
+function addItem(item, qty) {
+  const existing = state.lines.findIndex(l => l.sku === item.sku);
+  if (existing >= 0 && !item.weighed) {
+    state.lines[existing] = lineOf(item, state.lines[existing].qty + qty, state.lines[existing].discount);
+    state.sel = existing;
+  } else {
+    state.lines.push(lineOf(item, qty, 0));
+    state.sel = state.lines.length - 1;
+  }
+  renderBill();
+  say(item.name + ' added.');
+}
+
+// Exact matches win before any name search. A barcode that is also a substring of some product
+// name must still resolve to the item it identifies.
+function resolve(text) {
+  const q = text.trim();
+  if (!q) return null;
+
+  const exact = CATALOGUE.find(i => i.barcode === q || i.sku.toLowerCase() === q.toLowerCase());
+  if (exact) return {kind: 'one', item: exact};
+
+  const hits = CATALOGUE.filter(i => i.name.toLowerCase().includes(q.toLowerCase()));
+  if (hits.length === 1) return {kind: 'one', item: hits[0]};
+  if (hits.length > 1) return {kind: 'many', items: hits};
+  return {kind: 'none'};
+}
+
+function onScan() {
+  const box = $('scan');
+  const text = box.value;
+  if (!text.trim()) return;
+
+  const r = resolve(text);
+  box.value = '';
+
+  if (r.kind === 'none') {
+    say('Nothing matches "' + text.trim() + '". Nothing was added.', 'bad');
+    return;
+  }
+  if (r.kind === 'many') {
+    say(r.items.length + ' items match: ' + r.items.map(i => i.name).join(', ') + '. Be more specific.', 'warn');
+    return;
+  }
+
+  const item = r.item;
+  if (item.weighed) {
+    const kg = prompt('"' + item.name + '" is sold by weight.\n\nThe scale would send this. Type the weight in kg:', '1.250');
+    if (kg === null) { say('Cancelled.'); return; }
+    const q = parseFloat(kg);
+    if (!isFinite(q) || q <= 0) { say('That is not a weight. Nothing was added.', 'bad'); return; }
+    addItem(item, round2(q * 1000) / 1000);
+  } else {
+    addItem(item, 1);
+  }
+}
+
+function requireLine() {
+  if (state.sel < 0 || !state.lines[state.sel]) {
+    say('Pick a line first — click one on the bill.', 'warn');
+    return false;
+  }
+  return true;
+}
+
+const actions = {
+  search() { $('scan').focus(); $('scan').select(); },
+
+  qty() {
+    if (!requireLine()) return;
+    const l = state.lines[state.sel];
+    const v = prompt('Quantity for "' + l.name + '":', l.weighed ? l.qty.toFixed(3) : l.qty);
+    if (v === null) return;
+    const q = parseFloat(v);
+    if (!isFinite(q) || q <= 0) { say('That is not a quantity. Nothing changed.', 'bad'); return; }
+    const item = CATALOGUE.find(i => i.sku === l.sku);
+    state.lines[state.sel] = lineOf(item, l.weighed ? q : Math.round(q), l.discount);
+    renderBill();
+    say('Quantity changed to ' + (l.weighed ? q.toFixed(3) : Math.round(q)) + '.');
+  },
+
+  disc() {
+    if (!requireLine()) return;
+    const l = state.lines[state.sel];
+    const v = prompt('Discount on "' + l.name + '" (rupees off this line):', l.discount || '0');
+    if (v === null) return;
+    const d = parseFloat(v);
+    if (!isFinite(d) || d < 0) { say('That is not a discount. Nothing changed.', 'bad'); return; }
+    if (d > l.gross) { say('A discount cannot exceed the line. Refused.', 'bad'); return; }
+    const item = CATALOGUE.find(i => i.sku === l.sku);
+    state.lines[state.sel] = lineOf(item, l.qty, round2(d));
+    renderBill();
+    say(d > 0 ? 'Discount of ' + money(d) + ' applied.' : 'Discount removed.');
+  },
+
+  del() {
+    if (!requireLine()) return;
+    const name = state.lines[state.sel].name;
+    state.lines.splice(state.sel, 1);
+    state.sel = Math.min(state.sel, state.lines.length - 1);
+    renderBill();
+    say(name + ' removed.');
+  },
+
+  hold() {
+    if (!state.lines.length) { say('There is nothing to hold.', 'warn'); return; }
+    state.held = JSON.parse(JSON.stringify(state.lines));
+    state.lines = []; state.sel = -1;
+    renderBill();
+    say('Bill parked. F6 brings it back — discounts and all.');
+  },
+
+  recall() {
+    if (!state.held) { say('No parked bill to recall.', 'warn'); return; }
+    if (state.lines.length) { say('Clear or settle this bill first.', 'warn'); return; }
+    state.lines = state.held; state.held = null; state.sel = -1;
+    reprice(); renderBill();
+    say('Parked bill recalled.');
+  },
+
+  new() {
+    if (!state.lines.length) { say('The bill is already empty.'); return; }
+    state.lines = []; state.sel = -1;
+    renderBill();
+    say('Bill cleared. Nothing was recorded.');
+  },
+
+  owner() { showOwner(true); },
+
+  pay() {
+    if (!state.lines.length) { say('There is nothing to pay for.', 'warn'); return; }
+    tenderPane();
+  }
+};
+
+document.querySelectorAll('.key').forEach(k => k.onclick = () => actions[k.dataset.act]());
+
+/* ---------------- tender and receipt ---------------- */
+
+function tenderPane() {
+  const t = totals();
+  const veil = $('veil');
+  veil.innerHTML =
+    '<div class="paybox">' +
+      '<h3>Take payment</h3>' +
+      '<div class="hint">The bill number is minted when it is paid, so an abandoned sale cannot burn one.</div>' +
+      '<div class="due">' + money(t.net) + '</div>' +
+      '<div class="tender">' +
+        '<button data-t="Cash">Cash</button>' +
+        '<button data-t="UPI">UPI</button>' +
+        '<button data-t="Card">Card</button>' +
+        '<button data-t="Split">Split</button>' +
+      '</div>' +
+      '<button class="close" data-t="">Cancel (Esc)</button>' +
+    '</div>';
+  veil.classList.add('on');
+
+  veil.querySelectorAll('button[data-t]').forEach(b => b.onclick = () => {
+    const how = b.dataset.t;
+    if (!how) { veil.classList.remove('on'); say('Payment cancelled. The bill is still here.'); return; }
+    settle(how);
+  });
+}
+
+let billNo = 0;
+
+function settle(how) {
+  const t = totals();
+  billNo += 1;
+  const num = 'RM/26-27/' + billNo;
+
+  let split;
+  if (how === 'Split') {
+    const cash = round2(Math.min(t.net, Math.round(t.net / 2)));
+    split = [['Cash', cash], ['UPI', round2(t.net - cash)]];
+  } else {
+    split = [[how, t.net]];
+  }
+
+  $('pCash').textContent   = money(split.filter(s => s[0] === 'Cash').reduce((a, s) => a + s[1], 0));
+  $('pUpi').textContent    = money(split.filter(s => s[0] === 'UPI').reduce((a, s) => a + s[1], 0));
+  $('pCard').textContent   = money(split.filter(s => s[0] === 'Card').reduce((a, s) => a + s[1], 0));
+  $('pCredit').textContent = money(0);
+
+  // Stock comes off the shelf on settle, which is what makes the owner's stock tab move.
+  state.lines.forEach(l => {
+    if (state.stock[l.sku] !== undefined) {
+      state.stock[l.sku] = Math.max(0, round2(state.stock[l.sku] - l.qty));
+    }
+  });
+
+  showReceipt(num, split, t);
+}
+
+function showReceipt(num, split, t) {
+  const veil = $('veil');
+  const heading = state.noTax ? 'BILL OF SUPPLY' : 'TAX INVOICE';
+
+  let items = '';
+  state.lines.forEach(l => {
+    const qty = l.weighed ? l.qty.toFixed(3) : l.qty;
+    items += '<div class="li"><span>' + l.name + '</span></div>' +
+             '<div class="li"><span>&nbsp;&nbsp;' + qty + ' &times; ' + money(l.rate) + '</span>' +
+             '<span class="r">' + money(l.net) + '</span></div>';
+  });
+
+  let taxPart = '';
+  if (!state.noTax) {
+    const half = round2(t.tax / 2);
+    taxPart = '<div class="rule"></div>' +
+      '<div class="li"><span>Taxable</span><span class="r">' + money(t.taxable) + '</span></div>' +
+      '<div class="li"><span>CGST</span><span class="r">' + money(half) + '</span></div>' +
+      '<div class="li"><span>SGST</span><span class="r">' + money(round2(t.tax - half)) + '</span></div>';
+  }
+
+  const decl = state.noTax
+    ? '<div class="decl">Composition taxable person, not eligible to collect tax on supplies.</div>'
+    : '';
+
+  veil.innerHTML =
+    '<div class="receipt">' +
+      '<h3>Ravi Stores</h3>' +
+      '<div class="ctr">No. 3/324, Main Road<br>Thanjavur - 613501</div>' +
+      '<div class="ctr">GSTIN 33AEIPH7795F1Z9</div>' +
+      '<div class="ctr" style="margin-top:8px"><b>' + heading + '</b></div>' +
+      '<div class="rule"></div>' +
+      '<div class="li"><span>Bill ' + num + '</span><span>' + new Date().toLocaleDateString('en-GB') + '</span></div>' +
+      '<div class="rule"></div>' +
+      items +
+      taxPart +
+      '<div class="rule"></div>' +
+      '<div class="li big"><span>TOTAL</span><span class="r">' + money(t.net) + '</span></div>' +
+      split.map(s => '<div class="li"><span>' + s[0] + '</span><span class="r">' + money(s[1]) + '</span></div>').join('') +
+      (t.saved > 0 ? '<div class="li"><span>You saved</span><span class="r">' + money(t.saved) + '</span></div>' : '') +
+      decl +
+      '<div class="ctr" style="margin-top:10px">Thank you</div>' +
+      '<button class="close">This would be on paper. Close</button>' +
+    '</div>';
+  veil.classList.add('on');
+
+  veil.querySelector('.close').onclick = () => {
+    veil.classList.remove('on');
+    state.lines = []; state.sel = -1;
+    renderBill(); renderOwner();
+    say('Settled as ' + num + '. The screen is clear for the next customer.');
+    $('scan').focus();
+  };
+}
+
+/* ---------------- owner ---------------- */
+
+function showOwner(on) {
+  $('owner').classList.toggle('on', on);
+  $('billing').classList.toggle('off', on);
+  $('billing').style.display = on ? 'none' : 'flex';
+  $('winTitle').textContent = on ? 'RetailPOS — Owner' : 'RetailPOS — Billing — lane L1';
+  if (on) { renderOwner(); } else { $('scan').focus(); }
+}
+
+function tab(n) {
+  [1, 2, 3].forEach(i => {
+    $('tab' + i).setAttribute('aria-selected', i === n ? 'true' : 'false');
+    $('p' + i).classList.toggle('on', i === n);
+  });
+}
+$('tab1').onclick = () => tab(1);
+$('tab2').onclick = () => tab(2);
+$('tab3').onclick = () => tab(3);
+$('btnRefresh').onclick = () => { $('readMs').textContent = 11 + Math.floor(Math.random() * 20); renderOwner(); };
+document.querySelectorAll('input[name=per]').forEach(r => r.onchange = () => {
+  state.period = +r.value; renderOwner();
+});
+document.querySelectorAll('input[name=stk]').forEach(r => r.onchange = () => {
+  state.stockFilter = r.value; renderStock();
+});
+
+// Plausible figures for a small grocery, scaled by the period. Deterministic, so the shape of the
+// day does not change every time the screen is refreshed.
+function figures() {
+  const days = state.period;
+  const perDay = 8450;
+  const net = perDay * days;
+  const bills = Math.round(days * 47);
+  return {
+    net, bills,
+    today: 6120, todayBills: 34,
+    cash: round2(net * 0.46), bank: round2(net * 0.54)
+  };
+}
+
+const HOURS = [0,0,0,0,0,0,0,3,18,34,41,37,29,22,26,31,44,58,71,66,48,27,9,2];
+
+function renderFigures() {
+  const f = figures();
+  $('fNet').textContent = money(f.net);
+  $('fNetNote').textContent = f.bills.toLocaleString('en-IN') + ' bills · ' + money(round2(f.net * 0.011)) + ' given away';
+  $('fToday').textContent = money(f.today);
+  $('fTodayNote').textContent = f.todayBills + ' bills since midnight';
+  $('fCash').textContent = money(f.cash);
+  $('fBank').textContent = money(f.bank);
+
+  const peak = Math.max(...HOURS);
+  $('hours').innerHTML = HOURS.map(h =>
+    '<div class="h" style="height:' + Math.max(2, (h / peak) * 100) + '%" title="' + h + ' bills"></div>').join('');
+  $('hourLabels').innerHTML = HOURS.map((_, i) =>
+    '<span>' + String(i).padStart(2, '0') + '</span>').join('');
+
+  const sells = [
+    ['Staples', 0.41], ['Snacks', 0.21], ['Dairy', 0.17], ['Personal Care', 0.13], ['Other', 0.08]
+  ];
+  $('sells').innerHTML = sells.map(s =>
+    '<div class="bar"><div class="track"><div class="fill" style="width:' + (s[1] * 100) + '%"></div>' +
+    '<div class="who">' + s[0] + '</div></div>' +
+    '<div class="amt">' + money(round2(f.net * s[1])) + '</div></div>').join('');
+
+  const paid = [['Cash', 0.46], ['UPI', 0.38], ['Card', 0.16]];
+  $('paid').innerHTML = paid.map(s =>
+    '<div class="bar"><div class="track"><div class="fill" style="width:' + (s[1] * 100) + '%"></div>' +
+    '<div class="who">' + s[0] + '</div></div>' +
+    '<div class="amt">' + money(round2(f.net * s[1])) + '</div></div>').join('');
+}
+
+function renderStock() {
+  // Items with no count in the catalogue are not counted and never appear -- a zero and "nobody
+  // has ever counted this" are different things, and only one of them is worth ordering against.
+  const counted = CATALOGUE.filter(i => i.reorder > 0);
+  const rows = counted.map(i => ({
+    name: i.name, sku: i.sku, cat: i.cat,
+    have: state.stock[i.sku], reorder: i.reorder,
+    short: Math.max(0, round2(i.reorder - state.stock[i.sku]))
+  }));
+
+  const low = rows.filter(r => r.have <= r.reorder);
+  const none = low.filter(r => r.have === 0).length;
+
+  $('stockHead').textContent = low.length
+    ? low.length + ' item(s) to reorder, ' + none + ' of them with none left.'
+    : 'Nothing needs reordering.';
+
+  const show = (state.stockFilter === 'low' ? low : rows)
+    .sort((a, b) => (b.short - a.short) || a.name.localeCompare(b.name));
+
+  const tb = $('stockRows');
+  tb.innerHTML = '';
+  show.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.have === 0) tr.className = 'out';
+    tr.style.cursor = 'pointer';
+    tr.onclick = () => {
+      state.stockPick = r.sku;
+      $('adjPick').textContent = r.name + ' — counted at ' + r.have + ', reorder at ' + r.reorder + '.';
+      $('adjQty').disabled = false; $('adjWhy').disabled = false; $('btnApply').disabled = false;
+      $('adjQty').value = r.have; $('adjQty').focus();
+    };
+    tr.innerHTML = '<td class="name">' + r.name + '</td><td>' + r.sku + '</td><td>' + r.cat + '</td>' +
+      '<td class="n">' + r.have + '</td><td class="n">' + r.reorder + '</td>' +
+      '<td class="n">' + (r.short || '—') + '</td>';
+    tb.appendChild(tr);
+  });
+
+  if (!show.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--faint);padding:22px 10px">' +
+      (state.stockFilter === 'low' ? 'Nothing is below its reorder level.' : 'Nothing is counted.') + '</td></tr>';
+  }
+}
+
+$('btnApply').onclick = () => {
+  const q = parseInt($('adjQty').value, 10);
+  const why = $('adjWhy').value.trim();
+  if (!isFinite(q) || q < 0) { alert('That is not a count.'); return; }
+  if (!why) { alert('Say why. A count that changes for no recorded reason cannot be traced later.'); return; }
+  state.stock[state.stockPick] = q;
+  $('adjWhy').value = '';
+  renderStock();
+};
+
+function renderSettings() {
+  $('setBill').innerHTML = state.noTax
+    ? '<div class="lbl">WHAT KIND OF BILL THIS LANE ISSUES</div>' +
+      '<p class="lead">Bill of supply — this build never charges GST</p>' +
+      '<p>Every bill this lane issues is headed BILL OF SUPPLY and carries the declaration the ' +
+      'composition scheme requires. There is nothing to switch here: this is the no-tax build, and ' +
+      'it cannot issue a tax invoice.</p>' +
+      '<p>If the shop registers normally and starts collecting GST, install the GST build instead. ' +
+      'Its installer is named RetailPOS-GST-Setup. Your database, settings and backups are kept — ' +
+      'bills already issued keep the document they were issued as.</p>'
+    : '<div class="lbl">WHAT KIND OF BILL THIS LANE ISSUES</div>' +
+      '<p class="lead">Tax invoice — CGST and SGST within the state</p>' +
+      '<p>This is the GST build, so the lane can issue either a tax invoice or a bill of supply. ' +
+      'Changing it is refused while a bill is on the screen; finish or clear that first.</p>' +
+      '<p>Bills already issued do not change. Each one records the kind of document it was issued ' +
+      'as, so a reprint months later says what the customer was originally given.</p>';
+}
+
+function renderOwner() { renderFigures(); renderStock(); renderSettings(); }
+
+/* ---------------- variant switch ---------------- */
+
+function setVariant(noTax) {
+  state.noTax = noTax;
+  $('vNoTax').setAttribute('aria-pressed', noTax ? 'true' : 'false');
+  $('vGst').setAttribute('aria-pressed', noTax ? 'false' : 'true');
+  $('modeBadge').textContent = noTax ? 'NO TAX' : 'GST';
+  $('docKind').textContent = noTax ? 'Bill of supply — no GST charged' : 'Tax invoice — CGST/SGST';
+  reprice(); renderBill(); renderOwner();
+  say(noTax
+    ? 'Previewing the no-tax build. Bills are headed BILL OF SUPPLY.'
+    : 'Previewing the GST build. Tax is extracted out of the MRP, never added to it.');
+}
+
+$('vNoTax').onclick = () => setVariant(true);
+$('vGst').onclick = () => setVariant(false);
+$('btnReset').onclick = () => { const g = state.noTax; state = fresh(); state.noTax = g; boot(); };
+
+/* ---------------- keys ---------------- */
+
+document.addEventListener('keydown', e => {
+  const ownerOpen = $('owner').classList.contains('on');
+  const veilOpen = $('veil').classList.contains('on');
+
+  if (e.key === 'Escape') {
+    if (veilOpen) { $('veil').classList.remove('on'); say('Closed.'); e.preventDefault(); return; }
+    if (ownerOpen) { showOwner(false); e.preventDefault(); return; }
+  }
+  if (veilOpen) return;
+
+  if (ownerOpen) {
+    if (e.ctrlKey && ['1','2','3'].includes(e.key)) { tab(+e.key); e.preventDefault(); }
+    if (e.key === 'F5') { $('btnRefresh').click(); e.preventDefault(); }
+    return;
+  }
+
+  if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) { actions.owner(); e.preventDefault(); return; }
+  if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) { actions.new(); e.preventDefault(); return; }
+
+  const map = {F2:'search', F3:'qty', F4:'disc', F5:'hold', F6:'recall', F12:'pay'};
+  if (map[e.key]) { actions[map[e.key]](); e.preventDefault(); return; }
+
+  if (e.key === 'Delete' && document.activeElement !== $('scan')) { actions.del(); e.preventDefault(); }
+});
+
+$('scan').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { onScan(); e.preventDefault(); }
+});
+
+/* ---------------- boot ---------------- */
+
+function boot() {
+  $('today').textContent = new Date().toLocaleDateString('en-GB');
+  setVariant(state.noTax);
+  renderBill();
+  renderOwner();
+  tab(1);
+  say('Ready. The lane is open — scan something, or type part of a name.');
+  $('scan').focus();
+}
+
+state = fresh();
+boot();
+</script>
+</body>
+</html>
