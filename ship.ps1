@@ -4,10 +4,11 @@
     One installer, the four documents somebody needs before and during setup, the settings and
     catalogue templates, and a checksum so a copy that crossed a memory stick can be proved intact.
 
-    The documents are here as well as inside the installer on purpose. HARDWARE_SIGNOFF.md is
-    worked through at a bench and SETTINGS.md is read while filling settings in — both of which
-    happen around the install rather than after it, and neither should need the software to be
-    installed first to be readable.
+    The documents are here as well as inside the installer on purpose. HARDWARE_SIGNOFF is worked
+    through at a bench and SETTINGS is read while filling settings in — both of which happen around
+    the install rather than after it, and neither should need the software to be installed first to
+    be readable. They are rendered to HTML on the way in, because a till has a browser and no
+    Markdown viewer.
 
     What is deliberately not here: the loose executables. The installer carries them, and shipping
     both would triple the folder for no gain. -IncludeLoose adds them for a site that cannot run an
@@ -91,10 +92,6 @@ Write-Host "Assembling $folderName..." -ForegroundColor Cyan
 Copy-Item $installer.FullName (Join-Path $ship $installer.Name)
 
 $documents = @(
-    @{ From = 'docs\PILOT_RUNBOOK.md';        To = 'docs\PILOT_RUNBOOK.md' },
-    @{ From = 'deploy\SETTINGS.md';           To = 'docs\SETTINGS.md' },
-    @{ From = 'deploy\CATALOGUE_FORMAT.md';   To = 'docs\CATALOGUE_FORMAT.md' },
-    @{ From = 'deploy\HARDWARE_SIGNOFF.md';   To = 'docs\HARDWARE_SIGNOFF.md' },
     @{ From = 'deploy\FEATURES.html';         To = 'docs\FEATURES.html' },
     @{ From = 'deploy\settings.json';         To = 'templates\settings.json' },
     @{ From = 'deploy\settings.pilot-tamil.json'; To = 'templates\settings.pilot-tamil.json' },
@@ -106,6 +103,23 @@ foreach ($doc in $documents) {
     if (-not (Test-Path $source)) { throw "Missing from the shipment: $($doc.From)" }
     Copy-Item $source (Join-Path $ship $doc.To)
 }
+
+# The guides ship as HTML rather than Markdown. A till has a browser and no Markdown viewer, so a
+# .md file opens in Notepad as pipes and hashes -- which is exactly the state somebody is in when
+# they most need the hardware sheet or the settings reference. Markdown stays the source, so there
+# is still only one copy of each sentence to keep true.
+$guides = @(
+    'docs\PILOT_RUNBOOK.md',
+    'deploy\SETTINGS.md',
+    'deploy\CATALOGUE_FORMAT.md',
+    'deploy\HARDWARE_SIGNOFF.md'
+) | ForEach-Object {
+    $source = Join-Path $here $_
+    if (-not (Test-Path $source)) { throw "Missing from the shipment: $_" }
+    $source
+}
+
+& (Join-Path $here 'tools\docs\Convert-Docs.ps1') -Path $guides -OutputDir (Join-Path $ship 'docs') -Version $Version
 
 if ($IncludeLoose) {
     $lane = Join-Path $here 'artifacts\lane'
@@ -199,11 +213,14 @@ WHAT IS IN THIS FOLDER
       The installer. Everything is inside it - the target machine
       needs nothing installed first, not even the .NET runtime.
 
-  docs\PILOT_RUNBOOK.md      Day-to-day guide. Read this first.
-  docs\SETTINGS.md           Every setting, and which four must be right.
-  docs\CATALOGUE_FORMAT.md   The item list format, column by column.
-  docs\HARDWARE_SIGNOFF.md   Bench sheet. Print it and tick it.
-  docs\FEATURES.html         What the software does. Open in a browser.
+  Everything in docs\ opens by double-clicking it - it is a web page,
+  so it needs a browser and nothing else.
+
+  docs\PILOT_RUNBOOK.html    Day-to-day guide. Read this first.
+  docs\SETTINGS.html         Every setting, and which four must be right.
+  docs\CATALOGUE_FORMAT.html The item list format, column by column.
+  docs\HARDWARE_SIGNOFF.html Bench sheet. Print it and tick it.
+  docs\FEATURES.html         What the software does.
 
   templates\settings.pilot-tamil.json    <-- copy THIS one for a Tamil lane
   templates\settings.json                 the generic English template
@@ -244,7 +261,7 @@ THE ORDER TO DO THINGS IN
      Look at preview.png BEFORE printing anything. If any Tamil shows
      as ? or as strange Latin letters, stop - the preview says why.
 
-     Work through docs\HARDWARE_SIGNOFF.md and keep the sheet.
+     Work through docs\HARDWARE_SIGNOFF.html and keep the sheet.
 
   4. Load the catalogue.
 

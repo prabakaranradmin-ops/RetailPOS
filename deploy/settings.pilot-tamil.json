@@ -1,5 +1,5 @@
 ﻿{
-  "_comment": "Pilot lane: single till, Tamil receipts. Copy this to %LOCALAPPDATA%\\RetailPOS\\settings.json, fill in every FILL IN, and delete these two comment lines. Save as UTF-8 - see SETTINGS.md.",
+  "_comment": "Pilot lane: single till, Tamil receipts. Copy this to %LOCALAPPDATA%\\RetailPOS\\settings.json, fill in every FILL IN, and delete these two comment lines. Save as UTF-8 - see SETTINGS.html.",
   "_identity": "Take the GSTIN and FSSAI number from the shop's own certificates, not from an old printed bill. One wrong character prints on every invoice the shop issues and nothing can catch it.",
 
   "laneId": "L1",

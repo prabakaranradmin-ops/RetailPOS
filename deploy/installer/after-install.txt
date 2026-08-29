@@ -34,7 +34,8 @@ RetailPOS is installed. Three things before the shop can trade.
    Look at preview.png before printing anything. If any Tamil shows as ? or as
    strange Latin letters, stop - the lane cannot draw it, and the preview says why.
 
-   HARDWARE_SIGNOFF.md in the install folder is the sheet to work through.
+   HARDWARE_SIGNOFF.html in the install folder is the sheet to work through.
+   Double-click it, then print it.
 
 
 3. LOAD THE CATALOGUE
@@ -48,8 +49,9 @@ RetailPOS is installed. Three things before the shop can trade.
 
 Then open the till from the desktop shortcut.
 
-PILOT_RUNBOOK.md is the day-to-day guide: opening, the keys, closing the day,
-and what to do when something goes wrong.
+PILOT_RUNBOOK.html is the day-to-day guide: opening, the keys, closing the day,
+and what to do when something goes wrong. It is on the Start menu as "Operator
+runbook".
 
 Uninstalling removes the program and leaves the lane's database, settings and
 backups alone. They are the shop's books.

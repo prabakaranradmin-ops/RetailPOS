@@ -723,7 +723,7 @@ switch (command)
         Console.WriteLine("  This keeps somebody from idly reading the shop's figures. It is not a");
         Console.WriteLine("  safe: whoever can log in to this computer can still open pos.db with");
         Console.WriteLine("  other software. Real separation needs a second Windows account —");
-        Console.WriteLine("  SETTINGS.md explains how.");
+        Console.WriteLine("  SETTINGS.html explains how.");
 
         return 0;
     }
@@ -1021,7 +1021,7 @@ static void WriteHelp()
               Require a PIN before the dashboard will run, so a cashier cannot
               read the shop's turnover and margins. Asks for the current PIN
               before changing or clearing one. Keeps somebody out of the
-              command; it does not encrypt the database — see SETTINGS.md.
+              command; it does not encrypt the database — see SETTINGS.html.
 
           pos receipt-preview [--width N] [--png <path>]
               Renders a sample receipt as text. Touches no hardware, so it works

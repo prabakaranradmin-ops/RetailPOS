@@ -111,7 +111,7 @@ internal sealed class HardwareChecks(PosSettings settings, TextWriter output, Te
             output.WriteLine($"  Handover rate : {bytes / elapsed.TotalSeconds / 1024:N0} KB/s");
 
         output.WriteLine("  That is the time to hand the job to the spooler, not the time until the");
-        output.WriteLine("  paper stops. Time the paper yourself as well — see HARDWARE_SIGNOFF.md.");
+        output.WriteLine("  paper stops. Time the paper yourself as well — see HARDWARE_SIGNOFF.html.");
 
         if (elapsed.TotalSeconds >= 3)
         {

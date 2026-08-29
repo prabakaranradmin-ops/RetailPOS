@@ -103,14 +103,16 @@ Source: "{#Payload}\{#ToolExe}";                 DestDir: "{app}"; Flags: ignore
 Source: "{#Payload}\settings.pilot-tamil.json";  DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Payload}\settings.json";              DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Payload}\catalog_template.csv";       DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Payload}\SETTINGS.md";                DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Payload}\CATALOGUE_FORMAT.md";        DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Payload}\HARDWARE_SIGNOFF.md";        DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Payload}\PILOT_RUNBOOK.md";           DestDir: "{app}"; Flags: ignoreversion
+; The guides are HTML so the runbook shortcut below opens something readable. A .md file has no
+; handler on a clean Windows install, so that shortcut used to raise "how do you want to open this".
+Source: "{#Payload}\SETTINGS.html";              DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\CATALOGUE_FORMAT.html";      DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\HARDWARE_SIGNOFF.html";      DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Payload}\PILOT_RUNBOOK.html";         DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName} Till";        Filename: "{app}\{#TillExe}"
-Name: "{group}\Operator runbook";       Filename: "{app}\PILOT_RUNBOOK.md"
+Name: "{group}\Operator runbook";       Filename: "{app}\PILOT_RUNBOOK.html"
 Name: "{group}\{#AppName} commands";    Filename: "{cmd}"; Parameters: "/K cd /d ""{app}"" && echo Run: pos.exe --help"; IconFilename: "{app}\{#ToolExe}"
 Name: "{group}\Uninstall {#AppName}";   Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName} Till";  Filename: "{app}\{#TillExe}"; Tasks: desktopicon

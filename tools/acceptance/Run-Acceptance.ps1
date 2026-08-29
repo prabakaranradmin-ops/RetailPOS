@@ -564,7 +564,7 @@ else {
         Add-Result -Kind Positive -Feature 'Printing' -Name 'The printed bill can be inspected as an image' `
             -Expected 'the dots the printer would burn, as a PNG' -Actual 'rendered' -Passed $true `
             -Shot 'printed-receipt.png' `
-            -Detail 'This is how a Tamil bill gets checked on a bench with no paper — HARDWARE_SIGNOFF.md section 1a.'
+            -Detail 'This is how a Tamil bill gets checked on a bench with no paper — HARDWARE_SIGNOFF.html section 1a.'
     }
 }
 

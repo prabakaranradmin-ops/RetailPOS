@@ -133,17 +133,29 @@ Write-Host 'Adding the templates and the runbook...' -ForegroundColor Cyan
 $package = @(
     @{ From = Join-Path $root 'deploy\settings.json';           To = 'settings.json' },
     @{ From = Join-Path $root 'deploy\settings.pilot-tamil.json'; To = 'settings.pilot-tamil.json' },
-    @{ From = Join-Path $root 'deploy\SETTINGS.md';             To = 'SETTINGS.md' },
-    @{ From = Join-Path $root 'deploy\catalog_template.csv';    To = 'catalog_template.csv' },
-    @{ From = Join-Path $root 'deploy\CATALOGUE_FORMAT.md';     To = 'CATALOGUE_FORMAT.md' },
-    @{ From = Join-Path $root 'deploy\HARDWARE_SIGNOFF.md';     To = 'HARDWARE_SIGNOFF.md' },
-    @{ From = Join-Path $root 'docs\PILOT_RUNBOOK.md';          To = 'PILOT_RUNBOOK.md' }
+    @{ From = Join-Path $root 'deploy\catalog_template.csv';    To = 'catalog_template.csv' }
 )
 
 foreach ($file in $package) {
     if (-not (Test-Path $file.From)) { throw "Missing from the package: $($file.From)" }
     Copy-Item $file.From (Join-Path $Output $file.To) -Force
 }
+
+# The guides go in as HTML. They land in the install folder and get opened from the Start menu on a
+# machine that has a browser and no Markdown viewer, where a .md file opens in Notepad as pipes and
+# hashes. Markdown stays the source; this renders it on the way in.
+$guides = @(
+    'deploy\SETTINGS.md',
+    'deploy\CATALOGUE_FORMAT.md',
+    'deploy\HARDWARE_SIGNOFF.md',
+    'docs\PILOT_RUNBOOK.md'
+) | ForEach-Object {
+    $source = Join-Path $root $_
+    if (-not (Test-Path $source)) { throw "Missing from the package: $_" }
+    $source
+}
+
+& (Join-Path $root 'tools\docs\Convert-Docs.ps1') -Path $guides -OutputDir $Output -Version $Version
 
 # The settings that ship are the template, never whatever this machine happens to be configured
 # with. A developer's file-printer rig reaching a store would have it trading all day with no
@@ -206,9 +218,9 @@ Get-ChildItem $Output -File | Sort-Object Length -Descending | ForEach-Object {
 
 Write-Host ''
 Write-Host 'On the lane:' -ForegroundColor Cyan
-Write-Host '  1. Copy settings.json to %LOCALAPPDATA%\RetailPOS\ and edit it (see SETTINGS.md)'
+Write-Host '  1. Copy settings.json to %LOCALAPPDATA%\RetailPOS\ and edit it (see SETTINGS.html)'
 Write-Host '  2. pos test-hardware'
 Write-Host '  3. pos import-items --file catalogue.csv --dry-run, then without --dry-run'
 Write-Host '  4. Pos.App.exe'
 Write-Host ''
-Write-Host 'PILOT_RUNBOOK.md is the day-to-day guide for whoever runs the till.'
+Write-Host 'PILOT_RUNBOOK.html is the day-to-day guide for whoever runs the till.'
