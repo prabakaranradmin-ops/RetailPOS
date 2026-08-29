@@ -44,6 +44,9 @@
 
     <Style x:Key="NameCell" TargetType="TextBlock">
       <Setter Property="FontWeight" Value="SemiBold" />
+
+      <!-- A name too long for its column ends in an ellipsis rather than stopping mid-letter. -->
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     <!-- Codes: present when wanted, quiet when not. -->
@@ -53,21 +56,6 @@
       <Setter Property="FontSize" Value="13" />
     </Style>
 
-    <!--
-      The trailing filler column's header, with its right-hand border taken off.
-
-      Every header carries a separator on its right, which is what tells one column from the next.
-      On the filler that separator lands at the far edge of the grid and closes a box around the
-      empty space, so a column that exists only to absorb leftover width reads as a column somebody
-      forgot to name. Without it the header bar simply runs on past the last real column, which is
-      what it is doing.
-
-      The bottom edge stays, so the line under the headers still reaches the edge of the grid.
-    -->
-    <Style x:Key="FillerHeader" TargetType="DataGridColumnHeader"
-           BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
-      <Setter Property="BorderThickness" Value="0,0,0,1" />
-    </Style>
   </Window.Resources>
 
   <Grid Margin="16,10,16,16">
@@ -178,7 +166,7 @@
                 FontSize="14"
                 RowHeight="28"
                 ItemsSource="{Binding Lines}"
-                ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                 SelectedIndex="{Binding SelectedLineIndex, Mode=TwoWay}">
         <!--
           Every column is Auto, so the grid measures its own headers and cells rather than
@@ -190,17 +178,24 @@
           till is worse than a column that shifts by a few pixels when the widest value changes,
           and no amount of picking better numbers makes the whole class of fault go away.
 
-          The item name is Auto too, bounded rather than starred. A * column claims the leftover
-          width before the Auto columns have finished measuring, so when the row content turned
-          out wider than the headers the name kept its over-generous share and the grid took the
-          difference out of the last two columns instead — Tax and Total were squeezed to slivers.
-          Bounding the name means the widths always sum to what the columns actually need, and if
-          that exceeds the screen the grid scrolls sideways rather than crushing anything.
+          The item name is starred, so it takes whatever is left over and the columns always reach
+          the edge of the grid.
 
-          (Tried again after the no-tax build made the leftover space obvious, and it failed the
-          same way: the name took the room and Disc through Total came out as slivers a few pixels
-          wide. The last column below absorbs the slack instead, because an empty column has no
-          content to claim room for.)
+          That failed twice before, and this is why. A * column claims the leftover width before the
+          Auto columns have finished measuring, so the name took an over-generous share and Disc
+          through Total came out as slivers a few pixels wide. The missing piece was not the star —
+          it was that none of the other columns had a floor. Every one now carries a MinWidth wide
+          enough for its own header and its widest realistic value, so nothing can be squeezed below
+          legibility however the measure pass falls out. If the total ever does exceed the screen,
+          the grid scrolls sideways.
+
+          The alternative, tried and removed, was an empty trailing column to soak up the slack. It
+          worked, but it left a nameless column in the header that everyone asked about.
+
+          Sideways scrolling is off for the same reason. With a starred column that shrinks to a
+          floor, the widths always add up to the space available and there is nothing to scroll to —
+          the scrollbar was left over from when every column was content-sized, and it went on
+          appearing for a rounding pixel or two.
 
           There are no per-line tax columns. The rate-wise breakup a GST invoice must carry is on
           the printed invoice, where the law wants it, and in the day-end report — not on a screen a
@@ -210,43 +205,40 @@
         -->
         <DataGrid.Columns>
           <!-- Line number, so a cashier and a customer can point at the same row. -->
-          <DataGridTextColumn Header="#" Binding="{Binding LineNumber}" Width="Auto"
+          <DataGridTextColumn Header="#" Binding="{Binding LineNumber}" Width="Auto" MinWidth="36"
                               ElementStyle="{StaticResource IndexCell}" />
-          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="Auto" MinWidth="200" MaxWidth="380"
+
+          <!--
+            The name takes the slack, so the columns always reach the edge of the grid.
+
+            Capped as well as floored. Uncapped, the star claimed its share of the width before the
+            Auto columns had finished measuring, so the two together came to more than the viewport
+            and the grid scrolled with Total half off the edge. The cap leaves the Autos room to
+            turn out wider than expected without pushing anything off.
+          -->
+          <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" MinWidth="220" MaxWidth="520"
                               ElementStyle="{StaticResource NameCell}" />
-          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="Auto"
+
+          <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="Auto" MinWidth="58"
                               ElementStyle="{StaticResource DimCell}" />
-          <DataGridTextColumn Header="Barcode / Batch" Binding="{Binding BarcodeOrBatch}" Width="Auto"
+
+          <!-- "Barcode" alone: the header was setting this column's width, not its values. -->
+          <DataGridTextColumn Header="Barcode" Binding="{Binding BarcodeOrBatch}" Width="Auto" MinWidth="132"
                               ElementStyle="{StaticResource DimCell}" />
-          <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="Auto"
+          <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="Auto" MinWidth="60"
                               ElementStyle="{StaticResource NumericCell}" />
-          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="Auto"
+          <DataGridTextColumn Header="Unit" Binding="{Binding UnitLabel}" Width="Auto" MinWidth="52"
                               ElementStyle="{StaticResource DimCell}" />
-          <DataGridTextColumn Header="MRP" Binding="{Binding Mrp, StringFormat={}{0:N2}}" Width="Auto"
+          <DataGridTextColumn Header="MRP" Binding="{Binding Mrp, StringFormat={}{0:N2}}" Width="Auto" MinWidth="84"
                               ElementStyle="{StaticResource MutedNumericCell}" />
-          <DataGridTextColumn Header="Rate" Binding="{Binding UnitRateExclTax, StringFormat={}{0:N2}}" Width="Auto"
+          <DataGridTextColumn Header="Rate" Binding="{Binding UnitRateExclTax, StringFormat={}{0:N2}}" Width="Auto" MinWidth="84"
                               ElementStyle="{StaticResource NumericCell}" />
 
           <!-- A dash where there is no discount: a column of 0.00 reads as a figure worth checking. -->
-          <DataGridTextColumn Header="Disc" Binding="{Binding DiscountLabel}" Width="Auto"
+          <DataGridTextColumn Header="Disc" Binding="{Binding DiscountLabel}" Width="Auto" MinWidth="72"
                               ElementStyle="{StaticResource DiscountCell}" />
-          <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto"
+          <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="Auto" MinWidth="92"
                               ElementStyle="{StaticResource TotalCell}" />
-
-          <!--
-            Takes up whatever is left over, so the columns reach the edge of the grid.
-
-            Without it the widths stop where the content stops and WPF fills the remainder with a
-            strip of its own that belongs to no column: it carries neither the header shading nor
-            the selected row's highlight, so the row appears to end in an empty cell. Four fewer
-            columns on the no-tax build made a narrow gap into an obvious one.
-
-            Empty on purpose. A * column claims the leftover width before the Auto columns have
-            finished measuring, which is what crushed Tax and Total when the *name* was starred —
-            a column with nothing in it has no content to claim room for, so it can only ever take
-            what is genuinely spare.
-          -->
-          <DataGridTextColumn Header="" Width="*" HeaderStyle="{StaticResource FillerHeader}" />
         </DataGrid.Columns>
       </DataGrid>
 
