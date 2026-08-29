@@ -24,6 +24,9 @@ artifacts/ship/*
 !artifacts/ship/RetailPOS-GST-1.4.3/
 !artifacts/ship/RetailPOS-NoTax-1.4.3/
 
+# The assembled Pages site. Generated from artifacts/ship on every deploy, never edited.
+_site/
+
 *.db
 *.db-shm
 *.db-wal

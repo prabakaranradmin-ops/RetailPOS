@@ -1,0 +1,54 @@
+name: Pages
+
+# The documentation that ships in the box, published so it can be read without downloading
+# anything. The site is assembled from artifacts/ship, so it cannot drift from what a shop was
+# actually sent -- if the two could disagree, the site would eventually describe software nobody
+# is running.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/ship/**'
+      - 'tools/docs/Build-Site.ps1'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and let a running one finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # enablement turns Pages on for the repository the first time this runs, so nobody has to
+      # find the setting by hand.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # pwsh, not bash: the builder is the same script that runs on the build machine, and one
+      # copy of it is easier to keep true than two.
+      - name: Assemble the site
+        shell: pwsh
+        run: ./tools/docs/Build-Site.ps1 -Output ./_site -Repo "${{ github.repository }}"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
