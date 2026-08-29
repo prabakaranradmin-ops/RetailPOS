@@ -1,0 +1,280 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>settings.json â€” RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--warn:#A63D2F}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 110px}
+.doc-head{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+.doc-head .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+.doc-head .meta{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+h2{font-size:26px;margin:44px 0 10px;letter-spacing:-.01em;border-top:1px solid var(--rule);
+padding-top:30px}
+h3{font-size:19px;margin:28px 0 6px}
+h4{font-size:16.5px;margin:20px 0 4px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+/* A section heading draws its own rule, so a --- written just above one in the
+   source would print two rules a few pixels apart. */
+hr+h2{border-top:0;padding-top:0;margin-top:34px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 17px;
+overflow-x:auto;margin:16px 0;font-family:Consolas,monospace;font-size:13px;line-height:1.6}
+pre code{background:none;padding:0;color:var(--ink)}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+li.check{list-style:none;margin-left:-22px;margin-bottom:9px}
+.box{display:inline-block;width:15px;height:15px;border:1.5px solid var(--rule-hard);
+border-radius:3px;margin-right:10px;vertical-align:-2px}
+.box.done{border-color:var(--accent);color:var(--accent);font-size:11px;line-height:11px;
+text-align:center}
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0;min-width:420px}
+th,td{text-align:left;padding:8px 14px 8px 0;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
+border-bottom:1px solid var(--rule-hard)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--card);border-left:3px solid var(--warn);
+border-radius:0 8px 8px 0;color:var(--soft)}
+blockquote p:last-child{margin:0}
+@media print{body{background:#fff;color:#000;font-size:11pt}.wrap{padding:0;max-width:none}
+h2{page-break-after:avoid}pre,table,blockquote{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="doc-head">
+  <p class="eyebrow">RetailPOS 1.4.3</p>
+  <h1>settings.json</h1>
+  <p class="meta">Offline point of sale for Indian retail. Nothing on this lane leaves the machine.</p>
+</div>
+<p>Copy the template to <code>%LOCALAPPDATA%\RetailPOS\settings.json</code> on the lane and edit it. A missing file means defaults; a malformed one stops the till at startup with the exact line, deliberately, because a lane running under the wrong settings is worse than a lane that will not start.</p>
+<h2 id="must-be-set-before-the-lane-opens">Must be set before the lane opens</h2>
+<div class="scroller"><table><thead><tr>
+<th>Setting</th>
+<th>Why it matters</th>
+</tr></thead><tbody>
+<tr>
+<td><code>laneId</code></td>
+<td>Goes into every invoice number. <strong>Two lanes with the same id will mint colliding invoice numbers.</strong> Give each till its own — <code>L1</code>, <code>L2</code>, <code>COUNTER-A</code>.</td>
+</tr>
+<tr>
+<td><code>outletStateCode</code></td>
+<td>The outlet's GST state code. Decides CGST/SGST against IGST when a customer is from another state. <code>33</code> is Tamil Nadu.</td>
+</tr>
+<tr>
+<td><code>store.name</code>, <code>store.gstin</code></td>
+<td>Printed on every invoice. A GST invoice has to identify who issued it.</td>
+</tr>
+<tr>
+<td><code>invoiceNumber.storePrefix</code></td>
+<td>The shop's own prefix — the <code>RM</code> of <code>RM/26-27/11358</code>. Ships as <code>CHANGEME</code>. <strong>Settle this before the first sale</strong>; an invoice number cannot be changed once a bill is in a customer's hand.</td>
+</tr>
+<tr>
+<td><code>hardware.printerName</code></td>
+<td>See below. Ships as <code>CHANGE ME</code> deliberately.</td>
+</tr>
+</tbody></table></div>
+<h2 id="cashier">Cashier</h2>
+<p><code>defaultCashierName</code> sets who the till assumes is serving when it starts. Leave it <code>null</code> where shifts change — the cashier presses <code>Ctrl+U</code> and types their name, and the day-end report then splits takings and cash by person, which is what makes a drawer difference answerable. Set it to a name only on a lane that one person runs all day.</p>
+<h2 id="invoice-numbers">Invoice numbers</h2>
+<p><code>{storePrefix}/{financial year}/{lane}-{sequence}</code> — for example <code>RM/26-27/L1-11358</code>, or <code>RM/26-27/11358</code> with the lane segment turned off.</p>
+<div class="scroller"><table><thead><tr>
+<th>Setting</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>storePrefix</code></td>
+<td>The shop's own prefix. No spaces and no slashes.</td>
+</tr>
+<tr>
+<td><code>includeLaneSegment</code></td>
+<td><strong>Leave this <code>true</code> unless the shop has exactly one till and never will have two.</strong> Each lane mints its own 1, 2, 3…, so with the segment off two tills issue the same invoice numbers as each other. There is no server to notice.</td>
+</tr>
+<tr>
+<td><code>sequencePadding</code></td>
+<td><code>0</code> prints the number as-is, which is what a counter bill normally shows. Set it to <code>6</code> for a fixed-width <code>000123</code>.</td>
+</tr>
+</tbody></table></div>
+<p>The year is the Indian financial year, 1 April to 31 March, because that is what a GST return is filed against. The sequence restarts on 1 April, not on 1 January.</p>
+<h2 id="receipt-language">Receipt language</h2>
+<p><code>receiptLanguage</code> is <code>English</code> or <code>Tamil</code>. Only the labels change — every figure, item name and invoice number is identical either way.</p>
+<p>Tamil labels are <strong>drawn as dots</strong> and sent to the printer as an image, because no thermal printer has a Tamil font and a Tamil syllable is assembled from several code points rather than mapped one byte at a time. This needs <code>hardware.printerRasterMode</code> left at <code>Auto</code> and a Tamil-capable font on the machine; every Windows build since 8 has Nirmala UI. Set the language and run <code>pos receipt-preview --png receipt.png</code>, then look at the image — that is the only way to check the result without using a roll of paper.</p>
+<p>A lane set to Tamil with drawing switched off prints the labels as <code>?</code>. The preview says so rather than letting it reach a customer.</p>
+<h2 id="editing-it-when-anything-is-in-tamil">Editing it when anything is in Tamil</h2>
+<p><strong>Save the file as UTF-8.</strong> In Notepad: File → Save As → Encoding → <em>UTF-8 with BOM</em>.</p>
+<p>This matters more than it sounds. If the file is saved in the machine's ANSI encoding instead, a Tamil shop name comes back as <code>à®°à®µà®¿ à®®à®³à®¿à®•à¯ˆ</code>, and that is what prints at the top of every bill. The corruption is invisible to everything downstream — the mangled text is valid JSON and valid UTF-8, so nothing can tell it was ever anything else. The receipt's <em>labels</em> stay correct because they are built into the software, so the bill looks right apart from the shop's own name, which is the one thing on it nobody re-reads after the first day.</p>
+<p>The lane checks for this at startup and refuses to open, telling you what the text was meant to say. The template ships with a byte-order mark so Notepad reads and re-saves it correctly; that mark is what stops the problem happening in the first place, so do not strip it.</p>
+<p>If a lane has already printed bills with a mangled name, fix the file and reprint nothing — the invoices themselves are unaffected, only what was printed on them.</p>
+<h2 id="two-files-ship-and-you-use-one-of-them">Two files ship, and you use one of them</h2>
+<p><code>settings.json</code> is the generic template — English, no prefix, <code>CHANGE ME</code> markers throughout. It is the starting point for any lane.</p>
+<p><code>settings.pilot-tamil.json</code> is the same file with the pilot's decisions already made: Tamil receipts, prefix <code>RM</code>, no lane segment, unpadded sequence, 80mm paper. Copy <strong>that</strong> one to <code>%LOCALAPPDATA%\RetailPOS\settings.json</code>, fill in every <code>FILL IN</code>, and delete the two <code>_comment</code> lines at the top.</p>
+<p>It ships with the identity fields blank on purpose, and the build refuses to package it otherwise. A GSTIN has to be typed from the shop's own certificate and checked by somebody; a file that arrives with one already in it is a file nobody checks, and one wrong character prints on every invoice the shop ever issues.</p>
+<p>The prefix is in the pilot file rather than the template for the same kind of reason. <code>RM</code> belongs to one shop. A generic template carrying it would follow the next lane to the next shop, and with <code>includeLaneSegment</code> off two tills issuing <code>RM/26-27/…</code> would mint the same numbers as each other with nothing to notice.</p>
+<h2 id="worked-example-the-pilot-lane">Worked example: the pilot lane</h2>
+<p>The settled decisions for the first shop. Copy this over the template's corresponding blocks, then fill in the four identity fields from the shop's <strong>own paperwork</strong> — its GST certificate and FSSAI licence, not from a photograph of an old bill. A GSTIN with one character wrong is printed on every invoice the shop issues, and nothing in the software can catch it.</p>
+<pre><code>{
+  "laneId": "L1",
+  "outletStateCode": "33",
+  "receiptLanguage": "Tamil",
+
+  "store": {
+    "name": "FILL IN - the shop name, in Tamil",
+    "addressLine1": "FILL IN",
+    "addressLine2": "FILL IN",
+    "gstin": "FILL IN - from the GST certificate",
+    "fssaiNumber": "FILL IN - from the FSSAI licence",
+    "customerCarePhone": "FILL IN",
+    "currencyPrefix": "Rs:"
+  },
+
+  "invoiceNumber": {
+    "storePrefix": "RM",
+    "includeLaneSegment": false,
+    "sequencePadding": 0
+  },
+
+  "hardware": {
+    "printerName": "FILL IN - exact name from Printers &amp; Scanners",
+    "printerPaperWidthChars": 48,
+    "printerRasterMode": "Auto"
+  }
+}</code></pre>
+<p>Two of these are decisions rather than facts, and both are worth understanding before copying them:</p>
+<ul>
+<li><strong><code>includeLaneSegment: false</code></strong> gives <code>RM/26-27/11358</code> rather than <code>RM/26-27/L1-11358</code>. It is correct for a shop with one till and <strong>wrong the day a second till is added</strong> — the two would issue identical invoice numbers with nothing to notice. If a second counter is ever likely, turn it on now; the shape of the number cannot be changed once bills have been issued under it.</li>
+<li><strong><code>printerRasterMode: "Auto"</code></strong> assumes the printer is on USB. A Tamil receipt is around 27KB against 2KB in English, which is imperceptible over USB and about half a minute over a 9600-baud serial line. Section 1b of <code>HARDWARE_SIGNOFF.html</code> measures it. Do not assume.</li>
+</ul>
+<h2 id="hardware">Hardware</h2>
+<p>Leave a peripheral blank and the lane simply does not have one — it still bills.</p>
+<div class="scroller"><table><thead><tr>
+<th>Setting</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>printerName</code></td>
+<td>The Windows printer name, <strong>exactly</strong> as it appears in Printers &amp; Scanners — for an Epson TM-T82 that is usually something like <code>EPSON TM-T82 Receipt</code>. The template ships with a <code>CHANGE ME</code> value on purpose: a lane left unset then fails loudly on every sale, which is far better than an empty value, which means "this lane has no printer" and trades all day in silence. Set it to <code>""</code> only if the lane genuinely has none.</td>
+</tr>
+<tr>
+<td><code>printerPaperWidthChars</code></td>
+<td><code>48</code> for 80mm paper, <code>32</code> for 58mm. Check with <code>pos receipt-preview</code>.</td>
+</tr>
+<tr>
+<td><code>printerPaperWidthDots</code></td>
+<td>Print head width in dots — <code>576</code> for 80mm, <code>384</code> for 58mm. <code>0</code> works it out from the character width, which is right unless the printer has been set to an unusual font.</td>
+</tr>
+<tr>
+<td><code>printerRasterMode</code></td>
+<td><code>Auto</code> draws only the lines the printer has no glyphs for and sends the rest as characters — fast, sharp, and how a bilingual bill is normally produced. <code>Always</code> draws the whole receipt in one typeface, at roughly 1.7KB a line. <code>Never</code> draws nothing, and anything not ASCII prints as <code>?</code>.</td>
+</tr>
+<tr>
+<td><code>receiptFontFamily</code></td>
+<td>Blank picks the best installed of Nirmala UI, Latha, Arial Unicode MS, Segoe UI. Only set it if the shop wants a particular face.</td>
+</tr>
+<tr>
+<td><code>receiptFontSizeDots</code></td>
+<td>Em size for drawn text, in printer dots. <code>0</code> uses a size matched to the printer's own font so drawn and typed lines are the same height.</td>
+</tr>
+<tr>
+<td><code>printerOutputFile</code></td>
+<td>Writes receipts to a file instead of a printer. For setting a lane up before its printer arrives. Use forward slashes.</td>
+</tr>
+<tr>
+<td><code>drawerConnection</code></td>
+<td><code>Printer</code> (RJ11 off the printer — how nearly every counter is wired), <code>Serial</code>, or <code>None</code>.</td>
+</tr>
+<tr>
+<td><code>drawerPin</code></td>
+<td><code>0</code> for RJ11 pin 2, <code>1</code> for pin 5. A single drawer is almost always pin 2.</td>
+</tr>
+<tr>
+<td><code>scannerPort</code></td>
+<td>Leave blank for the usual keyboard-wedge scanner. Only set it for a scanner in serial mode.</td>
+</tr>
+<tr>
+<td><code>scalePort</code></td>
+<td>e.g. <code>COM3</code>. Blank means no scale. Find it with <code>pos list-ports</code>.</td>
+</tr>
+<tr>
+<td><code>scaleProtocol</code></td>
+<td><code>Auto</code> works it out from the stream. Set <code>StxEtx</code> for Toledo/CAS or <code>Line</code> for Essae/Contech only if auto-detection has a problem.</td>
+</tr>
+</tbody></table></div>
+<h2 id="loyalty">Loyalty</h2>
+<p>The defaults are the reference values from the SRS: redeem up to 30% of a bill, a point is worth 50 paise, and one point is earned per ₹50 of the <strong>net</strong> bill after any redemption. Change these only with whoever signs off the store's accounts — they affect what customers are owed.</p>
+<h2 id="which-build-you-have-and-taxmode">Which build you have, and <code>taxMode</code></h2>
+<p><strong>Two installers ship, and they are not interchangeable.</strong></p>
+<div class="scroller"><table><thead><tr>
+<th>Installer</th>
+<th>For</th>
+<th>What the bill says</th>
+</tr></thead><tbody>
+<tr>
+<td><code>RetailPOS-GST-Setup</code></td>
+<td>A shop that collects GST</td>
+<td><strong>TAX INVOICE</strong>, with the rate-wise breakup</td>
+</tr>
+<tr>
+<td><code>RetailPOS-NoTax-Setup</code></td>
+<td>A <strong>composition dealer</strong>, who has a GSTIN but may not collect tax</td>
+<td><strong>BILL OF SUPPLY</strong>, with the declaration the rules require</td>
+</tr>
+</tbody></table></div>
+<p><strong>On the no-tax build there is nothing to set.</strong> It issues a bill of supply whatever <code>taxMode</code> says, and its owner screen has no tax chooser — a build that cannot issue a tax invoice does not offer to. A <code>settings.json</code> copied from a GST lane cannot make it start charging.</p>
+<p><strong>On the GST build</strong> the shop can switch itself to bills of supply: <code>Ctrl+D</code>, then Settings. It asks before it changes anything, applies straight away without a restart, and writes:</p>
+<pre><code>"taxMode": "Composition"</code></pre>
+<p>A composition dealer has a GSTIN but may not collect tax from the customer. Setting this changes the document, not just the screen:</p>
+<ul>
+<li>the bill is headed <strong>BILL OF SUPPLY</strong>, not TAX INVOICE</li>
+<li>no GST rate appears against any line, and there is no slab table</li>
+<li>the total line reads <strong>Subtotal</strong> — nothing was taxed, so there is no taxable value</li>
+<li>the declaration the rules require is printed: <em>Composition taxable person, not eligible to collect tax on supplies</em></li>
+<li>the till's four tax columns and the CGST/SGST/IGST panel are hidden</li>
+<li>the day-end report has no tax section</li>
+</ul>
+<p><strong>Do not set this to tidy up the screen on a lane that is charging GST.</strong> A bill of supply from a shop that collected tax is the wrong document, and so is a tax invoice showing no tax.</p>
+<p>The mode is recorded on every bill as it is issued. If the shop later crosses the turnover threshold and switches to <code>Gst</code>, everything it sold before that still reprints as the bill of supply it was.</p>
+<p>Check it before opening with <code>pos receipt-preview</code> — the preview shows the document this lane will actually issue.</p>
+<h2 id="keeping-the-figures-from-the-cashier">Keeping the figures from the cashier</h2>
+<p>The owner's screen (<code>Ctrl+D</code> at the till) and <code>pos dashboard</code> both show turnover, margins, cost prices and best sellers. On a lane where a cashier uses the same computer, put a PIN in front of them — the same PIN covers both.</p>
+<p><strong>From the till:</strong> <code>Ctrl+D</code>, Settings, <em>Save PIN</em>.</p>
+<p><strong>Or from the command line:</strong></p>
+<pre><code>pos dashboard-pin              set or change it — asks for the current one first
+pos dashboard-pin --clear      remove it</code></pre>
+<p>It asks twice, never echoes what you type, and stores a salted hash — the PIN itself is not written anywhere, so there is no file to read it out of and no way to recover it if you forget it. At least 4 characters, and it refuses the obvious ones (<code>0000</code>, <code>1234</code>) because a lock everybody guesses is worse than no lock: you believe the figures are private when they are not.</p>
+<p>There is deliberately no <code>--pin</code> option. A PIN passed on the command line sits in the shell's history and in the process list, where the person it is keeping out can read it.</p>
+<p>In <code>settings.json</code> it looks like this, and it is the only thing in the file worth protecting:</p>
+<pre><code>"security": {
+  "dashboardPin": { "salt": "…", "hash": "…", "iterations": 600000 }
+}</code></pre>
+<h3 id="what-this-does-and-does-not-protect">What this does and does not protect</h3>
+<p><strong>It stops a cashier reading the shop's figures out of the till.</strong> That is the realistic risk at a counter, and this removes it.</p>
+<p><strong>It is not a safe.</strong> If the cashier logs in to Windows as the same user that runs the till, they can open <code>pos.db</code> with any SQLite tool and read everything — sales, costs, margins — and none of this code is involved. The same goes for any <code>dashboard.html</code> left lying about: the lock is on the command, and it cannot follow the page out of it. Write the page somewhere private with <code>--out</code>, and delete it when you are done.</p>
+<p><strong>Real separation is a Windows job, not a settings job.</strong> If the figures genuinely must be out of reach:</p>
+<ol>
+<li>Give the owner their own Windows account, and the cashier a separate one.</li>
+<li>Install RetailPOS under the cashier's account for billing. The lane's data lives in that account's <code>%LOCALAPPDATA%</code>, so it is already invisible to other non-administrator accounts.</li>
+<li>Run the dashboard from the owner's account against a <strong>copy</strong> of the database — not against the live lane. Take one with <code>pos backup-db</code>, then put the copy in a folder both accounts can reach (a USB stick will do), <strong>renamed to <code>pos.db</code></strong>, with the lane's <code>settings.json</code> beside it. Point the dashboard at that folder:</li>
+</ol>
+<pre><code>   pos dashboard --data E:\books</code></pre>
+<p>That costs a login at shift change, which is why most single-outlet shops will not do it. The PIN is the proportionate measure for the ones that do not.</p>
+<h2 id="a-warning-about-laneid">A warning about laneId</h2>
+<p>The invoice number is <code>{laneId}-{year}-{sequence}</code>, and the lane prefix is the only thing keeping two tills from issuing the same number. There is no server to catch a duplicate. If you clone a lane's folder to set up a second till, <strong>change <code>laneId</code> before it takes a single sale.</strong></p>
+
+</div>
+</body>
+</html>

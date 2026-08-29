@@ -1,0 +1,7 @@
+﻿sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed,category,cost_price,stock_qty,reorder_level
+DAL001,8901234567890,Toor Dal 1kg,0713,Pcs,189.00,189.00,5,false,Staples,162.00,40,10
+RICE01,8901234567920,"Basmati Rice, Premium, 5kg",1006,Pcs,1299.00,1249.00,5,false,Staples,1105.00,12,4
+SUG001,,Sugar Loose,1701,Kg,45.00,45.00,5,true,Staples,41.50,,
+ATT001,8901234567937,Wheat Atta Loose,1101,Kg,42.00,42.00,0,true,Staples,,,
+SHM001,8901234567944,Shampoo 340ml,3305,Pcs,299.00,279.00,18,false,Personal Care,196.00,25,6
+CHO001,8901234567913,Chocolate Bar 50g,1806,Pcs,60.00,60.00,28,false,Snacks,44.00,3,12

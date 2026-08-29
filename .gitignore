@@ -12,14 +12,17 @@ artifacts/*
 # every other version stays out — but a shop asking for the software should not have to wait for
 # somebody to be at the build machine. One version's worth, replaced rather than accumulated.
 #
-# Nothing here can exceed 100 MB: GitHub refuses the push outright, and the installers sit at
-# 98.8 MB. If a future build crosses that line these move to a Release instead.
+# The unzipped folders only. GitHub refuses any file over 100 MB outright, and the zips crossed it
+# at 1.4.3 — the acceptance report added 2.4 MB to a 99.1 MB zip and the push was rejected. The
+# folders hold the same installer at 98.8 MB, and are the more useful form here anyway: the guides
+# and the feature report open in the browser instead of having to be downloaded and extracted.
+#
+# The installer itself is now within 1.2 MB of the same limit. When it crosses, this stops working
+# and the shipment moves to a GitHub Release, where the cap is 2 GB.
 !artifacts/ship/
 artifacts/ship/*
-!artifacts/ship/RetailPOS-GST-1.4.2/
-!artifacts/ship/RetailPOS-NoTax-1.4.2/
-!artifacts/ship/RetailPOS-GST-1.4.2.zip
-!artifacts/ship/RetailPOS-NoTax-1.4.2.zip
+!artifacts/ship/RetailPOS-GST-1.4.3/
+!artifacts/ship/RetailPOS-NoTax-1.4.3/
 
 *.db
 *.db-shm
