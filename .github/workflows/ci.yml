@@ -23,5 +23,18 @@ jobs:
       - name: Build
         run: dotnet build RetailPos.sln --configuration Release --no-restore
 
+      # minimal, not normal. At normal verbosity this step prints a line for every one of the
+      # ~1,140 passing tests, so the handful of lines that say what actually failed are buried
+      # thousands of lines deep and get truncated out of anything anyone pastes or reads. A test
+      # log exists to show failures; the passes are the summary line.
       - name: Test
-        run: dotnet test RetailPos.sln --configuration Release --no-build --verbosity normal
+        run: dotnet test RetailPos.sln --configuration Release --no-build --verbosity minimal --logger "trx;LogFileName=results.trx" --results-directory artifacts/test-results
+
+      # if: always() -- the results are wanted precisely when the step above failed.
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results/
+          retention-days: 14
