@@ -9,7 +9,10 @@ on:
     branches: [main]
     paths:
       - 'artifacts/ship/**'
-      - 'tools/docs/Build-Site.ps1'
+      # The whole docs tool directory, not just the builder. demo.html is published by being
+      # copied, so watching only Build-Site.ps1 meant editing the demo changed nothing on the
+      # site and gave no sign that it had not deployed.
+      - 'tools/docs/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
