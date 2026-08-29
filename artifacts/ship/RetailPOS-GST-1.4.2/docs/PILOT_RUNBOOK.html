@@ -1,0 +1,423 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pilot runbook â€” RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--warn:#A63D2F}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 110px}
+.doc-head{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+.doc-head .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+.doc-head .meta{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+h2{font-size:26px;margin:44px 0 10px;letter-spacing:-.01em;border-top:1px solid var(--rule);
+padding-top:30px}
+h3{font-size:19px;margin:28px 0 6px}
+h4{font-size:16.5px;margin:20px 0 4px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+/* A section heading draws its own rule, so a --- written just above one in the
+   source would print two rules a few pixels apart. */
+hr+h2{border-top:0;padding-top:0;margin-top:34px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 17px;
+overflow-x:auto;margin:16px 0;font-family:Consolas,monospace;font-size:13px;line-height:1.6}
+pre code{background:none;padding:0;color:var(--ink)}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+li.check{list-style:none;margin-left:-22px;margin-bottom:9px}
+.box{display:inline-block;width:15px;height:15px;border:1.5px solid var(--rule-hard);
+border-radius:3px;margin-right:10px;vertical-align:-2px}
+.box.done{border-color:var(--accent);color:var(--accent);font-size:11px;line-height:11px;
+text-align:center}
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0;min-width:420px}
+th,td{text-align:left;padding:8px 14px 8px 0;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
+border-bottom:1px solid var(--rule-hard)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--card);border-left:3px solid var(--warn);
+border-radius:0 8px 8px 0;color:var(--soft)}
+blockquote p:last-child{margin:0}
+@media print{body{background:#fff;color:#000;font-size:11pt}.wrap{padding:0;max-width:none}
+h2{page-break-after:avoid}pre,table,blockquote{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="doc-head">
+  <p class="eyebrow">RetailPOS 1.4.2</p>
+  <h1>Pilot runbook</h1>
+  <p class="meta">Offline point of sale for Indian retail. Nothing on this lane leaves the machine.</p>
+</div>
+<p>For whoever runs the lane. Written to be followed by someone who has not read anything else in this repository.</p>
+<p>Every command below is run from the folder the lane software was copied into.</p>
+<h2 id="which-build-is-this">Which build is this?</h2>
+<p>There are two, and a handful of paragraphs below depend on which one is installed:</p>
+<div class="scroller"><table><thead><tr>
+<th></th>
+<th>Bills it issues</th>
+<th>Tax on the bill</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>No-tax build</strong></td>
+<td>Bill of supply</td>
+<td>None. The switch is not there, and settings asking for GST are ignored.</td>
+</tr>
+<tr>
+<td><strong>GST build</strong></td>
+<td>Tax invoice, or a bill of supply if set to</td>
+<td>CGST/SGST within the state, IGST outside it</td>
+</tr>
+</tbody></table></div>
+<p>The installer's own filename says which, and so does the owner's screen under Settings (<code>Ctrl+D</code>, then <code>Ctrl+3</code>). Everything else in this runbook — opening, billing, closing, stock, the drawer — is the same on both.</p>
+<p>A shop that registers for GST later installs the GST build over the top. Its database, settings and backups are kept, and bills already issued keep the kind of document they were issued as.</p>
+<hr>
+<h2 id="before-the-first-day">Before the first day</h2>
+<p>Do this once, with the shop closed and nobody waiting.</p>
+<h3 id="1-put-the-software-on-the-lane">1. Put the software on the lane</h3>
+<p>Copy the whole deployment folder to the till. Nothing needs installing — not even the .NET runtime.</p>
+<h3 id="2-set-the-lane-up">2. Set the lane up</h3>
+<p>Copy <code>settings.json</code> to <code>%LOCALAPPDATA%\RetailPOS\</code> and edit it. The three that must be right before anything else happens:</p>
+<ul>
+<li><strong><code>laneId</code></strong> — unique to this till. <code>L1</code> on the first, <code>L2</code> on the second. <strong>If you copied this folder from another lane, change it now.</strong> The invoice number is <code>{prefix}/{financial year}/{laneId}-{sequence}</code>, and the lane part is the only thing stopping two tills from issuing the same invoice number. There is no server to catch it.</li>
+<li><strong><code>invoiceNumber.storePrefix</code></strong> — the shop's own prefix, the <code>RM</code> of <code>RM/26-27/11358</code>. Ships as <code>CHANGEME</code>. <strong>Settle it before the first sale</strong> — a number cannot be changed once the bill is in a customer's hand. The year is the financial year, so the sequence restarts on 1 April.</li>
+<li><strong><code>outletStateCode</code></strong> — the outlet's GST state code (<code>33</code> is Tamil Nadu).</li>
+<li><strong><code>store.name</code> and <code>store.gstin</code></strong> — printed on every invoice.</li>
+</ul>
+<p>Then the printer name and, if there is one, the scale's COM port. <code>pos list-ports</code> shows what the machine can see. Full reference in <code>SETTINGS.html</code>.</p>
+<h3 id="3-check-the-hardware">3. Check the hardware</h3>
+<pre><code>pos test-hardware</code></pre>
+<p>Goes through each peripheral in turn. It shows what should come out of the printer <em>before</em> printing, fires the drawer, and asks you to confirm what physically happened — because no software can see paper leave a printer.</p>
+<p>Answer honestly. A "yes" here that should have been "no" is a problem discovered mid-queue instead.</p>
+<p><strong>Not done until every configured peripheral passes.</strong> Something not configured is skipped, which is fine — a card-only counter has no drawer.</p>
+<h3 id="4-load-the-catalogue">4. Load the catalogue</h3>
+<pre><code>pos import-items --file catalogue.csv --dry-run
+pos import-items --file catalogue.csv</code></pre>
+<p>Always dry-run first. It checks everything and writes nothing.</p>
+<p>If it reports problems, <strong>nothing was imported</strong> — the catalogue is exactly as it was. Fix the listed lines and run it again. The format and every rule are in <code>CATALOGUE_FORMAT.html</code>.</p>
+<h3 id="5-check-it-looks-right">5. Check it looks right</h3>
+<pre><code>pos receipt-preview</code></pre>
+<p>Prints a sample receipt as text. Check the shop name, the GSTIN, the FSSAI number and the bill number, and that nothing runs off the edge. If it does, the paper width is wrong — <code>48</code> for 80mm, <code>32</code> for 58mm.</p>
+<p><strong>On a lane printing Tamil</strong>, the text preview is not enough: it counts characters, and Tamil is drawn rather than typed. Render the actual dots and look at them:</p>
+<pre><code>pos receipt-preview --png receipt.png</code></pre>
+<p>Open the image. That is what will come out of the printer. If any Tamil shows as <code>?</code>, the lane cannot draw it — the preview says why — and the shop must not open on a receipt printing <code>?</code> where its own name should be.</p>
+<hr>
+<h2 id="every-morning-opening">Every morning — opening</h2>
+<ol>
+<li><strong>Start the till.</strong> Run <code>Pos.App.exe</code>. If it will not start it will say why in one line; the usual cause is a mistyped <code>settings.json</code>.</li>
+<li><strong>Say who is on the till.</strong> <code>Ctrl+U</code>, type your name. Every sale is recorded against it, and at close the report splits takings by cashier — which is what makes a drawer difference answerable rather than just noted. Do it again whenever the shift changes.</li>
+<li><strong>Check the float.</strong> Count what is in the drawer and write it down. The software does not track the opening float — the Z-report tells you what was <em>taken</em>, and you add your float to it.</li>
+<li><strong>Scan one item and cancel it</strong> (<code>Escape</code>). Confirms the scanner and the catalogue are both alive before a customer is waiting.</li>
+</ol>
+<p>If the printer was off overnight, turn it on before the first sale. A sale still completes with a dead printer — the invoice is saved either way — but the customer leaves without a bill.</p>
+<hr>
+<h2 id="during-the-day-the-keys">During the day — the keys</h2>
+<div class="scroller"><table><thead><tr>
+<th>Key</th>
+<th>Does</th>
+</tr></thead><tbody>
+<tr>
+<td><em>(just scan)</em></td>
+<td>Adds the item</td>
+</tr>
+<tr>
+<td>Type, then <code>Enter</code></td>
+<td>Search by name or SKU</td>
+</tr>
+<tr>
+<td><code>↑</code> <code>↓</code></td>
+<td>Move up and down the bill, or the search results</td>
+</tr>
+<tr>
+<td><code>+</code> <code>-</code></td>
+<td>Change quantity on the selected line</td>
+</tr>
+<tr>
+<td><code>F3</code></td>
+<td>Type an exact quantity</td>
+</tr>
+<tr>
+<td><code>F4</code></td>
+<td>Discount on the selected line</td>
+</tr>
+<tr>
+<td><code>Delete</code></td>
+<td>Remove the selected line</td>
+</tr>
+<tr>
+<td><code>F7</code></td>
+<td>Attach a customer by mobile (needed for loyalty points)</td>
+</tr>
+<tr>
+<td><code>F5</code></td>
+<td>Park the bill</td>
+</tr>
+<tr>
+<td><code>F6</code></td>
+<td>Bring a parked bill back</td>
+</tr>
+<tr>
+<td><code>F12</code></td>
+<td><strong>Take payment</strong></td>
+</tr>
+<tr>
+<td><code>Ctrl+P</code></td>
+<td>Reprint a bill</td>
+</tr>
+<tr>
+<td><code>Ctrl+U</code></td>
+<td>Say who is on the till</td>
+</tr>
+<tr>
+<td><code>Ctrl+D</code></td>
+<td><strong>The owner's screen</strong> — figures, stock, settings</td>
+</tr>
+<tr>
+<td><code>Ctrl+N</code></td>
+<td>Start over (asks twice)</td>
+</tr>
+<tr>
+<td><code>Ctrl+Shift+V</code></td>
+<td><strong>Void a settled sale</strong> (asks twice)</td>
+</tr>
+<tr>
+<td><code>Shift+F12</code></td>
+<td><strong>Close the day</strong> (asks twice)</td>
+</tr>
+</tbody></table></div>
+<p>Taking payment: <code>F12</code>, choose the tender with <code>↑</code>/<code>↓</code>, type the amount, <code>Enter</code>. Leave the amount blank to take the whole balance. Commit again when it is fully paid. Loyalty points are entered as <strong>points, not rupees</strong> — blank redeems the maximum allowed.</p>
+<h3 id="things-that-will-happen">Things that will happen</h3>
+<ul>
+<li><strong>"No item matches …"</strong> — the item is not in the catalogue, or the barcode is wrong. Search by name to check. Add it to the catalogue file and re-import with <code>--update</code> after hours.</li>
+<li><strong>A bill that has to wait</strong> — <code>F5</code> parks it and gives you a token. <code>F6</code> brings it back. Parked bills survive a restart and do <strong>not</strong> take an invoice number while they wait.</li>
+<li><strong>The drawer will not open</strong> — the till says so. Open it with the key and carry on; the sale is already saved.</li>
+<li><strong>The printer jams</strong> — the sale is already saved. Fix the paper, then <code>Ctrl+P</code> and <code>Enter</code> for a duplicate of the last bill.</li>
+<li><strong>A sale was rung up wrong and already settled</strong> — <code>Ctrl+Shift+V</code>, then <code>Enter</code> for the last bill or type the invoice number. It shows what will go; press <code>Enter</code> again to do it. The bill stays in the books marked cancelled, its number stays used, loyalty points go back, and the drawer opens if there is cash to return. <strong>Only works before the day is closed</strong> — after that the correction is a credit note, which this version does not do.</li>
+</ul>
+<hr>
+<h2 id="midday-the-backup">Mid-day — the backup</h2>
+<p>Once, around the quiet part of the afternoon:</p>
+<pre><code>pos backup-db</code></pre>
+<p>Takes about a second and does <strong>not</strong> stop anyone billing. It verifies the copy before calling it a backup.</p>
+<p>Why bother when closing also backs up: a lane that loses its database at 4pm loses the whole day if the last backup was last night. This costs a second.</p>
+<p><strong>Weekly</strong>, before opening:</p>
+<pre><code>pos check-db</code></pre>
+<p>Walks the whole file looking for damage. Takes longer on a large database, which is why it is not a daily job. If it reports problems, <strong>stop</strong> — take a copy of <code>%LOCALAPPDATA%\RetailPOS\pos.db</code> before touching anything, then restore from the most recent snapshot in the <code>backups</code> folder.</p>
+<hr>
+<h2 id="every-night-closing-and-reconciling">Every night — closing and reconciling</h2>
+<h3 id="1-clear-the-screen">1. Clear the screen</h3>
+<p>Finish, park, or discard whatever bill is on the till. The close is refused while a bill is on screen, because that bill has not been paid for.</p>
+<h3 id="2-deal-with-parked-bills">2. Deal with parked bills</h3>
+<p><code>F6</code> shows anything still parked. Settle them or discard them. The Z-report will tell you if any are left, but sorting it out now is easier than explaining it tomorrow.</p>
+<h3 id="3-close">3. Close</h3>
+<p>Press <code>Shift+F12</code>. It shows what it is about to close — invoice count, net sales, and what should be in the drawer. Press it again to commit.</p>
+<p><em>(Or <code>pos close-day</code> from the command line, which does the same thing.)</em></p>
+<p>A close <strong>cannot be undone</strong>. Every invoice it covers is stamped with it, so a sale can never appear on two reports and closing twice by accident is harmless.</p>
+<h3 id="4-count-the-drawer">4. Count the drawer</h3>
+<p>The report leads with <strong>CASH IN DRAWER SHOULD BE</strong>. That is cash taken less change given, and it does <strong>not</strong> include your opening float.</p>
+<pre><code>count the drawer  −  opening float  =  the figure on the report</code></pre>
+<p>If they match, you are done. If they do not:</p>
+<div class="scroller"><table><thead><tr>
+<th>Difference</th>
+<th>Usually</th>
+</tr></thead><tbody>
+<tr>
+<td>A round amount</td>
+<td>Change given wrong, or a note in the wrong compartment</td>
+</tr>
+<tr>
+<td>Matches one bill exactly</td>
+<td>A sale rung up as cash and paid by card, or the reverse</td>
+</tr>
+<tr>
+<td>Small and odd</td>
+<td>Miscounted coins — recount before investigating</td>
+</tr>
+<tr>
+<td>Report says 0.00, drawer has money</td>
+<td>The day was already closed. Check for two reports today.</td>
+</tr>
+</tbody></table></div>
+<p>Write the difference down, whatever it is. A pattern across the pilot is worth more than any single night.</p>
+<h3 id="5-check-the-report-reconciles">5. Check the report reconciles</h3>
+<p>At the foot it says either <strong>"Reconciled: sales, tax and tenders all agree"</strong> or <strong>"DOES NOT RECONCILE"</strong> with the figures that disagree.</p>
+<p>If it does not reconcile, keep the report and tell whoever is supporting the pilot. It is not something to fix at the till.</p>
+<h3 id="6-backup">6. Backup</h3>
+<p>Closing takes one automatically and says whether it worked. If it says <strong>BACKUP FAILED</strong>, run <code>pos backup-db</code> by hand and do not leave until it succeeds. The day's books are exactly what a lost file costs.</p>
+<h3 id="7-file-the-report">7. File the report</h3>
+<p>Keep the printed Z-reports in order. They are the day's takings as the till recorded them.</p>
+<p>On the <strong>GST build</strong> the report also breaks tax down by slab, which is the shape a GST return wants. On the <strong>no-tax build</strong> there is no slab section, because no tax was charged — the report is takings, tenders and the drawer count.</p>
+<p><strong>If a sheet goes missing, or the printer jammed at closing</strong>, the report itself is not lost — every close is stored:</p>
+<pre><code>pos close-day --list                 the reports this lane has taken
+pos close-day --show --id 12         read one back on screen, no paper
+pos close-day --reprint --id 12      print a duplicate, marked as one</code></pre>
+<p>Leave off <code>--id</code> and it takes the most recent. A duplicate says <code>** REPRINT **</code> on its face, so it cannot be filed as a second day's takings.</p>
+<p><strong>A mistyped option stops the command.</strong> <code>pos close-day --lst</code> names the mistake and does nothing — it does not fall through to closing the day. That is true of every command, and it means reading a report back can never accidentally take one.</p>
+<hr>
+<h2 id="the-owners-screen">The owner's screen</h2>
+<p><strong><code>Ctrl+D</code> at the till.</strong> Everything an owner needs is here, and none of it needs a command line.</p>
+<div class="scroller"><table><thead><tr>
+<th>Section</th>
+<th></th>
+<th></th>
+</tr></thead><tbody>
+<tr>
+<td><strong>The figures</strong></td>
+<td><code>Ctrl+1</code></td>
+<td>Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it.</td>
+</tr>
+<tr>
+<td><strong>Stock</strong></td>
+<td><code>Ctrl+2</code></td>
+<td>What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount.</td>
+</tr>
+<tr>
+<td><strong>Settings</strong></td>
+<td><code>Ctrl+3</code></td>
+<td>The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply.</td>
+</tr>
+</tbody></table></div>
+<p><code>F5</code> re-reads the figures. <code>Esc</code> goes back to billing.</p>
+<p><strong>Put a PIN on it</strong> if a cashier uses this computer — Settings, then <em>Save PIN</em>. The screen then asks for it before it opens. It is stored scrambled and <strong>cannot be recovered</strong>, so pick something you will remember. This keeps a cashier out of the figures; it does not encrypt the database.</p>
+<p><strong>Changing what kind of bill the lane issues</strong> is under Settings too — <strong>on the GST build only</strong>. It asks before it changes anything, and it is refused while a bill is on the screen; finish or clear that first. Bills already issued do not change: each one records the kind of document it was issued as.</p>
+<p>On the <strong>no-tax build</strong> there is no chooser. That build issues a bill of supply and cannot be made to charge GST, so the Settings tab says what it does instead of offering a switch it will not honour. A shop that registers normally installs the GST build, keeping its database, settings and backups.</p>
+<p><em>(The same things are still reachable from the command line — <code>pos dashboard</code>, <code>pos stock</code>, <code>pos dashboard-pin</code> — for support and for scripting. Nobody running a shop needs them.)</em></p>
+<hr>
+<h2 id="stock-what-is-left-and-what-to-order">Stock — what is left, and what to order</h2>
+<p>Only if the catalogue has a <code>stock_qty</code> column. Items without one are not counted and never appear here, which is right for anything sold loose out of a sack.</p>
+<p><strong>The cashier</strong> sees it without doing anything. Scanning an item that is running low adds a line to the message they already read:</p>
+<pre><code>Bath Soap 100g added.  Only 3 left.</code></pre>
+<p>and if the count has reached zero:</p>
+<pre><code>Bath Soap 100g added.  Stock says none left (0) — selling anyway.</code></pre>
+<p><strong>The sale always goes through.</strong> If the till says none are left and the customer is holding one, sell it. The shelf is the authority; the count going negative is the software telling you the two have parted company, and that is worth knowing rather than arguing with at a counter.</p>
+<p><strong>Whoever orders</strong> uses:</p>
+<pre><code>pos stock               everything counted, most depleted first
+pos stock --low         only what is at or below its reorder level</code></pre>
+<p>The low list also prints at the foot of the <strong>day-end report</strong>, so the shop has it on paper without anyone running a command, and appears on the <strong>dashboard</strong> under <em>To reorder</em>.</p>
+<p><strong>After a delivery, a breakage or a recount:</strong></p>
+<pre><code>pos stock --set --sku DAL001 --qty 24 --reason "delivery"</code></pre>
+<p>The change and the reason are kept. When a count stops matching the shelf — and it will — that history is what lets you find where it went, rather than shrugging and typing a new number.</p>
+<hr>
+<h2 id="the-dashboard-and-keeping-it-to-yourself">The dashboard — and keeping it to yourself</h2>
+<p>The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, and — if the catalogue has cost prices — margins. On the GST build it carries GST by slab too.</p>
+<pre><code>pos dashboard                       last 30 days, saved next to the database
+pos dashboard --days 90             a longer window
+pos dashboard --out D:\books.html   somewhere else</code></pre>
+<p>It <strong>reads without writing</strong>, so it can be run in the middle of the afternoon while the till is busy. It is not part of the billing screen on purpose: turnover and margins are not something to keep one keystroke away from a customer.</p>
+<p><strong>If a cashier uses this computer</strong>, put a PIN in front of it:</p>
+<pre><code>pos dashboard-pin              set or change it
+pos dashboard-pin --clear      remove it</code></pre>
+<p>It asks twice, never shows what you type, and stores only a scrambled form of it — <strong>there is no way to recover a forgotten PIN</strong>, so pick something you will remember. Changing or clearing it asks for the current one first, so being locked out cannot be undone by whoever is locked out.</p>
+<p>Two things this does not do, and it is worth knowing which:</p>
+<ul>
+<li><strong>The saved page is not protected.</strong> The lock is on the command, not on the file it writes. Use <code>--out</code> to put it somewhere private, and delete it when you are done.</li>
+<li><strong>The database is not encrypted.</strong> Somebody who knows their way around a computer can read <code>pos.db</code> directly. If the figures genuinely must be out of reach, that needs a separate Windows account for the owner — <code>SETTINGS.html</code> explains how.</li>
+</ul>
+<hr>
+<h2 id="when-something-is-wrong">When something is wrong</h2>
+<div class="scroller"><table><thead><tr>
+<th>What you see</th>
+<th>Do this</th>
+</tr></thead><tbody>
+<tr>
+<td>Till will not start</td>
+<td>It prints one line saying why. Nearly always <code>settings.json</code> — restore the template and re-edit.</td>
+</tr>
+<tr>
+<td>Scanner does nothing</td>
+<td><code>pos test-hardware --scanner</code>. If it reads there, it is the till; restart it. If not, it is the scanner or its cable.</td>
+</tr>
+<tr>
+<td>Scale reads nothing or will not settle</td>
+<td><code>pos test-hardware --scale</code>. Check the COM port and that the scale is set to stream continuously.</td>
+</tr>
+<tr>
+<td>Nothing prints</td>
+<td><code>pos test-hardware --printer</code>. Sales are unaffected — reprint with <code>Ctrl+P</code> once fixed.</td>
+</tr>
+<tr>
+<td>Drawer will not open</td>
+<td><code>pos test-hardware --drawer</code>. If it is on the printer's port, a printer fault takes the drawer with it.</td>
+</tr>
+<tr>
+<td>"Database is damaged"</td>
+<td>Stop trading. <code>pos restore-db --from backups\&lt;newest file&gt;</code>. It checks the snapshot first and renames the damaged database rather than deleting it. <strong>Everything sold since that snapshot is gone</strong> — have the Z-reports and receipts to hand.</td>
+</tr>
+<tr>
+<td>Something odd happened and nobody can explain it</td>
+<td>The lane keeps a log in <code>logs\</code>, one file per day. It records startup, every sale with its tenders and cashier, peripheral failures, backups, and any crash. Send the day's file.</td>
+</tr>
+</tbody></table></div>
+<p><strong>Never edit <code>pos.db</code> by hand, and never delete anything in <code>backups</code>.</strong></p>
+<hr>
+<h2 id="what-this-version-does-not-do">What this version does not do</h2>
+<p>Known and deliberate, so nobody wastes time looking:</p>
+<ul>
+<li><strong>No returns or refunds.</strong> Handle them in the store's own records for now. A proper GST credit note flow is a separate piece of work. Voiding is not a refund — it cancels a sale that has not yet been reported on a Z-report, and it stops working once the day is closed.</li>
+<li><strong>No opening float tracking.</strong> Count it and write it down.</li>
+<li><strong>Stock is a count, not an inventory system.</strong> It tells you what is left and what to reorder. It does not handle purchase orders, suppliers, batches or expiry, and it never stops a sale.</li>
+<li><strong>No report other than the Z-report.</strong> No day-range or item-wise sales reports yet.</li>
+<li><strong>Nothing is sent anywhere.</strong> The lane is entirely offline by design. Nothing leaves the machine except what you copy off it.</li>
+</ul>
+<hr>
+<h2 id="pilot-checklist">Pilot checklist</h2>
+<p>Print this and tick it.</p>
+<p><strong>Before the first day</strong></p>
+<ul>
+<li class="check"><span class="box"></span>Software copied to the lane</li>
+<li class="check"><span class="box"></span><code>settings.json</code> edited — <code>laneId</code> unique, invoice prefix, state code, shop name, GSTIN, FSSAI</li>
+<li class="check"><span class="box"></span><code>pos test-hardware</code> — every configured peripheral passed</li>
+<li class="check"><span class="box"></span>Catalogue dry-run clean, then imported</li>
+<li class="check"><span class="box"></span><code>pos receipt-preview</code> looks right and fits the paper</li>
+<li class="check"><span class="box"></span>On a Tamil lane: <code>pos receipt-preview --png</code> checked by eye, no <code>?</code> anywhere</li>
+<li class="check"><span class="box"></span>A test sale rung up and settled, and the receipt checked against the shelf price</li>
+</ul>
+<p><strong>Each morning</strong></p>
+<ul>
+<li class="check"><span class="box"></span>Till starts</li>
+<li class="check"><span class="box"></span><code>Ctrl+U</code> — cashier name set</li>
+<li class="check"><span class="box"></span>Opening float counted and written down</li>
+<li class="check"><span class="box"></span>One item scanned and cancelled</li>
+</ul>
+<p><strong>Each afternoon</strong></p>
+<ul>
+<li class="check"><span class="box"></span><code>pos backup-db</code></li>
+</ul>
+<p><strong>Each night</strong></p>
+<ul>
+<li class="check"><span class="box"></span>Screen clear, parked bills dealt with</li>
+<li class="check"><span class="box"></span><code>Shift+F12</code> twice</li>
+<li class="check"><span class="box"></span>Drawer counted against the report, difference written down</li>
+<li class="check"><span class="box"></span>Report says it reconciles</li>
+<li class="check"><span class="box"></span>Backup confirmed</li>
+<li class="check"><span class="box"></span>Z-report filed</li>
+</ul>
+<p><strong>Each week</strong></p>
+<ul>
+<li class="check"><span class="box"></span><code>pos check-db</code> before opening</li>
+</ul>
+<p><strong>Through the pilot, note down</strong></p>
+<ul>
+<li class="check"><span class="box"></span>Any GST figure a customer or the accountant queried</li>
+<li class="check"><span class="box"></span>Any drawer difference, and what it turned out to be</li>
+<li class="check"><span class="box"></span>Anything a cashier had to use the mouse for</li>
+<li class="check"><span class="box"></span>Any item that would not scan</li>
+<li class="check"><span class="box"></span>Anything that needed a restart</li>
+</ul>
+
+</div>
+</body>
+</html>

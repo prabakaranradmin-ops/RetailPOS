@@ -4,7 +4,23 @@ obj/
 *.user
 *.suo
 TestResults/
-artifacts/
+# Contents rather than the directory itself: git does not descend into an excluded directory, so
+# "artifacts/" would make every negation below unreachable.
+artifacts/*
+
+# Except the shipment that is current. Build output does not belong in a repository as a rule, and
+# every other version stays out — but a shop asking for the software should not have to wait for
+# somebody to be at the build machine. One version's worth, replaced rather than accumulated.
+#
+# Nothing here can exceed 100 MB: GitHub refuses the push outright, and the installers sit at
+# 98.8 MB. If a future build crosses that line these move to a Release instead.
+!artifacts/ship/
+artifacts/ship/*
+!artifacts/ship/RetailPOS-GST-1.4.2/
+!artifacts/ship/RetailPOS-NoTax-1.4.2/
+!artifacts/ship/RetailPOS-GST-1.4.2.zip
+!artifacts/ship/RetailPOS-NoTax-1.4.2.zip
+
 *.db
 *.db-shm
 *.db-wal

@@ -1,0 +1,9 @@
+# The shipped installers and zips are already compressed. Telling git so keeps it from spending
+# minutes and a lot of memory trying to delta two ~99 MB blobs against each other for no gain.
+*.exe binary -delta
+*.zip binary -delta
+
+# A shipment is bytes, not source. Every file in one is listed in its own CHECKSUMS.txt, so a
+# line-ending conversion on checkout would make a fresh clone fail its own verification -- which is
+# the one thing that file exists to prevent. Nothing under here is normalised, in either direction.
+artifacts/ship/** -text -delta

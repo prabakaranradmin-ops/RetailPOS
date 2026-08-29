@@ -1,0 +1,195 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware sign-off â€” RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--warn:#A63D2F}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 110px}
+.doc-head{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+.doc-head .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+.doc-head .meta{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+h2{font-size:26px;margin:44px 0 10px;letter-spacing:-.01em;border-top:1px solid var(--rule);
+padding-top:30px}
+h3{font-size:19px;margin:28px 0 6px}
+h4{font-size:16.5px;margin:20px 0 4px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+/* A section heading draws its own rule, so a --- written just above one in the
+   source would print two rules a few pixels apart. */
+hr+h2{border-top:0;padding-top:0;margin-top:34px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 17px;
+overflow-x:auto;margin:16px 0;font-family:Consolas,monospace;font-size:13px;line-height:1.6}
+pre code{background:none;padding:0;color:var(--ink)}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+li.check{list-style:none;margin-left:-22px;margin-bottom:9px}
+.box{display:inline-block;width:15px;height:15px;border:1.5px solid var(--rule-hard);
+border-radius:3px;margin-right:10px;vertical-align:-2px}
+.box.done{border-color:var(--accent);color:var(--accent);font-size:11px;line-height:11px;
+text-align:center}
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0;min-width:420px}
+th,td{text-align:left;padding:8px 14px 8px 0;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
+border-bottom:1px solid var(--rule-hard)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--card);border-left:3px solid var(--warn);
+border-radius:0 8px 8px 0;color:var(--soft)}
+blockquote p:last-child{margin:0}
+@media print{body{background:#fff;color:#000;font-size:11pt}.wrap{padding:0;max-width:none}
+h2{page-break-after:avoid}pre,table,blockquote{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="doc-head">
+  <p class="eyebrow">RetailPOS 1.4.2</p>
+  <h1>Hardware sign-off</h1>
+  <p class="meta">Offline point of sale for Indian retail. Nothing on this lane leaves the machine.</p>
+</div>
+<p>The last open gate. Print this, do it at the bench with the peripherals attached, and keep it.</p>
+<p>Everything above the wire — the ESC/POS bytes, the receipt layout, the scale protocol, the barcode check digits, the failure handling — is already tested and passing without hardware. What is left is the part no software can check: whether paper actually comes out, and whether the drawer actually opens.</p>
+<hr>
+<h2 id="before-you-start">Before you start</h2>
+<ul>
+<li class="check"><span class="box"></span>Lane machine has the deployment folder copied to it</li>
+<li class="check"><span class="box"></span><code>settings.json</code> copied to <code>%LOCALAPPDATA%\RetailPOS\</code> and edited</li>
+<li class="check"><span class="box"></span><code>printerName</code> set to the <strong>exact</strong> name from Printers &amp; Scanners</li>
+<li class="check"><span class="box"></span><code>scalePort</code> set (find it with <code>pos list-ports</code>)</li>
+<li class="check"><span class="box"></span>Epson TM-T82 powered, paper loaded, USB or COM connected</li>
+<li class="check"><span class="box"></span>Cash drawer plugged into the printer's RJ11 port</li>
+<li class="check"><span class="box"></span>Barcode scanner connected</li>
+<li class="check"><span class="box"></span>CAS scale connected and set to stream continuously at 9600 8-N-1</li>
+</ul>
+<p>Then:</p>
+<pre><code>pos test-hardware</code></pre>
+<p>It goes through all four in turn. Answer honestly — a "yes" that should have been "no" becomes a problem discovered mid-queue instead of here.</p>
+<hr>
+<h2 id="1-printer">1. Printer</h2>
+<p>The tool shows the receipt as text <strong>before</strong> printing it, then sends it.</p>
+<ul>
+<li class="check"><span class="box"></span>Paper came out</li>
+<li class="check"><span class="box"></span>Text matches what was shown on screen</li>
+<li class="check"><span class="box"></span>Nothing is cut off at the right margin</li>
+<li class="check"><span class="box"></span>The shop name and GSTIN are right</li>
+<li class="check"><span class="box"></span>The paper cut happened below the last line, not through it</li>
+<li class="check"><span class="box"></span>The total is legible from across a counter</li>
+</ul>
+<p>Paper width: ______ (48 for 80mm, 32 for 58mm — if text wraps oddly, this is wrong)</p>
+<p>If English characters look like boxes or Greek letters, the code page is not the problem — the English on a receipt is plain ASCII on purpose. Report it, because it means something else.</p>
+<p><strong>Result:</strong> PASS / FAIL  Notes: ________________________________________</p>
+<h2 id="1a-tamil-on-the-receipt">1a. Tamil on the receipt</h2>
+<p><em>Skip this section on a lane set to <code>"receiptLanguage": "English"</code>.</em></p>
+<p>Before printing anything, look at the bill on screen:</p>
+<pre><code>pos receipt-preview --png receipt.png</code></pre>
+<p>Open <code>receipt.png</code>. It is the dots the printer will burn, so what is in it is what will come out.</p>
+<ul>
+<li class="check"><span class="box"></span>The shop name at the top is in Tamil and reads correctly</li>
+<li class="check"><span class="box"></span>The column headings read <code>பொருளின் பெயர்</code> / <code>விலை</code> / <code>அளவு</code> / <code>தொகை</code></li>
+<li class="check"><span class="box"></span><code>மொத்தம்</code> appears beside the total, and the total is right</li>
+<li class="check"><span class="box"></span>No Tamil word is cut off, and none runs into the figure beside it</li>
+<li class="check"><span class="box"></span>Nothing prints as <code>?</code> or as empty boxes</li>
+</ul>
+<p>Then print it and check the paper against the image.</p>
+<ul>
+<li class="check"><span class="box"></span>The printed Tamil matches the image</li>
+<li class="check"><span class="box"></span>The Tamil and the English are the same height on the line</li>
+</ul>
+<p>A row of <code>?</code> means the lane could not draw the text: either <code>printerRasterMode</code> is <code>Never</code>, or the machine has no Tamil font. The preview says which. <strong>Do not open the shop on a receipt printing <code>?</code> where the shop's own name should be.</strong></p>
+<p>Font used (printed by <code>pos receipt-preview</code>): ____________________</p>
+<p><strong>Result:</strong> PASS / FAIL / N/A  Notes: ________________________________________</p>
+<h2 id="1b-how-long-a-receipt-takes">1b. How long a receipt takes</h2>
+<p><strong>Do not skip this on a Tamil lane.</strong> It is the one check that can fail on a counter that passed everything else.</p>
+<p>A Tamil receipt is not the same size as an English one. The Tamil is <em>drawn</em> and sent as an image — about <strong>27KB against 2KB</strong> for the same bill in English. Over USB that is imperceptible. Over a printer on a <strong>serial port at 9600 baud</strong> it is roughly <strong>half a minute per bill</strong>, which no queue will tolerate. Nobody can tell which they have by looking; it has to be timed.</p>
+<p><code>pos test-hardware --printer</code> prints the job size and how long the handover took. Record both, and time the paper yourself with a phone — the software figure is the time to hand the job to the Windows spooler, not the time until the paper stops moving.</p>
+<div class="scroller"><table><thead><tr>
+<th></th>
+<th>Job size (bytes)</th>
+<th>Handover (ms)</th>
+<th>Paper stopped after (seconds)</th>
+</tr></thead><tbody>
+<tr>
+<td>This lane's receipt</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table></div>
+<ul>
+<li class="check"><span class="box"></span>The paper stops within <strong>3 seconds</strong> of pressing the key</li>
+<li class="check"><span class="box"></span>The tool did not print its <code>SLOW:</code> warning</li>
+<li class="check"><span class="box"></span>Print it three times in a row — the third is no slower than the first</li>
+</ul>
+<p><strong>If it is slow.</strong> The cause is nearly always the connection, not the software. In order of preference: move the printer to USB; or set <code>"printerRasterMode": "Never"</code> and <code>"receiptLanguage": "English"</code>, which drops the receipt to about 2KB and prints instantly — at the cost of an English-only bill. Do not open a shop on a till that takes ten seconds to hand over a receipt.</p>
+<p>Connection (USB / serial / network): ____________  Baud, if serial: __________</p>
+<p><strong>Result:</strong> PASS / FAIL  Notes: ________________________________________</p>
+<h2 id="2-cash-drawer">2. Cash drawer</h2>
+<ul>
+<li class="check"><span class="box"></span>The drawer physically opened</li>
+<li class="check"><span class="box"></span>It opened once, not repeatedly</li>
+<li class="check"><span class="box"></span>Closing and re-running opens it again</li>
+</ul>
+<p>If the printer failed above, expect this to fail too — a passthrough drawer goes offline with the printer it hangs off.</p>
+<p><strong>Result:</strong> PASS / FAIL  Notes: ________________________________________</p>
+<h2 id="3-scanner">3. Scanner</h2>
+<p>Scan a real product from the store's stock, not a printed test sheet.</p>
+<ul>
+<li class="check"><span class="box"></span>The code was read</li>
+<li class="check"><span class="box"></span>The digits shown match the digits printed under the barcode</li>
+<li class="check"><span class="box"></span>Check digit reported <strong>valid</strong></li>
+</ul>
+<p>A check digit reported invalid means the scanner misread, or the label is damaged. Try another item before blaming the scanner.</p>
+<p>Codes scanned: ____________________  ____________________</p>
+<p><strong>Result:</strong> PASS / FAIL  Notes: ________________________________________</p>
+<h2 id="4-scale">4. Scale</h2>
+<p>Put a known weight on the pan — a sealed 1kg pack is ideal.</p>
+<ul>
+<li class="check"><span class="box"></span>Frames arrived (the count at the end is not zero)</li>
+<li class="check"><span class="box"></span>The weight shown matches the known weight</li>
+<li class="check"><span class="box"></span>It reported <strong>Stable</strong> once the pan settled</li>
+<li class="check"><span class="box"></span>Taking the weight off returns it to zero</li>
+</ul>
+<p>Protocol detected: ______________________  (<code>pos test-hardware --scale</code> prints this)</p>
+<p><strong>This is the one to watch.</strong> The scale is expected to speak the STX-framed CAS format. Two variants exist: one carries a status character saying whether the reading has settled, and one does not. If the bare variant is in use, the till decides stability in software by waiting for the reading to repeat unchanged three times. Confirm the weight settles within a second or two of the pan stopping — if it takes noticeably longer, or never says Stable, say so, because the substitute rule needs tuning to the actual device.</p>
+<p>Weight used: ______ kg   Weight shown: ______ kg   Settles in: ______ seconds</p>
+<p><strong>Result:</strong> PASS / FAIL  Notes: ________________________________________</p>
+<hr>
+<h2 id="a-real-sale">A real sale</h2>
+<p>With all four passing, ring one up on the till itself:</p>
+<ul>
+<li class="check"><span class="box"></span>Scan an item — it appears on the bill at the right price</li>
+<li class="check"><span class="box"></span>Add a loose item and key its weight with <code>F3</code> — the price works out right. <em>(The scale is checked in section 4 but is <strong>not</strong> wired into the billing screen in this version: read the weight off the scale's own display and type it. This line used to ask for the weight to arrive on the bill by itself, which the software has never done.)</em></li>
+<li class="check"><span class="box"></span><code>F12</code>, pay cash with change due</li>
+<li class="check"><span class="box"></span>Receipt prints, drawer opens, change matches</li>
+<li class="check"><span class="box"></span><code>Ctrl+P</code> reprints the bill, marked as a reprint</li>
+<li class="check"><span class="box"></span><code>Shift+F12</code> twice closes the day and prints the Z-report</li>
+<li class="check"><span class="box"></span>On a Tamil lane, the Z-report is in Tamil too — <code>நாள் இறுதி அறிக்கை (Z)</code> at the head, and <code>பணப்பெட்டியில் இருக்க வேண்டிய தொகை</code> above the cash figure</li>
+<li class="check"><span class="box"></span>Cash counted matches the report's <strong>CASH IN DRAWER SHOULD BE</strong>, plus the opening float</li>
+<li class="check"><span class="box"></span>The report says it reconciles</li>
+</ul>
+<hr>
+<h2 id="signoff">Sign-off</h2>
+<p>All four peripherals PASS, and the sale above completed end to end:</p>
+<p>Lane id: ______________  Machine: ______________________</p>
+<p>Tested by: ____________________  Date: ______________</p>
+<p>Once this sheet is complete, the hardware-in-the-loop item in <code>docs/TESTING_STRATEGY.md</code> can be marked closed, and this sheet is the evidence for it.</p>
+<p><strong>Do not mark it closed on the strength of the automated tests.</strong> They cover the bytes on the wire, not the paper in the tray.</p>
+
+</div>
+</body>
+</html>
