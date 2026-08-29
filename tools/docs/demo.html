@@ -65,8 +65,24 @@ a.home:hover{text-decoration:underline}
 .offline .live{width:8px;height:8px;border-radius:50%;background:var(--positive)}
 .offline b{color:var(--positive);letter-spacing:.05em;font-size:11.5px}
 
-.scanwrap{padding:14px 18px 4px}
+.scanwrap{padding:14px 18px 4px;position:relative}
 .scanwrap label{display:block;font-size:13px;color:var(--soft);margin-bottom:7px}
+.suggest{position:absolute;left:18px;right:18px;top:100%;z-index:20;background:#0B1017;
+  border:1px solid var(--accent);border-top:0;border-radius:0 0 8px 8px;overflow:hidden;
+  box-shadow:0 18px 40px rgba(0,0,0,.55)}
+.suggest .sg{display:grid;grid-template-columns:1fr 96px 92px 96px;gap:12px;align-items:baseline;
+  padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--line-soft)}
+.suggest .sg:last-child{border-bottom:0}
+.suggest .sg[aria-selected=true]{background:var(--row-active)}
+.suggest .sg:hover{background:var(--row-active)}
+.suggest .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.suggest .nm mark{background:transparent;color:var(--accent);font-weight:700}
+.suggest .sk{font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+.suggest .st{font-size:12.5px;color:var(--soft);text-align:right}
+.suggest .st.low{color:var(--amber)}
+.suggest .st.out{color:var(--negative)}
+.suggest .pr{font-family:var(--mono);text-align:right;color:var(--positive)}
+.suggest .foot{padding:7px 14px;font-size:12px;color:var(--faint);background:#080C12}
 #scan{width:100%;background:#080B10;border:1px solid var(--accent);border-radius:6px;
   color:var(--ink);padding:13px 14px;font-size:16px;outline:none;font-family:var(--mono)}
 #scan::placeholder{color:#4A5464}
@@ -256,8 +272,10 @@ tr.out td{color:var(--negative)}
 
     <div class="scanwrap">
       <label for="scan">Scan or search</label>
-      <input id="scan" autocomplete="off" spellcheck="false"
+      <input id="scan" autocomplete="off" spellcheck="false" role="combobox"
+             aria-expanded="false" aria-autocomplete="list" aria-controls="suggest"
              placeholder="Type a barcode, an SKU, or part of a name — then Enter">
+      <div id="suggest" class="suggest" role="listbox" hidden></div>
     </div>
 
     <div class="stage">
@@ -586,13 +604,121 @@ function resolve(text) {
   return {kind: 'none'};
 }
 
+/* ---------------- the suggestion list ---------------- */
+
+// The till does not query on every keystroke. A cashier typing "sha" would otherwise fire three
+// searches over the catalogue and throw two away, so the query waits for a pause -- short enough
+// to feel immediate, long enough that typing a word is one search rather than one per letter.
+const TYPING_PAUSE_MS = 160;
+
+let suggestions = [];
+let highlighted = -1;
+let pause = null;
+
+function candidatesFor(text) {
+  const q = text.trim().toLowerCase();
+  if (q.length < 2) return [];
+
+  // A barcode or SKU that identifies exactly one item is a scan, not a search: it goes straight
+  // onto the bill, so offering a list to pick from would be a step for nothing.
+  if (CATALOGUE.some(i => i.barcode === q || i.sku.toLowerCase() === q)) return [];
+
+  return CATALOGUE
+    .filter(i => i.name.toLowerCase().includes(q) ||
+                 i.sku.toLowerCase().includes(q) ||
+                 i.cat.toLowerCase().includes(q))
+    .slice(0, 8);
+}
+
+function markUp(name, q) {
+  const at = name.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0 || !q) return name;
+  return name.slice(0, at) + '<mark>' + name.slice(at, at + q.length) + '</mark>' + name.slice(at + q.length);
+}
+
+function showSuggestions() {
+  const box = $('scan');
+  const q = box.value.trim();
+  suggestions = candidatesFor(q);
+
+  const list = $('suggest');
+
+  if (!suggestions.length) { closeSuggestions(); return; }
+
+  highlighted = 0;
+  list.innerHTML = suggestions.map((i, n) => {
+    const left = state.stock[i.sku];
+    let stockClass = '', stockText = '';
+    if (i.reorder > 0) {
+      stockText = left + ' left';
+      if (left === 0) { stockClass = ' out'; stockText = 'none left'; }
+      else if (left <= i.reorder) stockClass = ' low';
+    }
+    return '<div class="sg" role="option" data-n="' + n + '" aria-selected="' + (n === 0) + '">' +
+             '<span class="nm">' + markUp(i.name, q) + '</span>' +
+             '<span class="sk">' + i.sku + '</span>' +
+             '<span class="st' + stockClass + '">' + stockText + '</span>' +
+             '<span class="pr">' + money(i.price) + '</span>' +
+           '</div>';
+  }).join('') +
+  '<div class="foot">' + suggestions.length + ' match' + (suggestions.length === 1 ? '' : 'es') +
+  ' &middot; arrows to choose, Enter to add, Esc to dismiss</div>';
+
+  list.hidden = false;
+  box.setAttribute('aria-expanded', 'true');
+
+  list.querySelectorAll('.sg').forEach(el => {
+    el.onmousedown = ev => { ev.preventDefault(); commitSuggestion(+el.dataset.n); };
+  });
+}
+
+function closeSuggestions() {
+  suggestions = [];
+  highlighted = -1;
+  $('suggest').hidden = true;
+  $('suggest').innerHTML = '';
+  $('scan').setAttribute('aria-expanded', 'false');
+}
+
+function moveHighlight(step) {
+  if (!suggestions.length) return;
+  highlighted = (highlighted + step + suggestions.length) % suggestions.length;
+  $('suggest').querySelectorAll('.sg').forEach((el, n) =>
+    el.setAttribute('aria-selected', n === highlighted));
+}
+
+function commitSuggestion(n) {
+  const item = suggestions[n];
+  if (!item) return;
+  closeSuggestions();
+  $('scan').value = '';
+  addOrWeigh(item);
+  $('scan').focus();
+}
+
+function addOrWeigh(item) {
+  if (item.weighed) {
+    const kg = prompt('"' + item.name + '" is sold by weight.\n\nThe scale would send this. Type the weight in kg:', '1.250');
+    if (kg === null) { say('Cancelled.'); return; }
+    const q = parseFloat(kg);
+    if (!isFinite(q) || q <= 0) { say('That is not a weight. Nothing was added.', 'bad'); return; }
+    addItem(item, round2(q * 1000) / 1000);
+  } else {
+    addItem(item, 1);
+  }
+}
+
 function onScan() {
   const box = $('scan');
   const text = box.value;
   if (!text.trim()) return;
 
+  // Whatever is highlighted wins, so Enter finishes the choice the cashier is looking at.
+  if (highlighted >= 0 && suggestions.length) { commitSuggestion(highlighted); return; }
+
   const r = resolve(text);
   box.value = '';
+  closeSuggestions();
 
   if (r.kind === 'none') {
     say('Nothing matches "' + text.trim() + '". Nothing was added.', 'bad');
@@ -603,16 +729,7 @@ function onScan() {
     return;
   }
 
-  const item = r.item;
-  if (item.weighed) {
-    const kg = prompt('"' + item.name + '" is sold by weight.\n\nThe scale would send this. Type the weight in kg:', '1.250');
-    if (kg === null) { say('Cancelled.'); return; }
-    const q = parseFloat(kg);
-    if (!isFinite(q) || q <= 0) { say('That is not a weight. Nothing was added.', 'bad'); return; }
-    addItem(item, round2(q * 1000) / 1000);
-  } else {
-    addItem(item, 1);
-  }
+  addOrWeigh(r.item);
 }
 
 function requireLine() {
@@ -999,8 +1116,36 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Delete' && document.activeElement !== $('scan')) { actions.del(); e.preventDefault(); }
 });
 
+$('scan').addEventListener('input', () => {
+  clearTimeout(pause);
+  pause = setTimeout(showSuggestions, TYPING_PAUSE_MS);
+});
+
+$('scan').addEventListener('blur', () => setTimeout(closeSuggestions, 120));
+
 $('scan').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { onScan(); e.preventDefault(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    // A pause the cashier has not waited out yet should not swallow the first arrow press.
+    if (!suggestions.length) { clearTimeout(pause); showSuggestions(); }
+    else moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === 'Escape' && suggestions.length) {
+    // Dismisses the list and keeps what was typed. Escape again clears the box, which is what
+    // the global handler does -- so this stops here rather than doing both at once.
+    closeSuggestions();
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
+  if (e.key === 'Enter') {
+    clearTimeout(pause);
+    onScan();
+    e.preventDefault();
+  }
 });
 
 /* ---------------- boot ---------------- */
