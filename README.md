@@ -163,6 +163,13 @@ DAL001,8901234567890,"Toor Dal, Premium, 1kg",0713,Pcs,189.00,189.00,5,false
 SUG001,,Sugar Loose,1701,Kg,45.00,45.00,5,true
 ```
 
+It is loaded from the owner's screen — `Ctrl+D`, then `Ctrl+3` for Catalogue. Pick the file and
+press **Check the file**: it reports what would happen and writes nothing, and **Import** stays cold
+until that check comes back clean. Problems are listed by line and column, because the fix happens
+in the spreadsheet rather than at the till. The check is tied to the file and the mode it was run
+against, so changing either withdraws it. `pos import-items` does the same thing from a command
+line, for support and for a scripted rollout.
+
 Nothing is written unless the whole file is clean, and every problem is reported at once — a
 rejected import leaves the catalogue exactly as it was. Alongside the obvious checks it refuses a
 selling price above MRP, a barcode whose EAN or UPC check digit does not add up, and a `unit` that

@@ -98,6 +98,19 @@ list of problems with line numbers — fix the file and run it again.
 
 ## Loading it
 
+At the till: **Ctrl+D** for the owner's screen, then **Ctrl+3** for Catalogue. Pick the file, choose
+whether items already in the catalogue may be changed, and press **Check the file**. It reads the
+file and says what would happen without writing anything; **Import** only wakes up once that check
+comes back clean, and the problems are listed by line and column so the fix happens in the
+spreadsheet. Nothing is written until you press Import, and what lands is sellable at the counter
+straight away — no restart.
+
+The check belongs to the file and the mode it was run against. Pick a different file, or switch
+between adding and updating, and it has to be checked again — a clean check of one file is not
+permission to write another.
+
+The same thing from a command line, for support and for a scripted rollout:
+
 ```
 pos import-items --file catalogue.csv --dry-run    check it without writing anything
 pos import-items --file catalogue.csv              first load

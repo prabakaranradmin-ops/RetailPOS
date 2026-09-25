@@ -40,11 +40,20 @@ RetailPOS is installed. Three things before the shop can trade.
 
 3. LOAD THE CATALOGUE
 
+   Open the till, press Ctrl+D for the owner's screen, then Ctrl+3 for
+   Catalogue. Pick the file and press "Check the file" before importing.
+
+   The check writes nothing and lists every problem by line, so the fix happens
+   in the spreadsheet. Import stays greyed out until the check is clean, and if
+   it reports problems the catalogue is exactly as it was.
+
+   Save the sheet from Excel as CSV UTF-8. catalog_template.csv shows the
+   format, and CATALOGUE_FORMAT.md lists every column.
+
+   The same thing from "RetailPOS commands", if you prefer typing:
+
        pos.exe import-items --file catalogue.csv --dry-run
        pos.exe import-items --file catalogue.csv
-
-   Always dry-run first. If it reports problems, nothing was imported and the
-   catalogue is exactly as it was. catalog_template.csv shows the format.
 
 
 Then open the till from the desktop shortcut.

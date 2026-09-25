@@ -15,7 +15,7 @@ There are two, and a handful of paragraphs below depend on which one is installe
 | **GST build** | Tax invoice, or a bill of supply if set to | CGST/SGST within the state, IGST outside it |
 
 The installer's own filename says which, and so does the owner's screen under Settings (`Ctrl+D`,
-then `Ctrl+3`). Everything else in this runbook — opening, billing, closing, stock, the drawer — is
+then `Ctrl+4`). Everything else in this runbook — opening, billing, closing, stock, the drawer — is
 the same on both.
 
 A shop that registers for GST later installs the GST build over the top. Its database, settings and
@@ -66,15 +66,22 @@ is fine — a card-only counter has no drawer.
 
 ### 4. Load the catalogue
 
+At the till: **Ctrl+D** for the owner's screen, **Ctrl+3** for Catalogue. Pick the file, leave it on
+"Add new items only" for a first load, and press **Check the file**.
+
+The check writes nothing. **Import** stays greyed out until it comes back clean, and every problem
+is listed by line and column so the fix happens in the spreadsheet. Pick a different file or switch
+to updating and it has to be checked again.
+
+If it reports problems, **nothing was imported** — the catalogue is exactly as it was. Fix the
+listed lines and check it again. The format and every rule are in `CATALOGUE_FORMAT.md`.
+
+The same thing from a command line, for support or a scripted rollout:
+
 ```
 pos import-items --file catalogue.csv --dry-run
 pos import-items --file catalogue.csv
 ```
-
-Always dry-run first. It checks everything and writes nothing.
-
-If it reports problems, **nothing was imported** — the catalogue is exactly as it was. Fix the
-listed lines and run it again. The format and every rule are in `CATALOGUE_FORMAT.md`.
 
 ### 5. Check it looks right
 
@@ -277,7 +284,8 @@ report back can never accidentally take one.
 |---|---|---|
 | **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
-| **Settings** | `Ctrl+3` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
+| **Catalogue** | `Ctrl+3` | Load a price list or a whole item master from a CSV. Check the file first — it writes nothing and lists every problem by line — then import. What lands is sellable at the counter immediately. |
+| **Settings** | `Ctrl+4` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 

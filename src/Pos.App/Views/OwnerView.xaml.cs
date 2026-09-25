@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.Win32;
 using Pos.App.ViewModels;
 using Pos.Core.Configuration;
 using Pos.Core.Domain;
@@ -9,12 +11,13 @@ using Pos.Core.Domain;
 namespace Pos.App.Views;
 
 /// <summary>
-/// The owner's screen. Figures, what needs reordering, and the two settings an owner should be able
-/// to change without opening a text editor.
+/// The owner's screen. Figures, what needs reordering, loading a catalogue, and the two settings an
+/// owner should be able to change without opening a text editor.
 /// </summary>
 public partial class OwnerView : Window
 {
     private readonly OwnerViewModel _viewModel;
+    private readonly CatalogueImportViewModel _catalogue;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -22,14 +25,25 @@ public partial class OwnerView : Window
     /// </summary>
     private bool _settingUp = true;
 
-    public OwnerView(OwnerViewModel viewModel)
+    public OwnerView(OwnerViewModel viewModel, CatalogueImportViewModel catalogue)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
+        ArgumentNullException.ThrowIfNull(catalogue);
 
         InitializeComponent();
 
         _viewModel = viewModel;
+        _catalogue = catalogue;
         DataContext = viewModel;
+
+        // The catalogue tab answers to its own view model. Scoped to that one branch of the tree so
+        // the rest of the window keeps binding to the figures without qualification.
+        CatalogueTab.DataContext = catalogue;
+
+        // A catalogue that has just landed changes the reorder list and, where the file carried cost
+        // prices, the margins beside the figures. Re-reading here means the owner does not have to
+        // know that, or close the screen and open it again to see it.
+        catalogue.Imported += (_, _) => _viewModel.Refresh();
 
         viewModel.PropertyChanged += (_, e) =>
         {
@@ -92,13 +106,77 @@ public partial class OwnerView : Window
         }
 
         // The till is driven from the keyboard, and so is this. Without these the only way between
-        // the three sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
+        // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
-        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.D2 or Key.D3)
+        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
         }
+    }
+
+    // ---- Loading a catalogue ---------------------------------------------------------------------
+
+    private void BrowseCatalogue_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose the catalogue file",
+            Filter = "Catalogue (*.csv)|*.csv|Every file (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        // Start where they were last time. A shop reloading a price list goes back to the same
+        // folder every time, and a dialog that opens somewhere else makes them navigate twice.
+        var last = _catalogue.FilePath.Trim();
+
+        if (last.Length > 0)
+        {
+            try
+            {
+                var folder = Path.GetDirectoryName(Path.GetFullPath(last));
+
+                if (folder is not null && Directory.Exists(folder))
+                    dialog.InitialDirectory = folder;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // Whatever is in the box is not a path. The dialog opens wherever it would have.
+            }
+        }
+
+        if (dialog.ShowDialog(this) == true)
+            _catalogue.FilePath = dialog.FileName;
+    }
+
+    private void ImportMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_settingUp || sender is not RadioButton { Tag: string tag })
+            return;
+
+        _catalogue.UpdateExisting = tag == "Update";
+    }
+
+    private void CheckCatalogue_Click(object sender, RoutedEventArgs e) => _catalogue.Check();
+
+    private void ImportCatalogue_Click(object sender, RoutedEventArgs e)
+    {
+        // Only when existing items are in play. A first load adds what was not there and is undone
+        // by correcting the file and loading it again; an update writes over prices the shop is
+        // already trading on, and those are gone once they are replaced.
+        if (_catalogue.UpdateExisting && MessageBox.Show(
+                this,
+                "Prices, names and barcodes in this file will replace what the catalogue holds for "
+                + "items already in it.\n\nBills already issued do not change — each one records what "
+                + "it was sold at. Shelf counts are left alone unless the file gives new ones.",
+                "Change items already in the catalogue?",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning) != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        _catalogue.Import();
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _viewModel.Refresh();

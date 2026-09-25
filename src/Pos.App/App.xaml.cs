@@ -145,7 +145,9 @@ public partial class App : Application
         // enough to read anything.
         billingView.OwnerViewFactory = () =>
             PinPrompt.Passes(billingView, settings.Security)
-                ? new OwnerView(BuildOwnerViewModel(settings, database, viewModel))
+                ? new OwnerView(
+                    BuildOwnerViewModel(settings, database, viewModel),
+                    new CatalogueImportViewModel(new ItemRepository(database)))
                 : null;
 
         MainWindow = billingView;

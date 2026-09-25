@@ -62,7 +62,13 @@
             <Border x:Name="Face" CornerRadius="6" Background="#FF243040"
                     BorderBrush="{StaticResource Line}" BorderThickness="1"
                     Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!--
+                RecognizesAccessKey, or a button labelled "_Import" renders with the underscore
+                showing and Alt+I reaches nothing. The default template does this; this one replaces
+                it, so it has to say so itself.
+              -->
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                RecognizesAccessKey="True" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
@@ -403,8 +409,93 @@
         </Grid>
       </TabItem>
 
+      <!-- ==== Catalogue ==== -->
+      <TabItem Header="Catalogue  (Ctrl+3)">
+        <Grid x:Name="CatalogueTab" Margin="8,12,8,8">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+
+          <Border Grid.Row="0" Style="{StaticResource Card}">
+            <StackPanel>
+              <TextBlock Text="LOAD A CATALOGUE — PRICES, BARCODES AND SHELF COUNTS FROM A SPREADSHEET"
+                         Style="{StaticResource Heading}" />
+
+              <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="980" Margin="0,0,0,14"
+                         Text="Save the sheet from Excel as CSV UTF-8, then pick it here. The columns are sku, barcode, name, hsn_code, unit, mrp, selling_price, gst_rate and is_weighed — in any order, in any case. category, cost_price, stock_qty and reorder_level may be added and may be left out. CATALOGUE_FORMAT.md in the install folder is the full list, and catalog_template.csv is a file to start from." />
+
+              <!--
+                The path stretches rather than taking a fixed width. A till screen is often 1366
+                wide, and a box sized for this development machine puts the Browse button off the
+                edge of one — where the only way to a file is to type its full path.
+              -->
+              <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="File" Style="{StaticResource Label}"
+                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Column="1" x:Name="CataloguePath" Padding="8,6" Margin="0,0,10,0"
+                         Text="{Binding FilePath, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Grid.Column="2" Content="_Browse…" Padding="16,6" Click="BrowseCatalogue_Click" />
+              </Grid>
+
+              <StackPanel Margin="0,0,0,14">
+                <RadioButton x:Name="ImportInsertOnly" GroupName="ImportMode" IsChecked="True"
+                             Foreground="{StaticResource Ink}" Margin="0,0,0,8" Checked="ImportMode_Checked" Tag="Insert">
+                  <StackPanel Margin="6,0,0,0">
+                    <TextBlock Text="Add new items only" FontSize="15" />
+                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="860" Margin="0,3,0,0"
+                               Text="A first load. An item whose SKU is already in the catalogue is reported as a mistake rather than written over, which is what you want when the file was meant to be all new." />
+                  </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="ImportUpdate" GroupName="ImportMode"
+                             Foreground="{StaticResource Ink}" Checked="ImportMode_Checked" Tag="Update">
+                  <StackPanel Margin="6,0,0,0">
+                    <TextBlock Text="Also change items already in the catalogue" FontSize="15" />
+                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="860" Margin="0,3,0,0"
+                               Text="A price revision. Prices, names and barcodes in the file replace what the catalogue holds. A blank stock_qty leaves the live count alone, so re-importing the file you first loaded will not put every shelf count back to what it was weeks ago." />
+                  </StackPanel>
+                </RadioButton>
+              </StackPanel>
+
+              <StackPanel Orientation="Horizontal">
+                <Button Content="_Check the file" Padding="20,7" Margin="0,0,10,0" Click="CheckCatalogue_Click"
+                        IsEnabled="{Binding CanCheck, Mode=OneWay}" />
+                <Button Content="_Import" Padding="26,7" Margin="0,0,18,0" Click="ImportCatalogue_Click"
+                        IsEnabled="{Binding CanImport, Mode=OneWay}" />
+                <TextBlock Style="{StaticResource Label}" VerticalAlignment="Center">
+                  <Run Text="The catalogue holds" /><Run Text=" " /><Run Text="{Binding Held, Mode=OneWay}" />
+                </TextBlock>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <TextBlock Grid.Row="1" Text="{Binding Verdict, Mode=OneWay}" TextWrapping="Wrap"
+                     FontSize="15" Margin="2,14,2,0" />
+
+          <DataGrid Grid.Row="2" ItemsSource="{Binding Problems}" Margin="0,12,0,0"
+                    AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="False"
+                    Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                    GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                    HeadersVisibility="Column" Foreground="{StaticResource Warn}"
+                    SelectionMode="Single" RowHeight="32">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Where" Binding="{Binding Where}" Width="110" />
+              <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="150" />
+              <DataGridTextColumn Header="What is wrong with it" Binding="{Binding Problem}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+
       <!-- ==== Settings ==== -->
-      <TabItem Header="Settings  (Ctrl+3)">
+      <TabItem Header="Settings  (Ctrl+4)">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel MaxWidth="900" HorizontalAlignment="Left">
 
