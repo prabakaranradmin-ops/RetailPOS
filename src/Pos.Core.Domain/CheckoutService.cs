@@ -89,10 +89,13 @@ public sealed class CheckoutService(
 
         var totals = bill.Totals;
 
-        if (basket.AmountDue != totals.GrandTotal)
+        // Against the payable amount, not the grand total. On a lane that rounds they differ by up
+        // to fifty paise, and settling against the unrounded figure would leave every bill of the
+        // day short or over by that much against the drawer.
+        if (basket.AmountDue != totals.AmountPayable)
         {
             throw new InvalidOperationException(
-                $"The payments were taken against {basket.AmountDue:0.00} but the bill comes to {totals.GrandTotal:0.00}.");
+                $"The payments were taken against {basket.AmountDue:0.00} but the bill comes to {totals.AmountPayable:0.00}.");
         }
 
         if (!basket.IsSettled)
@@ -109,7 +112,7 @@ public sealed class CheckoutService(
         // Accrual is on the net bill — what the customer actually paid for after points came off —
         // so points spent on an invoice never earn points back (SRS section 4).
         var redemptionValue = basket.TotalOf(TenderType.LoyaltyPoints);
-        var netBill = Math.Max(0m, totals.GrandTotal - redemptionValue);
+        var netBill = Math.Max(0m, totals.AmountPayable - redemptionValue);
         var pointsEarned = customer is null ? 0 : LoyaltyEngine.PointsEarned(netBill, _loyaltyRules);
 
         var sale = new SaleDraft(
@@ -136,7 +139,9 @@ public sealed class CheckoutService(
         _log.Info("sale", string.Join(
             "  ",
             invoice.InvoiceNo,
-            $"total {totals.GrandTotal:0.00}",
+            totals.RoundOff == 0m
+                ? $"total {totals.AmountPayable:0.00}"
+                : $"total {totals.AmountPayable:0.00} (rounded from {totals.GrandTotal:0.00})",
             $"lines {totals.LineCount}",
             $"tenders [{string.Join(", ", basket.Tenders.Select(t => $"{t.Type} {t.Amount:0.00}"))}]",
             basket.ChangeDue > 0m ? $"change {basket.ChangeDue:0.00}" : "no change",

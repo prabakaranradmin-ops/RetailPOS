@@ -50,6 +50,22 @@ result without using a roll of paper.
 A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
 than letting it reach a customer.
 
+## Rounding to the rupee
+
+`roundOffToRupee` is `true` unless you say otherwise. A bill of ₹94.50 is settled at ₹94, and the
+bill shows a **Round off** line of `-0.50` so the arithmetic stays visible to the customer. Without
+it the drawer needs fifty-paise coins and the queue waits while somebody finds one.
+
+Bills ending in exactly fifty paise go to the **even** rupee — 94.50 down to 94, 95.50 up to 96 —
+so across a day the roundings cancel instead of taking half a rupee off every such customer.
+
+**It changes what is payable and nothing else.** The taxable value, the CGST/SGST split and the tax
+summary are identical either way, so your GST returns read the same whether the lane rounds or not.
+
+Set it to `false` only for a counter that has to hand over a figure to the paisa. Doing so changes
+what the *next* bill totals; every bill already issued keeps the round-off it was settled with, and
+reprints reproduce it exactly.
+
 ## Editing it when anything is in Tamil
 
 **Save the file as UTF-8.** In Notepad: File → Save As → Encoding → *UTF-8 with BOM*.

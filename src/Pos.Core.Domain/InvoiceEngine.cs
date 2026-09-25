@@ -16,14 +16,22 @@ public sealed class InvoiceEngine
     /// Whether this lane issues tax invoices or bills of supply. Defaults to <see cref="TaxMode.Gst"/>,
     /// which is what every lane was before the setting existed.
     /// </param>
-    public InvoiceEngine(string outletStateCode, TaxMode taxMode = TaxMode.Gst)
+    /// <param name="roundToRupee">
+    /// Whether this lane settles to the whole rupee. Off by default, which is what every lane was
+    /// before the setting existed.
+    /// </param>
+    public InvoiceEngine(string outletStateCode, TaxMode taxMode = TaxMode.Gst, bool roundToRupee = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outletStateCode);
         OutletStateCode = outletStateCode;
         TaxMode = taxMode;
+        RoundsToRupee = roundToRupee;
     }
 
     public string OutletStateCode { get; }
+
+    /// <summary>Whether the bill settles to the whole rupee.</summary>
+    public bool RoundsToRupee { get; }
 
     /// <summary>Whether this bill is a tax invoice or a bill of supply.</summary>
     public TaxMode TaxMode { get; private set; }
@@ -61,7 +69,7 @@ public sealed class InvoiceEngine
         !string.IsNullOrWhiteSpace(Customer?.StateCode) &&
         !string.Equals(Customer.StateCode, OutletStateCode, StringComparison.OrdinalIgnoreCase);
 
-    public InvoiceTotals Totals => InvoiceTotals.From(_lines);
+    public InvoiceTotals Totals => InvoiceTotals.From(_lines, RoundsToRupee);
 
     public bool IsEmpty => _lines.Count == 0;
 

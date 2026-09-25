@@ -157,7 +157,10 @@ public sealed class DayCloseRepository : IDayCloseStore
                 SELECT COUNT(*),
                        MIN(created_at),
                        COALESCE(SUM(CAST(total_discount AS REAL)), 0),
-                       COALESCE(SUM(CAST(grand_total AS REAL)), 0),
+                       -- What was taken, so the figure the drawer is counted against is the one the
+                       -- customers actually paid. On a lane that rounds, the grand total alone is
+                       -- out by up to fifty paise a bill.
+                       COALESCE(SUM(CAST(grand_total AS REAL) + CAST(round_off AS REAL)), 0),
                        COALESCE(SUM(CAST(total_cgst AS REAL)), 0),
                        COALESCE(SUM(CAST(total_sgst AS REAL)), 0),
                        COALESCE(SUM(CAST(total_igst AS REAL)), 0),
@@ -218,7 +221,7 @@ public sealed class DayCloseRepository : IDayCloseStore
         {
             command.Transaction = transaction;
             command.CommandText = """
-                SELECT COUNT(*), COALESCE(SUM(CAST(grand_total AS REAL)), 0)
+                SELECT COUNT(*), COALESCE(SUM(CAST(grand_total AS REAL) + CAST(round_off AS REAL)), 0)
                 FROM invoices
                 WHERE lane_id = $lane AND day_close_id IS NULL AND status = $cancelled;
                 """;
@@ -240,7 +243,7 @@ public sealed class DayCloseRepository : IDayCloseStore
             command.CommandText = $"""
                 SELECT COALESCE(i.cashier_name, ''),
                        COUNT(*),
-                       SUM(CAST(i.grand_total AS REAL)),
+                       SUM(CAST(i.grand_total AS REAL) + CAST(i.round_off AS REAL)),
                        COALESCE(SUM((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p
                                      WHERE p.invoice_id = i.id AND p.tender_type = $cash)), 0)
                        - COALESCE(SUM(CAST(i.change_due AS REAL)), 0)
@@ -478,7 +481,7 @@ public sealed class DayCloseRepository : IDayCloseStore
             command.CommandText = """
                 SELECT COALESCE(i.cashier_name, ''),
                        COUNT(*),
-                       SUM(CAST(i.grand_total AS REAL)),
+                       SUM(CAST(i.grand_total AS REAL) + CAST(i.round_off AS REAL)),
                        COALESCE(SUM((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p
                                      WHERE p.invoice_id = i.id AND p.tender_type = $cash)), 0)
                        - COALESCE(SUM(CAST(i.change_due AS REAL)), 0)

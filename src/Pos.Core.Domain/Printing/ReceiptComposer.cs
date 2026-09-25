@@ -221,6 +221,13 @@ public sealed class ReceiptComposer
         if (totals.TotalIgst > 0m)
             receipt.Columns(Labels.Igst, Amount(totals.TotalIgst));
 
+        // Only when there is one, and never as "0.00". A line saying nothing happened is a line the
+        // customer has to read to discover that. It sits below the tax and above the total because
+        // that is the order the arithmetic runs in: the lines make the total, the round-off nudges
+        // it, and what is left is payable.
+        if (totals.RoundOff != 0m)
+            receipt.Columns(Labels.RoundOff, Amount(totals.RoundOff));
+
         receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.TotalQuantity}: {Quantity(totals.TotalQuantity)}");
     }
 
@@ -280,7 +287,9 @@ public sealed class ReceiptComposer
 
         decimal Taken(TenderType type) => byType.TryGetValue(type, out var amount) ? amount : 0m;
 
-        var total = Amount(sale.Totals.GrandTotal);
+        // What was handed over, which on a rounding lane is not the grand total. The tender lines
+        // beside it are actual money, so the figure they are checked against has to be too.
+        var total = Amount(sale.Totals.AmountPayable);
 
         if (Paired)
         {

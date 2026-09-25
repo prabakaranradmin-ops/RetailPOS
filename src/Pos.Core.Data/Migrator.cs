@@ -21,6 +21,7 @@ public static class Migrator
         "007_dashboard_indexes.sql",
         "008_category_and_cost.sql",
         "009_stock_and_tax_mode.sql",
+        "010_round_off.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

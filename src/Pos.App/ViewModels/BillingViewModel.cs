@@ -208,8 +208,22 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public InvoiceTotals Totals => _bill.Totals;
 
-    /// <summary>Shown large and high-contrast per NFR-02.</summary>
-    public decimal GrandTotal => _bill.Totals.GrandTotal;
+    /// <summary>
+    /// Shown large and high-contrast per NFR-02. This is what the customer pays, so on a lane that
+    /// rounds it is the rounded figure — the number on the screen and the number in the drawer are
+    /// never allowed to be different things.
+    /// </summary>
+    public decimal GrandTotal => _bill.Totals.AmountPayable;
+
+    /// <summary>
+    /// What the bill came to before the rupee round-off, shown beside it only when the two differ.
+    /// </summary>
+    public decimal TotalBeforeRounding => _bill.Totals.GrandTotal;
+
+    /// <summary>The round-off on the bill as it stands, or zero when there is none.</summary>
+    public decimal RoundOff => _bill.Totals.RoundOff;
+
+    public bool HasRoundOff => _bill.Totals.RoundOff != 0m;
 
     /// <summary>
     /// Step used by the increment and decrement keys. Weighed goods move in a smaller step, since
@@ -678,7 +692,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        _basket = new TenderBasket(_bill.Totals.GrandTotal);
+        _basket = new TenderBasket(_bill.Totals.AmountPayable);
         _pointsRedeemed = 0;
         Payments.Clear();
         SelectedTenderTypeIndex = 0;
@@ -1616,6 +1630,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         Raise(nameof(Totals));
         Raise(nameof(GrandTotal));
+        Raise(nameof(TotalBeforeRounding));
+        Raise(nameof(RoundOff));
+        Raise(nameof(HasRoundOff));
         Raise(nameof(MaxRedeemablePoints));
 
         // The side panel reads the payment split and the projected points off the same state, and

@@ -52,6 +52,12 @@ public sealed record SettledInvoice(
 {
     public decimal GrandTotal => Sale.Totals.GrandTotal;
 
+    /// <summary>The rupee round-off this bill was settled with, or zero if it was not rounded.</summary>
+    public decimal RoundOff => Sale.Totals.RoundOff;
+
+    /// <summary>What the customer actually paid: the grand total after the round-off.</summary>
+    public decimal AmountPayable => Sale.Totals.AmountPayable;
+
     /// <summary>True once the sale has been cancelled. The record stays; the takings do not.</summary>
     public bool IsVoided => VoidedAt is not null;
 }

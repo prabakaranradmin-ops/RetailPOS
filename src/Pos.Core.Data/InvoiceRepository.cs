@@ -95,11 +95,11 @@ public sealed class InvoiceRepository : IInvoiceStore
             INSERT INTO invoices
               (invoice_no, lane_id, created_at, customer_id, status, hold_token,
                subtotal_taxable, total_discount, total_cgst, total_sgst, total_igst, grand_total,
-               points_redeemed, points_earned, change_due, cashier_name, tax_mode)
+               points_redeemed, points_earned, change_due, cashier_name, tax_mode, round_off)
             VALUES
               ($invoiceNo, $lane, $createdAt, $customerId, $status, $holdToken,
                $taxable, $discount, $cgst, $sgst, $igst, $grandTotal,
-               $pointsRedeemed, $pointsEarned, $changeDue, $cashier, $taxMode);
+               $pointsRedeemed, $pointsEarned, $changeDue, $cashier, $taxMode, $roundOff);
             SELECT last_insert_rowid();
             """;
 
@@ -116,6 +116,11 @@ public sealed class InvoiceRepository : IInvoiceStore
         command.Parameters.AddWithValue("$sgst", totals.TotalSgst);
         command.Parameters.AddWithValue("$igst", totals.TotalIgst);
         command.Parameters.AddWithValue("$grandTotal", totals.GrandTotal);
+
+        // Kept beside the total rather than folded into it, so the bill can still be read back the
+        // way it was issued: lines that add to the grand total, and an adjustment that explains the
+        // difference between that and what the customer paid.
+        command.Parameters.AddWithValue("$roundOff", totals.RoundOff);
         command.Parameters.AddWithValue("$pointsRedeemed", sale.PointsRedeemed);
         command.Parameters.AddWithValue("$pointsEarned", sale.PointsEarned);
         command.Parameters.AddWithValue("$changeDue", sale.ChangeDue);
@@ -351,7 +356,11 @@ public sealed class InvoiceRepository : IInvoiceStore
                        i.subtotal_taxable, i.total_discount, i.total_cgst, i.total_sgst,
                        i.total_igst, i.grand_total, i.points_redeemed, i.points_earned, i.change_due,
                        c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code,
-                       i.cashier_name, i.voided_at, i.void_reason, i.tax_mode
+                       i.cashier_name, i.voided_at, i.void_reason, i.tax_mode,
+                       -- Appended rather than slotted in beside grand_total: every reader below
+                       -- takes its columns by position, and moving one would silently re-point all
+                       -- of them.
+                       i.round_off
                 FROM invoices i
                 LEFT JOIN customers c ON c.id = i.customer_id
                 WHERE i.invoice_no = $invoiceNo;
@@ -384,7 +393,8 @@ public sealed class InvoiceRepository : IInvoiceStore
                 TotalCgst: reader.GetDecimal(6),
                 TotalSgst: reader.GetDecimal(7),
                 TotalIgst: reader.GetDecimal(8),
-                GrandTotal: reader.GetDecimal(9));
+                GrandTotal: reader.GetDecimal(9),
+                RoundOff: reader.GetDecimal(22));
 
             sale = new SaleDraft(
                 reader.GetString(1),

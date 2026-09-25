@@ -7,6 +7,11 @@ namespace Pos.Core.Domain;
 /// the grid rather than a separately derived figure, so the printed total always reconciles
 /// line by line with what the cashier and customer can see.
 /// </summary>
+/// <param name="RoundOff">
+/// What the grand total was nudged by to reach a whole rupee, between -0.50 and +0.50, or zero on a
+/// lane that does not round. It is an adjustment to what is payable and nothing else: no line
+/// price, no taxable value and no part of the tax split moves with it.
+/// </param>
 public readonly record struct InvoiceTotals(
     int LineCount,
     decimal TotalQuantity,
@@ -15,13 +20,29 @@ public readonly record struct InvoiceTotals(
     decimal TotalCgst,
     decimal TotalSgst,
     decimal TotalIgst,
-    decimal GrandTotal)
+    decimal GrandTotal,
+    decimal RoundOff = 0m)
 {
     public decimal TotalTax => TotalCgst + TotalSgst + TotalIgst;
 
+    /// <summary>
+    /// What the customer actually hands over, and what the tender has to settle.
+    /// </summary>
+    /// <remarks>
+    /// Every figure that has to match the drawer is taken from here rather than from
+    /// <see cref="GrandTotal"/>: the tender, the change, the cash line on the Z-report and the
+    /// takings on the dashboard. A bill counted one way and reconciled the other would leave a
+    /// shopkeeper hunting a rupee that was never missing.
+    /// </remarks>
+    public decimal AmountPayable => GrandTotal + RoundOff;
+
     public static InvoiceTotals Empty => new(0, 0m, 0m, 0m, 0m, 0m, 0m, 0m);
 
-    public static InvoiceTotals From(IEnumerable<InvoiceLine> lines)
+    /// <param name="roundToRupee">
+    /// Whether this lane settles to the whole rupee. Off by default so that a caller which has not
+    /// been told about the shop's setting cannot quietly invent a round-off of its own.
+    /// </param>
+    public static InvoiceTotals From(IEnumerable<InvoiceLine> lines, bool roundToRupee = false)
     {
         var count = 0;
         decimal quantity = 0m, discount = 0m;
@@ -45,6 +66,11 @@ public readonly record struct InvoiceTotals(
         var totalTax = Money.ToPresentation(cgst) + Money.ToPresentation(sgst) + Money.ToPresentation(igst);
         var total = Money.ToPresentation(grandTotal);
 
+        // Banker's rounding, the same rule every other step uses, so a bill ending in exactly fifty
+        // paise goes to the even rupee rather than always up. Half of them round down, which over a
+        // day's trading is the difference between a rounding rule and a levy.
+        var roundOff = roundToRupee ? Money.Round(total, 0) - total : 0m;
+
         return new InvoiceTotals(
             count,
             quantity,
@@ -63,6 +89,7 @@ public readonly record struct InvoiceTotals(
             Money.ToPresentation(cgst),
             Money.ToPresentation(sgst),
             Money.ToPresentation(igst),
-            total);
+            total,
+            roundOff);
     }
 }

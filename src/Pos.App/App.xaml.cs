@@ -122,7 +122,7 @@ public partial class App : Application
             stock: new StockRepository(database));
 
         var viewModel = new BillingViewModel(
-            new InvoiceEngine(settings.OutletStateCode, settings.TaxMode),
+            new InvoiceEngine(settings.OutletStateCode, settings.TaxMode, settings.RoundOffToRupee),
             new ItemRepository(database),
             heldBills,
             customers,

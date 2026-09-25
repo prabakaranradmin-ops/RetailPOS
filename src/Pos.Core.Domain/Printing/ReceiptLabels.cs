@@ -33,6 +33,11 @@ public sealed record ReceiptLabels
     /// <summary>The total before payment on a bill that taxed nothing.</summary>
     public required string Subtotal { get; init; }
 
+    /// <summary>
+    /// The paise given up or added to reach a whole rupee. Printed only when there is one.
+    /// </summary>
+    public required string RoundOff { get; init; }
+
     /// <summary>Heading for the reorder list at the foot of the day-end report.</summary>
     public required string LowStock { get; init; }
 
@@ -142,6 +147,7 @@ public sealed record ReceiptLabels
         Cgst = "CGST",
         Sgst = "SGST",
         Igst = "IGST",
+        RoundOff = "Round off",
         Total = "TOTAL",
         Items = "Items",
         TotalQuantity = "Qty",
@@ -230,6 +236,11 @@ public sealed record ReceiptLabels
         Cgst = "CGST",
         Sgst = "SGST",
         Igst = "IGST",
+
+        // Worth a native eye before a shop prints it. The reference bill this set was taken from
+        // prints this one line in English, so there was nothing to copy; this follows the rest of
+        // the Tamil set rather than leaving a lone English label among translated ones.
+        RoundOff = "வட்டமிடல்",
         Total = "மொத்தம்",
         Items = "பொருட்கள்",
         TotalQuantity = "அளவு",

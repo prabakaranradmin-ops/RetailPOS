@@ -60,6 +60,28 @@ Given `qty`, `unit_price`, `discount`, `gst_rate`, `is_inter_state`, `is_tax_inc
 
 Rounding mode: banker's rounding (round-half-to-even) at every 2-decimal step, matching standard invoice accounting practice.
 
+### The rupee round-off
+
+A lane with `roundOffToRupee` set (the default) settles the bill to the whole rupee, because a
+counter does not keep half-rupee coins:
+
+5. `round_off = round(grand_total, 0) - grand_total`, banker's rounding again, so a bill ending in
+   exactly fifty paise goes to the **even** rupee rather than always up — 94.50 falls to 94, 95.50
+   climbs to 96. Always up would be a levy on every customer who happened to land on a midpoint.
+6. `amount_payable = grand_total + round_off`, and `|round_off| <= 0.50` by construction.
+
+**The round-off adjusts what is payable and nothing else.** No line total, no taxable value and no
+part of the CGST/SGST/IGST split moves with it — the same rule loyalty points follow, and for the
+same reason: a GST return filed from these invoices must read identically whether the lane rounds
+or not. `RoundOffTests` asserts this directly by pricing the same basket both ways and comparing
+every tax figure.
+
+It is stored per invoice rather than derived on read. A reprint has to reproduce the document that
+was issued, and the setting can be turned off tomorrow — deriving it would silently restate every
+bill the shop has already given out, and the day-end reports that reconciled against them would
+stop reconciling. Everything that must agree with the drawer — the tender, the change, the Z-report
+cash line and the dashboard's takings — is taken from `amount_payable`.
+
 This must be implemented as a pure, stateless function — no I/O, no hidden state — so it can be exhaustively unit tested against a table of known input/output pairs.
 
 ## 4. Scanner vs. typed input

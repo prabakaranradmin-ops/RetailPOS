@@ -168,7 +168,7 @@ public sealed class DashboardQuery(PosDatabase database)
                    i.customer_id IS NOT NULL AS identified,
                    i.voided_at IS NOT NULL AS voided,
                    COUNT(*),
-                   COALESCE({Sum("i.grand_total")}, 0),
+                   COALESCE({Sum("i.grand_total")}, 0) + COALESCE({Sum("i.round_off")}, 0),
                    COALESCE({Sum("i.total_discount")}, 0),
                    COALESCE({Sum("i.total_cgst")}, 0) + COALESCE({Sum("i.total_sgst")}, 0) + COALESCE({Sum("i.total_igst")}, 0),
                    COALESCE({Sum("i.change_due")}, 0),

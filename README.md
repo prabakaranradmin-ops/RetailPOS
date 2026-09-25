@@ -130,6 +130,19 @@ and a gesture you rebind is taken away from whatever action held it:
 }
 ```
 
+## Rounding to the rupee
+
+`"roundOffToRupee": true`, the default, settles the bill at the whole rupee and prints a **Round
+off** line for the difference — ₹94.50 is taken as ₹94, because a counter does not keep half-rupee
+coins. Midpoints go to the even rupee, so 94.50 falls to 94 and 95.50 climbs to 96 and the two
+cancel across a day's trading rather than taking half a rupee off every such customer.
+
+It moves what is payable and nothing else. The taxable value, the CGST/SGST split and the tax
+summary are what they always were, so a GST return filed from these bills reads the same either
+way — asserted directly by pricing the same basket on a rounding lane and a plain one and comparing
+every tax figure. Each invoice stores the round-off it was settled with, so turning the setting off
+changes the next bill and never a bill already in a customer's hand.
+
 `settings.json` also carries the store's details for the receipt header and the lane's peripherals:
 
 ```json

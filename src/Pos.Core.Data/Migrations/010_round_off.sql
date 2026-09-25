@@ -1,0 +1,20 @@
+-- The rupee round-off, recorded per invoice rather than worked out again on demand.
+--
+-- A bill comes to 94.50 and the customer hands over 94. Indian retail settles to the whole rupee,
+-- because a drawer does not hold half-rupee coins and a queue does not wait while somebody finds
+-- one. The adjustment is its own figure on the bill so the arithmetic stays visible: the lines add
+-- up to the grand total, the round-off nudges it, and the payable amount is what changed hands.
+--
+-- Stored, not derived. Two reasons, and either alone would be enough:
+--
+--   1. A reprint has to reproduce the bill that was issued, to the paisa. Recomputing it would
+--      reproduce the bill today's settings would have produced, which is a different document.
+--   2. The setting can be turned off tomorrow. If the figure were derived, doing so would quietly
+--      restate every bill the shop has ever issued, and the day-end reports that reconciled against
+--      them would stop reconciling.
+--
+-- Zero on every invoice issued before this migration, which is exactly what those bills were: the
+-- lane did not round, so nothing was rounded off. The tax is untouched either way — the round-off
+-- adjusts what is payable, never the taxable value or the CGST/SGST split, so a GST return filed
+-- from these rows reads the same as it did before.
+ALTER TABLE invoices ADD COLUMN round_off TEXT NOT NULL DEFAULT '0';

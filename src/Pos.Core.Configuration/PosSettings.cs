@@ -85,6 +85,22 @@ public sealed class PosSettings
     public ReceiptLanguage ReceiptLanguage { get; set; } = ReceiptLanguage.English;
 
     /// <summary>
+    /// Whether the bill settles to the whole rupee, with the difference shown as a round-off.
+    /// </summary>
+    /// <remarks>
+    /// On by default, because a counter does not keep half-rupee coins and a queue does not wait
+    /// while somebody finds one. It moves only what is payable: the lines, the taxable value and
+    /// the CGST/SGST split are what they were, so a GST return filed from these bills reads the
+    /// same either way.
+    ///
+    /// Turning it off is for a lane that must hand over a figure to the paisa. Doing so changes
+    /// what the next bill totals, never what an issued one did — each invoice keeps the round-off
+    /// it was settled with.
+    /// </remarks>
+    [JsonPropertyName("roundOffToRupee")]
+    public bool RoundOffToRupee { get; set; } = true;
+
+    /// <summary>
     /// Whether this lane issues tax invoices or bills of supply.
     /// </summary>
     /// <remarks>

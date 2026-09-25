@@ -278,6 +278,22 @@
                            Margin="0,4,0,2"
                            LineStackingStrategy="BlockLineHeight" />
 
+                <!--
+                  Only when the bill was actually rounded. The cashier is the one a customer asks
+                  why the figure is not what they added up in their head, so the paise that came
+                  off is on the screen rather than only on the paper.
+                -->
+                <Grid Visibility="{Binding HasRoundOff, Converter={StaticResource BoolToVisibility}}"
+                      Margin="0,0,0,2">
+                  <TextBlock Text="Round off" Foreground="{StaticResource InkDim}"
+                             FontSize="11" HorizontalAlignment="Left" />
+                  <TextBlock Foreground="{StaticResource InkDim}" FontSize="11" HorizontalAlignment="Right"
+                             FontFamily="{StaticResource FigureFont}">
+                    <Run Text="{Binding TotalBeforeRounding, Mode=OneWay, StringFormat={}{0:N2}}" />
+                    <Run Text=" " /><Run Text="{Binding RoundOff, Mode=OneWay, StringFormat={}{0:+0.00;-0.00}}" />
+                  </TextBlock>
+                </Grid>
+
                 <Grid>
                   <TextBlock x:Name="TaxNote" Text="Incl. all taxes" Foreground="{StaticResource InkDim}"
                              FontSize="11" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" />
