@@ -209,8 +209,10 @@ Not in the SRS. The SRS specifies the billing transaction thoroughly and the ope
 around it not at all, so a lane built strictly to it could not open in the morning, trade, and
 close in the evening. These four are the minimum for it to do so.
 
-- **Catalogue import** — `pos import-items --file <path>`. A store arrives with thousands of SKUs
-  in a spreadsheet; without this the pilot lane has an empty catalogue and cannot ring up anything.
+- **Catalogue import** — `Ctrl+D` then `Ctrl+3` at the till, or `pos import-items --file <path>`. A
+  store arrives with thousands of SKUs in a spreadsheet; without this the pilot lane has an empty
+  catalogue and cannot ring up anything. The screen came later, for the same reason the owner's
+  figures did: a shopkeeper will not open a terminal to price their shelves.
 - **Day-end close** — `Shift+F12` at the till, or `pos close-day`. At close the cashier counts the
   drawer against a figure, and there was no way to ask the till for that figure.
 - **Backup** — `pos backup-db`, and automatically as part of every close. `pos check-db` already
