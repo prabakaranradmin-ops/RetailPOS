@@ -147,7 +147,8 @@ public partial class App : Application
             PinPrompt.Passes(billingView, settings.Security)
                 ? new OwnerView(
                     BuildOwnerViewModel(settings, database, viewModel),
-                    new CatalogueImportViewModel(new ItemRepository(database)))
+                    new CatalogueImportViewModel(new ItemRepository(database)),
+                    BuildHardwareViewModel(settings))
                 : null;
 
         MainWindow = billingView;
@@ -222,6 +223,31 @@ public partial class App : Application
                 return null;
             });
     }
+
+    /// <summary>
+    /// The peripheral checks, wired to dialogs instead of to a console.
+    /// </summary>
+    /// <remarks>
+    /// The rasteriser is built afresh rather than shared with the till's printer. A check that ran
+    /// through a different path from a sale would be checking the wrong thing, but it must also not
+    /// be able to disturb the one the counter is using mid-queue.
+    /// </remarks>
+    private HardwareViewModel BuildHardwareViewModel(PosSettings settings) =>
+        new(
+            settings,
+            CreateRasterizer(settings),
+
+            // Called from the thread running the check, so it has to come back to the dispatcher
+            // before it can put a window up — and it has to block there until the operator answers,
+            // because the answer is the check's result.
+            confirm: question => Dispatcher.Invoke(() => MessageBox.Show(
+                MainWindow!,
+                question,
+                "Checking the hardware",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) == MessageBoxResult.Yes),
+
+            post: action => Dispatcher.Invoke(action));
 
     /// <summary>
     /// Builds the text rasteriser, or returns null if the machine cannot supply one.

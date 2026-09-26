@@ -82,7 +82,19 @@ log.Info("tool", $"pos {string.Join(' ', args)}");
 var rasterizer = CreateRasterizer(settings, log);
 using var rasterizerLifetime = rasterizer as IDisposable;
 
-var checks = new HardwareChecks(settings, Console.Out, Console.In, rasterizer);
+// The same checks the owner's screen runs, wired to a console instead of to dialogs. One
+// implementation, so a lane signed off from a window is the lane the sign-off sheet describes.
+var checks = new PeripheralCheck(
+    settings,
+    report: line => Console.WriteLine(line.Length == 0 ? string.Empty : "  " + line),
+    confirm: question =>
+    {
+        Console.Write($"  {question} [y/N] ");
+        var answer = Console.ReadLine();
+
+        return answer is not null && answer.Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase);
+    },
+    rasterizer);
 var window = ParseWindow(args) ?? TimeSpan.FromSeconds(10);
 
 switch (command)
@@ -733,8 +745,7 @@ switch (command)
         // Renders the sample receipt as text without touching a printer, which is how the layout
         // gets checked on a bench or against a different paper width.
         var width = ParseWidth(args) ?? settings.Hardware.PrinterPaperWidthChars;
-        var receipt = new ReceiptComposer(settings.Store.ToProfile(), width, settings.ReceiptLanguage)
-            .Compose(SampleInvoice.Build(settings.LaneId, settings.InvoiceNumber.ToFormat(), settings.TaxMode));
+        var receipt = checks.Preview(width);
 
         Console.WriteLine();
         Console.WriteLine(receipt.ToPlainText());
@@ -779,7 +790,21 @@ switch (command)
             results.Add(("Cash drawer", checks.Drawer()));
 
         if (all || flags.Contains("--scanner"))
-            results.Add(("Scanner", checks.Scanner(window)));
+        {
+            // A keyboard-emulation scanner types into whatever has focus, so at a console it is
+            // simply read as a line before the check is asked to judge it.
+            string? typed = null;
+
+            if (checks.ScannerTypesLikeAKeyboard)
+            {
+                Console.WriteLine();
+                Console.WriteLine("  This scanner types like a keyboard. Scan an item now, or press Enter to skip.");
+                Console.Write("  > ");
+                typed = Console.ReadLine();
+            }
+
+            results.Add(("Scanner", checks.Scanner(window, typed)));
+        }
 
         if (all || flags.Contains("--scale"))
             results.Add(("Scale", checks.Scale(window)));

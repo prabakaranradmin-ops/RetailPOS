@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Pos.App.ViewModels;
 using Pos.Core.Configuration;
@@ -18,6 +19,7 @@ public partial class OwnerView : Window
 {
     private readonly OwnerViewModel _viewModel;
     private readonly CatalogueImportViewModel _catalogue;
+    private readonly HardwareViewModel _hardware;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -25,16 +27,20 @@ public partial class OwnerView : Window
     /// </summary>
     private bool _settingUp = true;
 
-    public OwnerView(OwnerViewModel viewModel, CatalogueImportViewModel catalogue)
+    public OwnerView(OwnerViewModel viewModel, CatalogueImportViewModel catalogue, HardwareViewModel hardware)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
+        ArgumentNullException.ThrowIfNull(hardware);
 
         InitializeComponent();
 
         _viewModel = viewModel;
         _catalogue = catalogue;
+        _hardware = hardware;
         DataContext = viewModel;
+
+        HardwareTab.DataContext = hardware;
 
         // The catalogue tab answers to its own view model. Scoped to that one branch of the tree so
         // the rest of the window keeps binding to the figures without qualification.
@@ -108,11 +114,59 @@ public partial class OwnerView : Window
         // The till is driven from the keyboard, and so is this. Without these the only way between
         // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
-        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4)
+        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
         }
+    }
+
+    // ---- Hardware --------------------------------------------------------------------------------
+
+    private async void CheckPrinter_Click(object sender, RoutedEventArgs e) => await _hardware.CheckPrinter();
+
+    private async void CheckDrawer_Click(object sender, RoutedEventArgs e) => await _hardware.CheckDrawer();
+
+    private async void CheckScale_Click(object sender, RoutedEventArgs e) => await _hardware.CheckScale();
+
+    private async void ListPorts_Click(object sender, RoutedEventArgs e) => await _hardware.ListPorts();
+
+    private async void CheckScanner_Click(object sender, RoutedEventArgs e)
+    {
+        if (_hardware.ScannerTypesLikeAKeyboard && _hardware.ScannedCode.Trim().Length == 0)
+        {
+            Say("This lane's scanner types like a keyboard. Click in the box, scan an item so the "
+                + "code appears there, then check it.");
+            return;
+        }
+
+        await _hardware.CheckScanner();
+    }
+
+    /// <summary>The paper width to preview against, which is not always the lane's own.</summary>
+    private int PreviewWidth() => Width32.IsChecked == true ? 32 : 48;
+
+    private void Preview_Click(object sender, RoutedEventArgs e) => _hardware.ShowPreview(PreviewWidth());
+
+    private void PreviewImage_Click(object sender, RoutedEventArgs e)
+    {
+        // Written under the lane's own folder rather than beside the program: the install folder
+        // may be read-only, and this is the lane's working output, not part of the build.
+        _hardware.RenderPreviewImage(Path.Combine(App.DataDirectory, "previews"));
+
+        if (_hardware.PreviewImagePath is not { } path)
+            return;
+
+        // Loaded fully into memory and released, so the file is not locked by the control. Without
+        // this, drawing a second preview fails on a file the window is still holding open.
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.UriSource = new Uri(path);
+        image.EndInit();
+        image.Freeze();
+
+        PreviewImage.Source = image;
     }
 
     // ---- Loading a catalogue ---------------------------------------------------------------------

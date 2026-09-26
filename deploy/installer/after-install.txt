@@ -26,13 +26,18 @@ RetailPOS is installed. Three things before the shop can trade.
 
 2. CHECK THE HARDWARE
 
-   Open "RetailPOS commands" from the Start Menu, then:
+   Open the till, press Ctrl+D for the owner's screen, then Ctrl+4 for
+   Hardware. There is a button for the printer, the drawer, the scanner and
+   the scale, and one that lists the serial ports.
+
+   Press "Draw it as the printer will" before printing anything. If any Tamil
+   shows as ? or as strange Latin letters, stop - the lane cannot draw it, and
+   the screen says why.
+
+   The same checks from "RetailPOS commands", if you prefer typing:
 
        pos.exe receipt-preview --png preview.png
        pos.exe test-hardware
-
-   Look at preview.png before printing anything. If any Tamil shows as ? or as
-   strange Latin letters, stop - the lane cannot draw it, and the preview says why.
 
    HARDWARE_SIGNOFF.html in the install folder is the sheet to work through.
    Double-click it, then print it.

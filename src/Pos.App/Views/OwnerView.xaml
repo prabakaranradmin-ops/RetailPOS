@@ -8,6 +8,7 @@
 
   <Window.Resources>
     <SolidColorBrush x:Key="Warn" Color="#FFFF7A66" />
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
     <v:StarShareConverter x:Key="Share" />
     <v:StarShareConverter x:Key="Rest" Remainder="True" />
@@ -494,8 +495,118 @@
         </Grid>
       </TabItem>
 
+      <!-- ==== Hardware ==== -->
+      <TabItem Header="Hardware  (Ctrl+4)">
+        <Grid x:Name="HardwareTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- What to check -->
+          <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="CHECK A PERIPHERAL" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
+                             Text="Each one shows what should happen, does it, then asks you what physically happened — no software can see paper leave a printer. Answer honestly: a yes here that should have been no is a fault found mid-queue instead." />
+
+                  <Button Content="Test the _printer" Padding="14,8" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                          Click="CheckPrinter_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                  <Button Content="Fire the cash _drawer" Padding="14,8" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                          Click="CheckDrawer_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                  <Button Content="Read the _scale" Padding="14,8" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                          Click="CheckScale_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                  <Button Content="List the serial p_orts" Padding="14,8" HorizontalAlignment="Stretch"
+                          Click="ListPorts_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="SCANNER" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="A scanner that types like a keyboard puts the code wherever the caret is. Click in the box and scan something, then check it." />
+                  <TextBox Text="{Binding ScannedCode, UpdateSourceTrigger=PropertyChanged}"
+                           Padding="8,6" Margin="0,0,0,10" />
+                  <Button Content="Check the scan_ner" Padding="14,8" HorizontalAlignment="Stretch"
+                          Click="CheckScanner_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="THE BILL, WITHOUT A PRINTER" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Composes a sample bill exactly as this lane would — your shop name, GSTIN, paper width, language and bill number. Nothing is printed and no hardware is needed." />
+
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Paper" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <RadioButton x:Name="Width48" Content="80mm (48)" GroupName="Paper" IsChecked="True"
+                                 Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <RadioButton x:Name="Width32" Content="58mm (32)" GroupName="Paper"
+                                 Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
+                  </StackPanel>
+
+                  <Button Content="Show the _bill" Padding="14,8" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                          Click="Preview_Click" />
+                  <Button Content="Draw it as the printer _will" Padding="14,8" HorizontalAlignment="Stretch"
+                          Click="PreviewImage_Click" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
+                             Text="Drawing it is the only way to check a Tamil bill without a roll of paper. Text counts characters, which says nothing about a script the printer has no font for." />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- What happened -->
+          <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="{Binding Summary, Mode=OneWay}" TextWrapping="Wrap"
+                       FontSize="15" Margin="2,0,2,10" />
+
+            <Border Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
+              <Grid>
+                <!-- The running check's progress. -->
+                <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
+                  <ItemsControl ItemsSource="{Binding Log}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" Foreground="{StaticResource Ink}"
+                                   FontFamily="Consolas" FontSize="12.5" TextWrapping="NoWrap" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <!-- The composed bill, in the face the paper will carry. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                              Visibility="{Binding ShowsPreviewText, Converter={StaticResource BoolToVisibility}}">
+                  <TextBlock Text="{Binding PreviewText, Mode=OneWay}" Foreground="{StaticResource Ink}"
+                             FontFamily="Consolas" FontSize="12.5" />
+                </ScrollViewer>
+
+                <!-- The dots themselves, once they have been drawn. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding ShowsPreviewImage, Converter={StaticResource BoolToVisibility}}">
+                  <Border Background="White" Padding="10" HorizontalAlignment="Left">
+                    <Image x:Name="PreviewImage" Stretch="None" />
+                  </Border>
+                </ScrollViewer>
+              </Grid>
+            </Border>
+          </Grid>
+        </Grid>
+      </TabItem>
+
       <!-- ==== Settings ==== -->
-      <TabItem Header="Settings  (Ctrl+4)">
+      <TabItem Header="Settings  (Ctrl+5)">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel MaxWidth="900" HorizontalAlignment="Left">
 

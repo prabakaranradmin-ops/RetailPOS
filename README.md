@@ -324,8 +324,17 @@ Copy the folder to the lane, then:
 
 ## Checking the hardware
 
-Peripherals are driven by a separate tool rather than from the billing screen, because checking one
-means printing test pages and firing drawers:
+From the owner's screen — `Ctrl+D`, then `Ctrl+4` for Hardware. A button each for the printer, the
+drawer, the scanner and the scale, one that lists the serial ports, and one that shows the bill this
+lane would print without touching a printer at all. **Draw it as the printer will** renders the dots
+themselves, which is the only way to check a Tamil bill without a roll of paper.
+
+They are kept out of the billing screen and behind the owner's PIN because checking a peripheral
+means printing test pages and firing drawers, which is not something to leave where a cashier can
+reach it mid-sale.
+
+The same checks run from a command line, for support and for a scripted rollout. Both drive one
+implementation, so a lane signed off from the window is the lane the sign-off sheet describes:
 
 ```
 pos import-items --file catalogue.csv  # load the catalogue; --update for a price revision

@@ -1,23 +1,32 @@
-using Pos.Core.Domain;
-
-namespace Pos.Diagnostics;
+namespace Pos.Core.Domain.Printing;
 
 /// <summary>
-/// A representative invoice for the printer test: two tax slabs, a discount, a weighed line, a
-/// split tender with change, and loyalty movement — so a test print exercises every part of the
-/// layout rather than only the easy ones.
+/// A representative invoice for the printer test and the on-screen preview: two tax slabs, a
+/// discount, a weighed line, a split tender with change, and loyalty movement — so a test print
+/// exercises every part of the layout rather than only the easy ones.
 /// </summary>
-internal static class SampleInvoice
+/// <remarks>
+/// Shared rather than owned by the command-line tool, because the owner's screen previews the same
+/// bill. A second sample built somewhere else would drift, and the shopkeeper checking their layout
+/// before the shop opens would be checking a different document from the one the sign-off sheet
+/// asks about.
+/// </remarks>
+public static class SampleInvoice
 {
     /// <param name="taxMode">
     /// What the lane issues. A composition lane must preview the bill of supply it will actually
     /// print — previewing a tax invoice would show the shopkeeper a document they never issue, and
     /// this preview is how they check the bill before the shop opens.
     /// </param>
+    /// <param name="roundToRupee">
+    /// Whether the lane settles to the whole rupee. A preview without it would be missing the
+    /// round-off line every real bill on that lane will carry.
+    /// </param>
     public static SettledInvoice Build(
         string laneId,
         InvoiceNumberFormat? numberFormat = null,
-        TaxMode taxMode = TaxMode.Gst)
+        TaxMode taxMode = TaxMode.Gst,
+        bool roundToRupee = false)
     {
         var customer = new Customer
         {
@@ -40,7 +49,7 @@ internal static class SampleInvoice
             Line(4, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", "8901234567901", 1_299m, 5m * rate),
         ];
 
-        var totals = InvoiceTotals.From(lines);
+        var totals = InvoiceTotals.From(lines, roundToRupee);
 
         Tender[] payments =
         [
@@ -56,7 +65,7 @@ internal static class SampleInvoice
             lines,
             totals,
             payments,
-            ChangeDue: Math.Max(0m, payments.Sum(p => p.Amount) - totals.GrandTotal),
+            ChangeDue: Math.Max(0m, payments.Sum(p => p.Amount) - totals.AmountPayable),
             PointsRedeemed: 200,
             PointsEarned: 32,
             RecalledFromToken: "H007",

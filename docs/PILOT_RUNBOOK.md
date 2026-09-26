@@ -15,7 +15,7 @@ There are two, and a handful of paragraphs below depend on which one is installe
 | **GST build** | Tax invoice, or a bill of supply if set to | CGST/SGST within the state, IGST outside it |
 
 The installer's own filename says which, and so does the owner's screen under Settings (`Ctrl+D`,
-then `Ctrl+4`). Everything else in this runbook — opening, billing, closing, stock, the drawer — is
+then `Ctrl+5`). Everything else in this runbook — opening, billing, closing, stock, the drawer — is
 the same on both.
 
 A shop that registers for GST later installs the GST build over the top. Its database, settings and
@@ -51,11 +51,11 @@ machine can see. Full reference in `SETTINGS.md`.
 
 ### 3. Check the hardware
 
-```
-pos test-hardware
-```
+At the till: **Ctrl+D** for the owner's screen, **Ctrl+4** for Hardware. A button each for the
+printer, the drawer, the scanner and the scale, and one that lists the serial ports the machine can
+see. `pos test-hardware` does the same checks from a command line.
 
-Goes through each peripheral in turn. It shows what should come out of the printer *before*
+Take them one at a time. Each shows what should come out of the printer *before*
 printing, fires the drawer, and asks you to confirm what physically happened — because no software
 can see paper leave a printer.
 
@@ -85,24 +85,22 @@ pos import-items --file catalogue.csv
 
 ### 5. Check it looks right
 
-```
-pos receipt-preview
-```
+On the Hardware tab (**Ctrl+D**, then **Ctrl+4**), press **Show the bill**. No printer is needed and
+nothing is printed.
 
-Prints a sample receipt as text. Check the shop name, the GSTIN, the FSSAI number and the bill
-number, and that nothing runs off the edge. If it does, the paper width is wrong — `48` for 80mm,
-`32` for 58mm.
+Check the shop name, the GSTIN, the FSSAI number and the bill number, and that nothing runs off the
+edge. If it does, the paper width is wrong — pick 80mm or 58mm above the button to see the layout
+each one gives.
 
-**On a lane printing Tamil**, the text preview is not enough: it counts characters, and Tamil is
-drawn rather than typed. Render the actual dots and look at them:
+**On a lane printing Tamil**, that is not enough: it counts characters, and Tamil is drawn rather
+than typed. Press **Draw it as the printer will**, which renders the actual dots and shows them.
 
-```
-pos receipt-preview --png receipt.png
-```
+That image is what will come out of the printer. If any Tamil shows as `?`, the lane cannot draw it
+— the screen says why — and the shop must not open on a receipt printing `?` where its own name
+should be.
 
-Open the image. That is what will come out of the printer. If any Tamil shows as `?`, the lane
-cannot draw it — the preview says why — and the shop must not open on a receipt printing `?` where
-its own name should be.
+The same two things from a command line: `pos receipt-preview` and `pos receipt-preview --png
+receipt.png`.
 
 ---
 
@@ -285,7 +283,8 @@ report back can never accidentally take one.
 | **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
 | **Catalogue** | `Ctrl+3` | Load a price list or a whole item master from a CSV. Check the file first — it writes nothing and lists every problem by line — then import. What lands is sellable at the counter immediately. |
-| **Settings** | `Ctrl+4` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
+| **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
+| **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 
