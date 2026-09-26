@@ -176,7 +176,18 @@ DAL001,8901234567890,"Toor Dal, Premium, 1kg",0713,Pcs,189.00,189.00,5,false
 SUG001,,Sugar Loose,1701,Kg,45.00,45.00,5,true
 ```
 
-It is loaded from the owner's screen — `Ctrl+D`, then `Ctrl+3` for Catalogue. Pick the file and
+A single product goes in on the left of the same screen, for the line the shop has just started
+stocking. Type the name and it offers an HSN code and the slab that goes with it: **what the shop
+already sells first** — *your Lux Soap 100g is 3401 at 18%* — and a shipped table of common grocery
+codes behind that, for a catalogue with nothing in it yet to match against. Every suggestion says
+where it came from, nothing is filled in silently, and the shop picks. A wrong HSN prints on every
+invoice of that product for as long as the shop sells it, and no software can tell that it is wrong.
+
+The form is not a softer way in. It composes the one row it was given and hands it to the same
+importer a file goes through, so a bad check digit, a selling price above MRP or a rate that is not
+a slab is refused there exactly as it would be here.
+
+A whole file is loaded from the right of that screen — `Ctrl+D`, then `Ctrl+3` for Catalogue. Pick the file and
 press **Check the file**: it reports what would happen and writes nothing, and **Import** stays cold
 until that check comes back clean. Problems are listed by line and column, because the fix happens
 in the spreadsheet rather than at the till. The check is tied to the file and the mode it was run

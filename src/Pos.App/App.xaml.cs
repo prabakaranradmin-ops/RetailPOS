@@ -7,6 +7,7 @@ using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Catalogue;
 using Pos.Core.Domain.Printing;
 using Pos.Core.Hardware.Printing;
 using Pos.Core.Hardware.Windows;
@@ -144,12 +145,21 @@ public partial class App : Application
         // PIN is checked here rather than inside the window, so a refused attempt never gets far
         // enough to read anything.
         billingView.OwnerViewFactory = () =>
-            PinPrompt.Passes(billingView, settings.Security)
-                ? new OwnerView(
-                    BuildOwnerViewModel(settings, database, viewModel),
-                    new CatalogueImportViewModel(new ItemRepository(database)),
-                    BuildHardwareViewModel(settings))
-                : null;
+        {
+            if (!PinPrompt.Passes(billingView, settings.Security))
+                return null;
+
+            var items = new ItemRepository(database);
+
+            return new OwnerView(
+                BuildOwnerViewModel(settings, database, viewModel),
+                new CatalogueImportViewModel(items),
+                BuildHardwareViewModel(settings),
+
+                // Suggestions come off the same index the till searches on, so what the shop is
+                // offered is what the shop actually sells.
+                new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))));
+        };
 
         MainWindow = billingView;
         MainWindow.Show();

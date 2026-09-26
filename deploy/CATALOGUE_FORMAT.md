@@ -96,7 +96,18 @@ list of problems with line numbers — fix the file and run it again.
 - Thousands separators and currency prefixes: `"1,299.00"` and `Rs.1299` both work.
 - A byte order mark, which Excel adds when you "Save as CSV UTF-8".
 
-## Loading it
+## One item at a time
+
+A file is for loading a shop. For a single product the shop has just started stocking, use the left
+half of the Catalogue screen (**Ctrl+D**, then **Ctrl+3**): type the name and it offers an HSN code
+and its slab, taking what the shop already sells in preference to the built-in list of common
+grocery codes. Nothing is filled in without being shown, and every suggestion says where it came
+from — the code is the shop's responsibility and its accountant's call.
+
+That form goes through the same checks as a file. Nothing gets in by the shorter route that would
+be refused by the longer one.
+
+## Loading a whole file
 
 At the till: **Ctrl+D** for the owner's screen, then **Ctrl+3** for Catalogue. Pick the file, choose
 whether items already in the catalogue may be changed, and press **Check the file**. It reads the

@@ -288,7 +288,11 @@ public sealed class CatalogueImportViewModel : ObservableObject
         Raise(nameof(CanImport));
     }
 
-    private void RefreshHeld()
+    /// <summary>
+    /// Re-reads what the catalogue holds. Called when something else on the screen added to it, so
+    /// the count beside the import button does not go stale.
+    /// </summary>
+    public void RefreshHeld()
     {
         try
         {

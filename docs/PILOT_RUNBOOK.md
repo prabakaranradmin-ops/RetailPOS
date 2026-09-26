@@ -282,7 +282,7 @@ report back can never accidentally take one.
 |---|---|---|
 | **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
-| **Catalogue** | `Ctrl+3` | Load a price list or a whole item master from a CSV. Check the file first — it writes nothing and lists every problem by line — then import. What lands is sellable at the counter immediately. |
+| **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first. Load a price list or a whole item master from a CSV on the right: check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. |
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
 | **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 

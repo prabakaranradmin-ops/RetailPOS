@@ -412,12 +412,153 @@
 
       <!-- ==== Catalogue ==== -->
       <TabItem Header="Catalogue  (Ctrl+3)">
-        <Grid x:Name="CatalogueTab" Margin="8,12,8,8">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-          </Grid.RowDefinitions>
+        <Grid Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="440" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- One at a time -->
+          <ScrollViewer x:Name="SingleItemPanel" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
+            <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="ADD ONE ITEM" Style="{StaticResource Heading}" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
+                           Text="For a product the shop has just started stocking. It goes through exactly the same checks a file does, so nothing gets in here that would be refused there." />
+
+                <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,10" />
+
+                <!-- Offered from the name, because the name is the only field that says what the
+                     thing is. The shop's own codes come first and are marked as such. -->
+                <ItemsControl ItemsSource="{Binding HsnSuggestions}" Margin="0,0,0,10">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Click="AcceptHsn_Click" Tag="{Binding}" Padding="10,7" Margin="0,0,0,5"
+                              HorizontalContentAlignment="Left" HorizontalAlignment="Stretch">
+                        <StackPanel>
+                          <TextBlock Foreground="{StaticResource Ink}" FontWeight="SemiBold">
+                            <Run Text="HSN" /><Run Text=" " /><Run Text="{Binding HsnCode, Mode=OneWay}" />
+                            <Run Text=" · " /><Run Text="{Binding GstRate, Mode=OneWay, StringFormat={}{0:0.##}%}" />
+                          </TextBlock>
+                          <TextBlock Text="{Binding Reason, Mode=OneWay}" Style="{StaticResource Label}"
+                                     TextWrapping="Wrap" Margin="0,2,0,0" />
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Grid Margin="0,0,0,10">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="HSN code" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding HsnCode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="GST %" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding GstRate, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,10">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="SKU — your own code" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="Barcode — blank for loose" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding Barcode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,10">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="MRP" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding Mrp, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="You charge" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding SellingPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="4">
+                    <TextBlock Text="You pay" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding CostPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,10">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="Department" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="On the shelf" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding StockQty, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="4">
+                    <TextBlock Text="Warn at" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                    <TextBox Text="{Binding ReorderLevel, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </StackPanel>
+                </Grid>
+
+                <CheckBox IsChecked="{Binding IsWeighed}" Foreground="{StaticResource Ink}" Margin="0,0,0,4"
+                          Content="Sold by weight — priced per kilo on the scale" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
+                           Text="Leave &quot;on the shelf&quot; blank for anything you do not count, like loose rice out of a sack. Blank means not counted, which is not the same as none left." />
+
+                <StackPanel Orientation="Horizontal">
+                  <Button Content="_Add it" Padding="24,7" Margin="0,0,10,0" Click="AddItem_Click"
+                          IsEnabled="{Binding CanSave, Mode=OneWay}" />
+                  <Button Content="Clear" Padding="18,7" Click="ClearItem_Click" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Foreground="{StaticResource Accent}" />
+
+                <ItemsControl ItemsSource="{Binding Problems}" Margin="0,8,0,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Foreground="{StaticResource Warn}" TextWrapping="Wrap" Margin="0,0,0,3">
+                        <Run Text="{Binding Column, Mode=OneWay}" /><Run Text=": " /><Run Text="{Binding Problem, Mode=OneWay}" />
+                      </TextBlock>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </ScrollViewer>
+
+          <!-- A whole file -->
+          <Grid x:Name="CatalogueTab" Grid.Column="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
           <Border Grid.Row="0" Style="{StaticResource Card}">
             <StackPanel>
@@ -492,6 +633,7 @@
               <DataGridTextColumn Header="What is wrong with it" Binding="{Binding Problem}" Width="*" />
             </DataGrid.Columns>
           </DataGrid>
+          </Grid>
         </Grid>
       </TabItem>
 

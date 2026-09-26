@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using Pos.App.ViewModels;
 using Pos.Core.Configuration;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Catalogue;
 
 namespace Pos.App.Views;
 
@@ -20,6 +21,7 @@ public partial class OwnerView : Window
     private readonly OwnerViewModel _viewModel;
     private readonly CatalogueImportViewModel _catalogue;
     private readonly HardwareViewModel _hardware;
+    private readonly NewItemViewModel _newItem;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -27,20 +29,34 @@ public partial class OwnerView : Window
     /// </summary>
     private bool _settingUp = true;
 
-    public OwnerView(OwnerViewModel viewModel, CatalogueImportViewModel catalogue, HardwareViewModel hardware)
+    public OwnerView(
+        OwnerViewModel viewModel,
+        CatalogueImportViewModel catalogue,
+        HardwareViewModel hardware,
+        NewItemViewModel newItem)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(hardware);
+        ArgumentNullException.ThrowIfNull(newItem);
 
         InitializeComponent();
 
         _viewModel = viewModel;
         _catalogue = catalogue;
         _hardware = hardware;
+        _newItem = newItem;
         DataContext = viewModel;
 
         HardwareTab.DataContext = hardware;
+        SingleItemPanel.DataContext = newItem;
+
+        // An item added by hand changes the reorder list the same way a file does.
+        newItem.Added += (_, _) =>
+        {
+            _catalogue.RefreshHeld();
+            _viewModel.Refresh();
+        };
 
         // The catalogue tab answers to its own view model. Scoped to that one branch of the tree so
         // the rest of the window keeps binding to the figures without qualification.
@@ -212,6 +228,18 @@ public partial class OwnerView : Window
     }
 
     private void CheckCatalogue_Click(object sender, RoutedEventArgs e) => _catalogue.Check();
+
+    // ---- One item at a time ----------------------------------------------------------------------
+
+    private void AcceptHsn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: HsnSuggestion suggestion })
+            _newItem.Accept(suggestion);
+    }
+
+    private void AddItem_Click(object sender, RoutedEventArgs e) => _newItem.Save();
+
+    private void ClearItem_Click(object sender, RoutedEventArgs e) => _newItem.Clear();
 
     private void ImportCatalogue_Click(object sender, RoutedEventArgs e)
     {
