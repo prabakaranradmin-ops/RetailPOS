@@ -14,6 +14,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The real theme file, copied beside the tests and read as XML.
+
+      Not a second copy of the palette: a colour changed in App.xaml has to be answerable by
+      ThemeContrastTests, and a hard-coded table of hex values in a test would agree with the
+      screen only until somebody edited one of them. None rather than Content so the WPF targets
+      do not try to compile it a second time.
+    -->
+    <None Include="..\..\src\Pos.App\Theme.xaml" Link="Theme.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Pos.App\Pos.App.csproj" />
     <!--
       The real font engine. It is referenced here rather than only through the till because the

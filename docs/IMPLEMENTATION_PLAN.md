@@ -122,16 +122,23 @@ Decisions taken:
   peripherals get their interfaces in Phase 3 alongside their drivers; there is no value in stubs
   for features that do not exist yet.
 
-## Phase 3 — Hardware integration — **services and tests complete; hardware-in-the-loop pending devices**
+## Phase 3 — Hardware integration — **complete, gate passing**
 - `PrinterService` (ESC/POS), `DrawerService` (kick pulse), `ScannerService` (HID), `ScaleService` (serial)
 - Graceful degradation when a peripheral is missing/disconnected
-- **Gate:** Phase 3 tests — automated portion **passing**; the hardware-in-the-loop checklist item
-  stays open until it is run on a lane with devices attached. See `TESTING_STRATEGY.md`.
+- **Gate:** Phase 3 tests — automated portion **passing**; the hardware-in-the-loop portion **signed
+  off at the bench against `v1.0.0-RC3` (`b374724`)** on an Epson TM-T82 over USB, an RJ11 drawer
+  through the printer's passthrough port, a CAS scale on COM3 and a barcode scanner. The figures and
+  the completed sheet are in `TESTING_STRATEGY.md`.
 
 Everything above the wire is built and tested: the command bytes, the receipt layout, the scale
 protocol, the barcode check digits, the failure handling, and the checkout-to-print-and-kick path.
-What remains is confirming that a real printer prints and a real drawer opens, which is done with
-`pos test-hardware` on the lane.
+That a real printer prints and a real drawer opens was then confirmed on devices rather than
+inferred from the tests.
+
+**This closes the gate; it does not excuse the next lane.** The sign-off is evidence that the
+drivers work against real hardware, not that any particular shop's hardware is configured. Every
+lane still works through `deploy/HARDWARE_SIGNOFF.md` on its own devices before it trades — from
+the owner's screen (**Ctrl+D**, then **Ctrl+4**) or with `pos test-hardware`.
 
 Decisions taken:
 - **Layout lives in the hardware layer, content lives in the domain.** `ReceiptBuilder` knows about
@@ -215,10 +222,101 @@ close in the evening. These four are the minimum for it to do so.
   figures did: a shopkeeper will not open a terminal to price their shelves.
 - **Day-end close** — `Shift+F12` at the till, or `pos close-day`. At close the cashier counts the
   drawer against a figure, and there was no way to ask the till for that figure.
-- **Backup** — `pos backup-db`, and automatically as part of every close. `pos check-db` already
-  told the operator to restore from a backup that nothing created.
+- **Backup** — `Ctrl+D` then `Ctrl+6`, automatically as part of every close, or `pos backup-db`.
+  `pos check-db` already told the operator to restore from a backup that nothing created.
 - **Reprint** — `Ctrl+P`. `CheckoutService.Reprint` existed and was tested but was unreachable: no
   action, no binding, no way to find a past invoice.
+
+## The last of the command prompts — **complete** *(added 2026-09-27, approved)*
+
+The lane's upkeep was the one thing still reachable only from a command line, and the daily backup
+was the worst of it: a runbook that tells a shopkeeper to open a terminal every afternoon describes
+a step that quietly stops happening, and the step it stops happening to is the backup.
+
+A **Maintenance** tab (`Ctrl+6`) now carries backup, the integrity check and compaction, restoring a
+snapshot, and reading or reprinting any day-end report the lane has taken. The figures tab gained
+**Save as a web page…**, which writes the same page `pos dashboard --out` writes.
+
+- **`Ctrl+6`, not a renumbering.** Settings had already moved from `Ctrl+3` to `Ctrl+5` one release
+  earlier. Shortcuts a shop has learned are not free to shuffle, so the new tab went on the end.
+- **Restoring asks for the snapshot's date to be typed.** It discards every sale since that
+  snapshot; a dialog with a Yes button is answered by reflex, and the command line asks for a typed
+  `y/N` for exactly this reason. Typing the date also proves the operator read *which* snapshot they
+  picked. Changing the selection clears what was typed.
+- **Compaction stays refused until a check comes back clean**, as the command refuses it. It
+  rewrites every page, which on a damaged file is the likeliest way to lose what is left.
+- **Nothing here is new behaviour.** Every action drives the class the tool drives —
+  `DatabaseBackup`, `DatabaseRestore`, `PosDatabase.CheckIntegrity`, `IDayCloseStore`,
+  `DashboardPage` — so the screen cannot be a softer route than the command, including the refusals.
+- **The `pos` tool stays.** It is the support path, the scripted-rollout path, and the only way in
+  when the till itself will not open. Removing it would trade a convenience for a recovery path.
+
+One bug found by the tests and worth recording, because the shape of it recurs: the guard inside the
+restore job was written against `CanRestore`, which includes `!IsBusy` — and by the time the job
+runs, `IsBusy` is already true, so it refused every restore it was asked to perform. The arming
+condition is now separate from the enabled-ness of the button, and the snapshot is captured before
+the background thread starts rather than read from a bound property on it.
+
+## The figures the screen was throwing away — **complete** *(added 2026-09-27, approved)*
+
+`DashboardQuery.Gather` computed twelve pictures of the shop on every refresh; the owner's screen
+rendered seven of them. Margins, the day-by-day trend, cancelled sales, who is buying and the
+loyalty balance were reachable only by saving a web page — the same inversion the rest of this
+release existed to undo. Surfacing them needed no new queries and no new SQL.
+
+Added to `Ctrl+1`: **what the shop earned** (profit, margin, and what share of takings the figure
+can speak for), **what earns most and least**, **day by day**, **who is buying and what was
+cancelled**, the **average basket**, and the **loyalty points still owed**.
+
+- **Margins are ranked by rupees earned, not by percentage.** A wide margin on something that sells
+  twice a month earns the shop less than a thin one on rice, and a list ordered by percentage puts
+  the wrong item at the top of an owner's attention.
+- **Coverage is stated beside every margin.** `MarginPicture` already reported what share of takings
+  it could account for; that number is now on the screen rather than implied. A margin built on a
+  third of the catalogue that does not say so is worse than no margin at all.
+- **An unpriced catalogue is told, not shown a zero.** A shop reading "0.00" would conclude it
+  earned nothing rather than that nobody had said what anything cost.
+- **The trend is dense.** A day the shop did not trade is a zero, not a gap, or the chart would put
+  Monday beside Thursday and read as a steady week. Over 31 days only every nth bar is labelled.
+- **Cancelled sales are measured against everything rung up**, settled and voided together. A sale
+  stops being a settled bill the moment it is voided, so measuring against settled bills alone would
+  report a shop that cancelled its only sale as having cancelled nothing out of nothing.
+
+### The bug this uncovered
+
+`InvoiceLine.Clone()` copied thirteen fields and omitted `CategorySnapshot` and `CostSnapshot`. Both
+had been appended to the line later, and the factory's own comment notes they were made optional
+"so that adding them did not have to touch a hundred call sites" — `Clone` was a call site that
+needed touching and did not get it.
+
+`InvoiceEngine.SnapshotLines()` clones every line on its way into a settled sale, so this was not a
+hold/recall defect: **every sale ever settled through the till stored a null cost and a null
+category.** Nothing looked wrong. The bill, the tax, the totals and the receipt were all correct.
+Only the figures built on them were empty — margins had nothing to work from, and every sale the
+shop ever made filed itself under "Uncategorised".
+
+It is fixed, with a regression test at the domain boundary and another through the owner's screen.
+**The fix is not retroactive and deliberately so**: a snapshot records what was true at the moment
+of sale, and back-filling an old line from today's cost price would attribute today's buying price
+to last March's sale. Margins and departments fill in from the fix forward.
+
+### And a second one, found by the acceptance run
+
+`invoices.hold_token` changed meaning in migration 003 and one reader was never told. It was
+designed to mark a row as a parked bill; when parked bills moved to their own `held_bills` table the
+column was kept to record which parked bill a *settled* invoice was recalled from. `DashboardQuery`
+went on filtering `hold_token IS NULL` as "a real sale", so **every bill that was parked and then
+paid for vanished from the owner's figures** — and from `pos dashboard` — while the day-end report,
+which never used the column, counted it.
+
+Found when the owner's screen was added to the acceptance run. Its walkthrough parks and recalls its
+only sale, and the Maintenance tab listed a close of one bill for 495.00 while the figures tab beside
+it said the lane had sold nothing. Unlike the `Clone` fault this one *is* retroactive once fixed:
+the invoices were always stored correctly, only read wrongly, so history reappears in full.
+
+The screenshot check for that tab had passed while showing 0.00. The run now also asks the same
+query the screen uses and checks the count against the sale, because a picture that nobody reads is
+not a check.
 
 Decisions taken:
 - **Import is all or nothing, and reports every problem at once.** A partly loaded catalogue is
@@ -336,7 +434,7 @@ Release package, staged in `artifacts/lane` by `publish.ps1`:
 | `Pos.App.exe` | The till. Self-contained; needs nothing installed. |
 | `pos.exe` | The lane tool: import, close, backup, restore, void, hardware checks. |
 | `settings.json` | Template with `CHANGE ME` markers, not any developer's rig. |
-| `SETTINGS.md` | What every setting does, and which three must be right first. |
+| `SETTINGS.md` | What every setting does, and which must be right before the lane opens. |
 | `catalog_template.csv` | A worked example of the catalogue format. |
 | `CATALOGUE_FORMAT.md` | For whoever produces the store's item export. |
 | `PILOT_RUNBOOK.md` | Day-to-day guide for whoever runs the till. |
@@ -348,9 +446,12 @@ a real store name. A developer's file-printer rig reaching a store would have it
 with no receipts and nobody noticing, so it is checked rather than trusted.
 
 Still open, deliberately:
-- **Phase 3 hardware-in-the-loop.** Runs on site with `pos test-hardware` and the devices attached,
-  recorded on `deploy/HARDWARE_SIGNOFF.md`. Not simulated, not ticked.
 - The on-site pilot itself.
+
+Phase 3's hardware-in-the-loop gate is closed — signed off at the bench against `v1.0.0-RC3` on real
+devices, with the figures in `docs/TESTING_STRATEGY.md`. That is a gate on the drivers, not a
+substitute for `deploy/HARDWARE_SIGNOFF.md` being worked through on each lane's own printer, drawer
+and scale before it trades.
 
 One fault found while preparing the package, and fixed: a receipt that failed to print was logged
 but never shown to the cashier. The printer name in the template ships as a `CHANGE ME` marker

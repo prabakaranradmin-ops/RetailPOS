@@ -22,6 +22,7 @@ public partial class OwnerView : Window
     private readonly CatalogueImportViewModel _catalogue;
     private readonly HardwareViewModel _hardware;
     private readonly NewItemViewModel _newItem;
+    private readonly MaintenanceViewModel _maintenance;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -33,12 +34,14 @@ public partial class OwnerView : Window
         OwnerViewModel viewModel,
         CatalogueImportViewModel catalogue,
         HardwareViewModel hardware,
-        NewItemViewModel newItem)
+        NewItemViewModel newItem,
+        MaintenanceViewModel maintenance)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(hardware);
         ArgumentNullException.ThrowIfNull(newItem);
+        ArgumentNullException.ThrowIfNull(maintenance);
 
         InitializeComponent();
 
@@ -46,9 +49,11 @@ public partial class OwnerView : Window
         _catalogue = catalogue;
         _hardware = hardware;
         _newItem = newItem;
+        _maintenance = maintenance;
         DataContext = viewModel;
 
         HardwareTab.DataContext = hardware;
+        MaintenanceTab.DataContext = maintenance;
         SingleItemPanel.DataContext = newItem;
 
         // An item added by hand changes the reorder list the same way a file does.
@@ -130,11 +135,45 @@ public partial class OwnerView : Window
         // The till is driven from the keyboard, and so is this. Without these the only way between
         // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
-        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5)
+        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control &&
+            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
         }
+    }
+
+    // ---- Maintenance -----------------------------------------------------------------------------
+
+    private async void Backup_Click(object sender, RoutedEventArgs e) => await _maintenance.Backup();
+
+    private async void CheckDb_Click(object sender, RoutedEventArgs e) => await _maintenance.Check();
+
+    private async void Compact_Click(object sender, RoutedEventArgs e) => await _maintenance.Compact();
+
+    private async void ShowReport_Click(object sender, RoutedEventArgs e) => await _maintenance.ShowReport();
+
+    private async void Reprint_Click(object sender, RoutedEventArgs e) => await _maintenance.Reprint();
+
+    private async void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        // The typed date already armed the button. This says out loud what is about to be lost,
+        // because the number of sales involved is the part somebody has not worked out for
+        // themselves — and it is the last point at which they can stop.
+        if (MessageBox.Show(
+                this,
+                "This replaces the lane's database with the snapshot you picked.\n\n"
+                + "Every sale rung up since it was taken will be gone, including any day already "
+                + "closed on them. The database being replaced is moved aside rather than deleted.\n\n"
+                + "Close the till before doing this.",
+                "Put this snapshot back?",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning) != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        await _maintenance.Restore();
     }
 
     // ---- Hardware --------------------------------------------------------------------------------
@@ -262,6 +301,33 @@ public partial class OwnerView : Window
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _viewModel.Refresh();
+
+    private void SaveWebPage_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the figures as a web page",
+            Filter = "Web page (*.html)|*.html|Every file (*.*)|*.*",
+            FileName = $"figures-{DateTime.Now:yyyy-MM-dd}.html",
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_viewModel.SaveAsWebPage(dialog.FileName) is { } problem)
+        {
+            Say(problem);
+            return;
+        }
+
+        // Said once, at the moment the file exists. The PIN guards this screen; it cannot guard a
+        // file, and an owner who does not know that leaves their margins in the lane folder.
+        Say($"Saved to {dialog.FileName}.\n\nThat file holds the shop's turnover, margins and cost "
+            + "prices, and anyone who can open this computer can read it. Keep it somewhere private, "
+            + "and delete it once it has been sent.");
+    }
 
     private void Days_Checked(object sender, RoutedEventArgs e)
     {

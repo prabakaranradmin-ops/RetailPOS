@@ -13,6 +13,8 @@
 
   "receiptLanguage": "English",
 
+  "roundOffToRupee": true,
+
   "store": {
     "name": "CHANGE ME - Store Name",
     "addressLine1": "",

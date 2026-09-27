@@ -192,7 +192,9 @@
                      Foreground="{StaticResource Ink}" VerticalAlignment="Center" Checked="Days_Checked" Tag="30" />
         <RadioButton x:Name="Days90" Content="90 days" GroupName="Days" Margin="0,0,20,0"
                      Foreground="{StaticResource Ink}" VerticalAlignment="Center" Checked="Days_Checked" Tag="90" />
-        <Button Content="Refresh" Padding="14,6" Click="Refresh_Click" />
+        <Button Content="Refresh" Padding="14,6" Margin="0,0,10,0" Click="Refresh_Click" />
+        <Button Content="Save as a web _page…" Padding="14,6" Click="SaveWebPage_Click"
+                IsEnabled="{Binding CanSaveWebPage, Mode=OneWay}" />
       </StackPanel>
     </Grid>
 
@@ -213,6 +215,9 @@
                   <TextBlock Style="{StaticResource Label}" Margin="0,4,0,0">
                     <Run Text="{Binding PeriodBills, Mode=OneWay}" /><Run Text=" bills · " />
                     <Run Text="{Binding PeriodDiscount, Mode=OneWay}" /><Run Text=" given away" />
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Label}" Margin="0,2,0,0">
+                    <Run Text="{Binding PeriodAverageBasket, Mode=OneWay}" /><Run Text=" a basket" />
                   </TextBlock>
                 </StackPanel>
               </Border>
@@ -242,6 +247,103 @@
                 </StackPanel>
               </Border>
             </UniformGrid>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="WHAT THE SHOP EARNED" Style="{StaticResource Heading}" />
+
+                <UniformGrid Rows="1" Margin="0,0,0,4">
+                  <StackPanel Margin="0,0,16,0">
+                    <TextBlock Text="PROFIT" Style="{StaticResource Label}" />
+                    <TextBlock Text="{Binding PeriodProfit, Mode=OneWay}" Style="{StaticResource Figure}"
+                               Foreground="{StaticResource Positive}" />
+                  </StackPanel>
+                  <StackPanel Margin="0,0,16,0">
+                    <TextBlock Text="MARGIN" Style="{StaticResource Label}" />
+                    <TextBlock Text="{Binding PeriodMargin, Mode=OneWay}" Style="{StaticResource Figure}" />
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock Text="POINTS THE SHOP STILL OWES" Style="{StaticResource Label}" />
+                    <TextBlock Text="{Binding PointsOwed, Mode=OneWay}" Style="{StaticResource Figure}" />
+                    <TextBlock Text="{Binding PointsLine, Mode=OneWay}" Style="{StaticResource Label}"
+                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                  </StackPanel>
+                </UniformGrid>
+
+                <TextBlock Text="{Binding MarginCoverage, Mode=OneWay}" Style="{StaticResource Label}"
+                           TextWrapping="Wrap" Margin="0,6,0,0" />
+              </StackPanel>
+            </Border>
+
+            <Grid Margin="0,0,0,16" Visibility="{Binding HasMargins, Converter={StaticResource BoolToVisibility}}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,8,0">
+                <StackPanel>
+                  <TextBlock Text="WHAT EARNS THE MOST" Style="{StaticResource Heading}" />
+                  <ItemsControl ItemsSource="{Binding BestMargins}" ItemTemplate="{StaticResource RankedRowTemplate}" />
+                  <TextBlock Text="Ranked by rupees earned, not by percentage. A wide margin on something that sells twice a month earns the shop less than a thin one on rice."
+                             Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0">
+                <StackPanel>
+                  <TextBlock Text="WHAT EARNS THE LEAST" Style="{StaticResource Heading}" />
+                  <ItemsControl ItemsSource="{Binding WorstMargins}" ItemTemplate="{StaticResource RankedRowTemplate}" />
+                  <TextBlock Text="Worth a look before a price revision. A line that earns nothing may still be the reason somebody walks in, so this is a question rather than a verdict."
+                             Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+            </Grid>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="DAY BY DAY" Style="{StaticResource Heading}" />
+                <ItemsControl ItemsSource="{Binding Daily}" Height="150">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid Margin="1,0" ToolTip="{Binding Tooltip}">
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="*" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0">
+                          <Grid.RowDefinitions>
+                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Rest}}" />
+                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Share}}" />
+                          </Grid.RowDefinitions>
+                          <Border Grid.Row="1" CornerRadius="3,3,0,0" MinHeight="2"
+                                  Background="{StaticResource Positive}" Opacity="0.8" />
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Label}"
+                                   HorizontalAlignment="Center" Margin="0,5,0,0" FontSize="9" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="Whether the shop is growing is a question about the shape of this, not about any one day in it. Hover a bar for the bills behind it."
+                           Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="WHO IS BUYING, AND WHAT WAS CANCELLED" Style="{StaticResource Heading}" />
+                <TextBlock Text="{Binding CustomerLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                <TextBlock Text="{Binding ReturningLine, Mode=OneWay}" Style="{StaticResource Label}"
+                           TextWrapping="Wrap" Margin="0,0,0,10" />
+                <TextBlock Text="{Binding VoidLine, Mode=OneWay}" TextWrapping="Wrap" />
+                <TextBlock Text="A cancelled sale is the ordinary way to fix a mistake at the counter. It is also the shape till fraud takes, so the figure is here to be glanced at rather than gone looking for."
+                           Style="{StaticResource Label}" Margin="0,6,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
 
             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
               <StackPanel>
@@ -821,6 +923,172 @@
           </StackPanel>
         </ScrollViewer>
       </TabItem>
+      <!-- ==== Maintenance ==== -->
+      <TabItem Header="Maintenance  (Ctrl+6)">
+        <Grid x:Name="MaintenanceTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="380" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="BACK UP THE SHOP'S BOOKS" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Closing the day backs up on its own. Take one here before a price revision or a catalogue load. Every snapshot is verified before it counts as a backup." />
+
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="Keep" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Text="{Binding Keep, UpdateSourceTrigger=PropertyChanged}" Width="70" Padding="8,6" />
+                    <TextBlock Text="snapshots" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                  </StackPanel>
+
+                  <Button Content="_Back up now" Padding="14,8" HorizontalAlignment="Stretch"
+                          Click="Backup_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
+                             Text="{Binding BackupDirectory, Mode=OneWay, StringFormat=Snapshots are kept in {0}}" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="CHECK THE DATABASE" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Reads the file looking for damage. Worth doing weekly, and after any power cut." />
+
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton Content="Full" GroupName="Depth" IsChecked="{Binding Thorough}"
+                                 Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,14,0" />
+                    <RadioButton Content="Quick" GroupName="Depth"
+                                 Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
+                  </StackPanel>
+
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="_Check it" Padding="14,8" Margin="0,0,5,0"
+                            Click="CheckDb_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
+                    <Button Grid.Column="1" Content="C_ompact it" Padding="14,8" Margin="5,0,0,0"
+                            Click="Compact_Click" IsEnabled="{Binding CanCompact, Mode=OneWay}" />
+                  </Grid>
+
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
+                             Text="Compacting waits for a clean check: it rewrites every page, which on a damaged file is the surest way to finish it off." />
+                </StackPanel>
+              </Border>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="{Binding Summary, Mode=OneWay}" TextWrapping="Wrap"
+                       FontSize="15" Margin="2,0,2,10" />
+
+            <Border Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
+              <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
+                  <ItemsControl ItemsSource="{Binding Log}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" Foreground="{StaticResource Ink}"
+                                   FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                              Visibility="{Binding HasReport, Converter={StaticResource BoolToVisibility}}">
+                  <TextBlock Text="{Binding ReportText, Mode=OneWay}" Foreground="{StaticResource Ink}"
+                             FontFamily="Consolas" FontSize="12.5" />
+                </ScrollViewer>
+              </Grid>
+            </Border>
+
+            <Grid Grid.Row="2" Margin="0,12,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
+                <StackPanel>
+                  <TextBlock Text="DAY-END REPORTS ALREADY TAKEN" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Every Z-report this lane has closed. Read one on screen, or print a duplicate — a duplicate is marked as a reprint on the paper." />
+
+                  <DataGrid ItemsSource="{Binding Closes}" SelectedItem="{Binding SelectedClose}"
+                            AutoGenerateColumns="False" IsReadOnly="True" Height="140"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}"
+                            SelectionMode="Single" RowHeight="30" Margin="0,0,0,10">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="No" Binding="{Binding Id}" Width="50" />
+                      <DataGridTextColumn Header="Closed" Binding="{Binding ClosedAt, StringFormat=dd MMM HH:mm}" Width="*" />
+                      <DataGridTextColumn Header="Bills" Binding="{Binding InvoiceCount}" Width="58" />
+                      <DataGridTextColumn Header="Net" Binding="{Binding NetSales, StringFormat={}{0:N2}}" Width="92" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+
+                  <StackPanel Orientation="Horizontal">
+                    <Button Content="_Read it" Padding="16,7" Margin="0,0,10,0"
+                            Click="ShowReport_Click" IsEnabled="{Binding CanShowReport, Mode=OneWay}" />
+                    <Button Content="Print a _duplicate" Padding="16,7"
+                            Click="Reprint_Click" IsEnabled="{Binding CanShowReport, Mode=OneWay}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0">
+                <StackPanel>
+                  <TextBlock Text="PUT A SNAPSHOT BACK" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Close the till before restoring. The database being replaced is moved aside rather than deleted, so restoring the wrong one can itself be undone." />
+
+                  <DataGrid ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}"
+                            AutoGenerateColumns="False" IsReadOnly="True" Height="140"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}"
+                            SelectionMode="Single" RowHeight="30" Margin="0,0,0,10">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="170" />
+                      <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" />
+                      <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+
+                  <TextBlock Text="{Binding RestoreTarget, Mode=OneWay}" TextWrapping="Wrap"
+                             Foreground="{StaticResource Warn}" Margin="0,0,0,10" />
+
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Type the date" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}"
+                             Width="130" Padding="8,6" Margin="0,0,14,0" />
+                    <Button Content="Restore" Padding="20,7"
+                            Click="Restore_Click" IsEnabled="{Binding CanRestore, Mode=OneWay}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </Grid>
+        </Grid>
+      </TabItem>
+
     </TabControl>
 
     <!-- Footer ================================================================================ -->

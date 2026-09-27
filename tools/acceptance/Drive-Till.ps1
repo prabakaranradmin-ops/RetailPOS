@@ -21,6 +21,19 @@ public class AcceptanceWin {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+
+  // The owner's screen is a second window shown over the billing one, so a capture aimed at the
+  // billing handle would photograph whatever it is covering rather than the screen under test.
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+
+  // Which process owns the window in front - the only honest answer to "will these keystrokes
+  // reach the till". Checked by process rather than by handle, so the owner's screen, which is a
+  // second window of the same till, counts as the till.
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+
+  // A tap of Alt. Windows refuses SetForegroundWindow to a process the user is not interacting
+  // with; a synthetic keypress counts as input and lifts that lock for the next call.
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 }
 "@ -ErrorAction SilentlyContinue
 
@@ -74,8 +87,42 @@ function Invoke-TillWalkthrough {
 
     $shell = New-Object -ComObject WScript.Shell
 
+    # True when the window in front belongs to the till under test.
+    function Test-TillFocused {
+        $front = [AcceptanceWin]::GetForegroundWindow()
+        if ($front -eq [IntPtr]::Zero) { return $false }
+
+        [uint32] $owner = 0
+        [AcceptanceWin]::GetWindowThreadProcessId($front, [ref] $owner) | Out-Null
+        return $owner -eq [uint32] $proc.Id
+    }
+
+    # Keystrokes go to the till or nowhere.
+    #
+    # SendKeys types into whatever window has focus, and nothing about it knows or cares which that
+    # is. This run once typed its whole scan sequence into the developer's chat window, Enter and
+    # all, because Windows declined to hand the till focus while somebody was working in another
+    # application - and a later check then blamed a person for "scanning into the wrong window".
+    # The same fault aimed at an open email would send one. So focus is proved before every
+    # keystroke, recovered once if it has wandered, and the run stops rather than guessing.
+    function Assert-TillFocused {
+        if (Test-TillFocused) { return }
+
+        # One recovery attempt: an Alt tap lifts Windows' foreground lock, then ask again.
+        [AcceptanceWin]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+        [AcceptanceWin]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+        [AcceptanceWin]::SetForegroundWindow($handle) | Out-Null
+        Start-Sleep -Milliseconds 500
+
+        if (-not (Test-TillFocused)) {
+            throw 'TILL-NOT-FOCUSED'
+        }
+    }
+
     function Send-Keys {
         param([string] $Keys, [int] $SettleMs = 450)
+
+        Assert-TillFocused
         $shell.SendKeys($Keys)
         Start-Sleep -Milliseconds $SettleMs
     }
@@ -92,11 +139,26 @@ function Invoke-TillWalkthrough {
     }
 
     function Save-Shot {
-        param([string] $Name)
+        param(
+            [string] $Name,
+
+            # Photographs whatever is in front instead of the billing window. Used for the owner's
+            # screen, which opens over the top of it.
+            [switch] $Foreground
+        )
 
         Start-Sleep -Milliseconds 700
+
+        # Never photograph another application. The picture goes into a report that ships to shops,
+        # and whatever a developer had open - mail, a chat, a customer list - would ship with it.
+        # An empty name fails the check that asked for the shot, which is the right outcome.
+        if ($Foreground -and -not (Test-TillFocused)) { return '' }
+
+        $target = if ($Foreground) { [AcceptanceWin]::GetForegroundWindow() } else { $handle }
+        if ($target -eq [IntPtr]::Zero) { return '' }
+
         $rect = New-Object AcceptanceWin+RECT
-        [AcceptanceWin]::GetWindowRect($handle, [ref] $rect) | Out-Null
+        [AcceptanceWin]::GetWindowRect($target, [ref] $rect) | Out-Null
 
         $w = $rect.R - $rect.L
         $h = $rect.B - $rect.T
@@ -219,6 +281,145 @@ function Invoke-TillWalkthrough {
         Add-Result -Kind Positive -Feature 'Day close' -Name 'The day closes and the Z-report prints' `
             -Expected 'the day is closed and a report is printed' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
+
+        # ---------------------------------------------------------------------------------------
+        # The owner's screen.
+        #
+        # Walked last, on purpose. By now the lane has sold something, taken two tenders and closed
+        # a day, so the figures have figures in them and the day-end list has a report to list. Run
+        # first it would photograph six empty screens and call them covered.
+        # ---------------------------------------------------------------------------------------
+
+        Send-Keys '^d' 1200
+        $shot = Save-Shot 'owner-01-pin' -Foreground
+        Add-Result -Kind Negative -Feature 'Owner screen' -Name 'The owner screen asks for the PIN first' `
+            -Expected 'a PIN prompt, not the figures' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'This lane has a PIN set. A cashier reaching Ctrl+D must not see turnover, margins or cost prices.'
+
+        # Set earlier in this run, and deliberately never cleared - the clear is attempted with the
+        # wrong PIN and has to be refused.
+        Send-Keys 'Maligai26{ENTER}' 1600
+
+        $shot = Save-Shot 'owner-02-figures' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The right PIN opens the figures' `
+            -Expected 'takings, the average basket, what the shop earned, and the day by day trend' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '^2' 1100
+        $shot = Save-Shot 'owner-03-stock' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Stock shows what needs reordering' `
+            -Expected 'the reorder list, and a panel to correct a count' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '^3' 1100
+        $shot = Save-Shot 'owner-04-catalogue' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The catalogue takes one item or a whole file' `
+            -Expected 'the single-item form on the left, the file importer on the right' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # Alt+B on this tab composes the sample bill. Nothing here touches the printer or the
+        # drawer: firing either from an unattended run would put paper and noise into whatever room
+        # the machine is sitting in.
+        Send-Keys '^4' 1100
+        Send-Keys '%b' 1400
+        $shot = Save-Shot 'owner-05-hardware' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The bill can be seen without a printer' `
+            -Expected 'the sample bill composed for this lane, no hardware touched' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '^5' 1100
+        $shot = Save-Shot 'owner-06-settings' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Settings carry the PIN and what the lane issues' `
+            -Expected 'the PIN controls, and the tax mode on a GST build' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        # --- Maintenance ---------------------------------------------------------------------
+        Send-Keys '^6' 1200
+        $shot = Save-Shot 'owner-07-maintenance' -Foreground
+        Add-Result -Kind Positive -Feature 'Maintenance' -Name 'The day-end reports already taken are listed' `
+            -Expected 'the close from a moment ago, with its bills and net sales' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'A sheet that jams at closing is not a lost report; every close is stored and can be reprinted.'
+
+        # A backup taken from the screen, and proved on disk rather than from a screenshot.
+        $backups = Join-Path $Workspace 'backups'
+        $before = @(Get-ChildItem $backups -Filter 'pos-*.db' -ErrorAction SilentlyContinue).Count
+
+        Send-Keys '%b' 2500
+        $after = @(Get-ChildItem $backups -Filter 'pos-*.db' -ErrorAction SilentlyContinue).Count
+
+        $shot = Save-Shot 'owner-08-backup' -Foreground
+        Add-Result -Kind Positive -Feature 'Maintenance' -Name 'A backup can be taken from the screen' `
+            -Expected "a new verified snapshot in $backups" `
+            -Actual "$before snapshot(s) before, $after after" `
+            -Passed ($after -gt $before) -Shot $shot `
+            -Detail 'Checked on disk, not from the screen: a message saying a backup was taken is not a backup.'
+
+        Send-Keys '%c' 3000
+        $shot = Save-Shot 'owner-09-check' -Foreground
+        Add-Result -Kind Positive -Feature 'Maintenance' -Name 'The database can be checked for damage' `
+            -Expected 'a full integrity check, reporting the lane sound' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '{ESC}' 1200
+        $shot = Save-Shot 'owner-10-back-to-billing'
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Escape goes back to billing' `
+            -Expected 'the billing screen, ready to sell' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        # Every tab is a different screen.
+        #
+        # This exists because the first run of this walkthrough photographed the same tab six times
+        # and reported six passes. The build under test had no sixth tab, so Ctrl+6 did nothing and
+        # the screen stayed where it was - and a check that only asks "did a screenshot save"
+        # cannot tell that from success. Identical files mean the keystroke did not move anything.
+        $tabs = @(
+            'owner-02-figures.png', 'owner-03-stock.png', 'owner-04-catalogue.png',
+            'owner-05-hardware.png', 'owner-06-settings.png', 'owner-07-maintenance.png')
+
+        $seen = @{}
+        $repeats = @()
+
+        foreach ($file in $tabs) {
+            $path = Join-Path $Shots $file
+            if (-not (Test-Path $path)) { $repeats += "$file was never captured"; continue }
+
+            $hash = (Get-FileHash $path -Algorithm SHA256).Hash
+
+            if ($seen.ContainsKey($hash)) {
+                $repeats += "$file is pixel-identical to $($seen[$hash])"
+            }
+            else {
+                $seen[$hash] = $file
+            }
+        }
+
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Each tab shows a different screen' `
+            -Expected 'six tabs, six distinct screens' `
+            -Actual $(if ($repeats.Count -eq 0) { 'all six differ' } else { $repeats -join '; ' }) `
+            -Passed ($repeats.Count -eq 0) `
+            -Detail 'Two identical captures mean a Ctrl+N did not reach its tab, whatever the other checks say.'
+
+        Add-Result -Kind Negative -Feature 'Till' -Name 'Every keystroke reached the till and nothing else' `
+            -Expected 'the till in front before each keystroke' -Actual 'held for the whole walkthrough' `
+            -Passed $true
+    }
+    catch {
+        if ($_.Exception.Message -ne 'TILL-NOT-FOCUSED') { throw }
+
+        $front = [AcceptanceWin]::GetForegroundWindow()
+        [uint32] $owner = 0
+        [AcceptanceWin]::GetWindowThreadProcessId($front, [ref] $owner) | Out-Null
+        $thief = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+
+        Add-Result -Kind Negative -Feature 'Till' -Name 'Every keystroke reached the till and nothing else' `
+            -Expected 'the till in front before each keystroke' `
+            -Actual "focus was with $(if ($thief) { $thief } else { 'another window' }); the walkthrough stopped" `
+            -Passed $false `
+            -Detail ('Stopped rather than typing into another window. Windows will not hand focus to ' +
+                     'a background process while somebody is working elsewhere - leave the machine ' +
+                     'alone while this runs, then run it again. The checks after this point did not run.')
     }
     finally {
         Start-Sleep -Milliseconds 500

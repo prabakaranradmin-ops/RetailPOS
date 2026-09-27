@@ -167,27 +167,26 @@ blank to take the whole balance. Commit again when it is fully paid. Loyalty poi
 
 ## Mid-day — the backup
 
-Once, around the quiet part of the afternoon:
-
-```
-pos backup-db
-```
+Once, around the quiet part of the afternoon: **Ctrl+D**, then **Ctrl+6** for Maintenance, then
+**Back up now**.
 
 Takes about a second and does **not** stop anyone billing. It verifies the copy before calling it a
-backup.
+backup, and says how many snapshots are on hand.
 
 Why bother when closing also backs up: a lane that loses its database at 4pm loses the whole day
 if the last backup was last night. This costs a second.
 
-**Weekly**, before opening:
-
-```
-pos check-db
-```
+**Weekly**, before opening: same screen, **Check it**.
 
 Walks the whole file looking for damage. Takes longer on a large database, which is why it is not
 a daily job. If it reports problems, **stop** — take a copy of `%LOCALAPPDATA%\RetailPOS\pos.db`
-before touching anything, then restore from the most recent snapshot in the `backups` folder.
+before touching anything, then restore from the most recent snapshot.
+
+**Compact it** stays switched off until a check comes back clean. Compacting rewrites every page,
+which on a damaged file is the surest way to finish it off.
+
+*(Both are still `pos backup-db` and `pos check-db` from a command line, for support and for a
+scripted rollout. Nobody running a shop needs them.)*
 
 ---
 
@@ -244,9 +243,9 @@ something to fix at the till.
 
 ### 6. Backup
 
-Closing takes one automatically and says whether it worked. If it says **BACKUP FAILED**, run
-`pos backup-db` by hand and do not leave until it succeeds. The day's books are exactly what a
-lost file costs.
+Closing takes one automatically and says whether it worked. If it says **BACKUP FAILED**, take one
+by hand — **Ctrl+D**, **Ctrl+6**, **Back up now** — and do not leave until it succeeds. The day's
+books are exactly what a lost file costs.
 
 ### 7. File the report
 
@@ -257,20 +256,16 @@ On the **no-tax build** there is no slab section, because no tax was charged —
 tenders and the drawer count.
 
 **If a sheet goes missing, or the printer jammed at closing**, the report itself is not lost — every
-close is stored:
+close is stored. **Ctrl+D**, then **Ctrl+6** for Maintenance: the reports this lane has taken are
+listed with the date, the number of bills and the net. Pick one, then
 
-```
-pos close-day --list                 the reports this lane has taken
-pos close-day --show --id 12         read one back on screen, no paper
-pos close-day --reprint --id 12      print a duplicate, marked as one
-```
+- **Read it** puts it on screen, printing nothing.
+- **Print a duplicate** prints it, marked `** REPRINT **` on its face so it cannot be filed as a
+  second day's takings.
 
-Leave off `--id` and it takes the most recent. A duplicate says `** REPRINT **` on its face, so it
-cannot be filed as a second day's takings.
-
-**A mistyped option stops the command.** `pos close-day --lst` names the mistake and does nothing —
-it does not fall through to closing the day. That is true of every command, and it means reading a
-report back can never accidentally take one.
+*(Still `pos close-day --list`, `--show --id 12` and `--reprint --id 12` from a command line. A
+mistyped option stops the command — `pos close-day --lst` names the mistake and does nothing rather
+than falling through to closing the day, so reading a report back can never accidentally take one.)*
 
 ---
 
@@ -280,13 +275,21 @@ report back can never accidentally take one.
 
 | Section | | |
 |---|---|---|
-| **The figures** | `Ctrl+1` | Takings for the period and for today, cash against card and UPI, when the shop is busy, what sells, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
+| **The figures** | `Ctrl+1` | Takings for the period and for today, the average basket, **what the shop earned** (profit and margin), day by day, when the shop is busy, what sells, what earns most and least, who is buying, what was cancelled, the loyalty points still owed, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
 | **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first. Load a price list or a whole item master from a CSV on the right: check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. |
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
 | **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
+| **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
+
+**Margins need cost prices.** Profit, margin and the best/worst earner lists are worked from the
+cost recorded on each line at the moment it was sold, so they cover only items whose catalogue row
+carried a `cost_price`. The screen says what share of takings it can speak for rather than quietly
+reporting a margin for the whole shop — and where nothing carries a cost it says so instead of
+showing a profit of zero. Add a `cost_price` column and import again to fill it in **from that day
+forward**; bills already issued keep what they recorded, which was nothing.
 
 **Put a PIN on it** if a cashier uses this computer — Settings, then *Save PIN*. The screen then asks
 for it before it opens. It is stored scrambled and **cannot be recovered**, so pick something you
@@ -301,8 +304,11 @@ On the **no-tax build** there is no chooser. That build issues a bill of supply 
 charge GST, so the Settings tab says what it does instead of offering a switch it will not honour.
 A shop that registers normally installs the GST build, keeping its database, settings and backups.
 
-*(The same things are still reachable from the command line — `pos dashboard`, `pos stock`,
-`pos dashboard-pin` — for support and for scripting. Nobody running a shop needs them.)*
+**Nothing in the day-to-day running of this till needs a command prompt.** Billing, stock, the
+catalogue, the hardware checks, the figures, backups, the database check, reprinting a Z-report and
+restoring a snapshot are all on the screens above. The `pos` tool still does every one of them from
+a command line — for support, for a scripted rollout of several lanes, and as the way in if the till
+itself will not open — but a shop never has to touch it.
 
 ---
 
@@ -354,22 +360,18 @@ history is what lets you find where it went, rather than shrugging and typing a 
 The shop's figures as one HTML page: takings, the hourly rush, what sells, how people paid, and — if
 the catalogue has cost prices — margins. On the GST build it carries GST by slab too.
 
-```
-pos dashboard                       last 30 days, saved next to the database
-pos dashboard --days 90             a longer window
-pos dashboard --out D:\books.html   somewhere else
-```
+**Ctrl+D**, then **Ctrl+1** for the figures. Pick 7, 30 or 90 days. **Save as a web page…** writes
+exactly the same page, over whichever period is on screen, wherever you choose to put it — for
+sending to an accountant.
 
-It **reads without writing**, so it can be run in the middle of the afternoon while the till is
-busy. It is not part of the billing screen on purpose: turnover and margins are not something to
+It **reads without writing**, so it can be looked at in the middle of the afternoon while the till
+is busy. It is not part of the billing screen on purpose: turnover and margins are not something to
 keep one keystroke away from a customer.
 
-**If a cashier uses this computer**, put a PIN in front of it:
+*(Still `pos dashboard [--days 90] [--out D:\books.html]` from a command line.)*
 
-```
-pos dashboard-pin              set or change it
-pos dashboard-pin --clear      remove it
-```
+**If a cashier uses this computer**, put a PIN in front of it — **Ctrl+D**, **Ctrl+5** for Settings,
+then **Save PIN**. (`pos dashboard-pin` and `--clear` do the same from a command line.)
 
 It asks twice, never shows what you type, and stores only a scrambled form of it — **there is no way
 to recover a forgotten PIN**, so pick something you will remember. Changing or clearing it asks for
@@ -377,8 +379,8 @@ the current one first, so being locked out cannot be undone by whoever is locked
 
 Two things this does not do, and it is worth knowing which:
 
-- **The saved page is not protected.** The lock is on the command, not on the file it writes. Use
-  `--out` to put it somewhere private, and delete it when you are done.
+- **The saved page is not protected.** The lock is on the screen, not on the file it writes. Put it
+  somewhere private, and delete it when you are done. The screen says so each time it saves one.
 - **The database is not encrypted.** Somebody who knows their way around a computer can read
   `pos.db` directly. If the figures genuinely must be out of reach, that needs a separate Windows
   account for the owner — `SETTINGS.md` explains how.
@@ -394,7 +396,7 @@ Two things this does not do, and it is worth knowing which:
 | Scale reads nothing or will not settle | `pos test-hardware --scale`. Check the COM port and that the scale is set to stream continuously. |
 | Nothing prints | `pos test-hardware --printer`. Sales are unaffected — reprint with `Ctrl+P` once fixed. |
 | Drawer will not open | `pos test-hardware --drawer`. If it is on the printer's port, a printer fault takes the drawer with it. |
-| "Database is damaged" | Stop trading. `pos restore-db --from backups\<newest file>`. It checks the snapshot first and renames the damaged database rather than deleting it. **Everything sold since that snapshot is gone** — have the Z-reports and receipts to hand. |
+| "Database is damaged" | Stop trading. **Ctrl+D**, **Ctrl+6**, pick the newest snapshot, type its date, **Restore**. It checks the snapshot first and renames the damaged database rather than deleting it. **Everything sold since that snapshot is gone** — have the Z-reports and receipts to hand. Close the till and open it again afterwards. (`pos restore-db --from backups\<newest file>` does the same.) |
 | Something odd happened and nobody can explain it | The lane keeps a log in `logs\`, one file per day. It records startup, every sale with its tenders and cashier, peripheral failures, backups, and any crash. Send the day's file. |
 
 **Never edit `pos.db` by hand, and never delete anything in `backups`.**
@@ -437,7 +439,7 @@ Print this and tick it.
 - [ ] One item scanned and cancelled
 
 **Each afternoon**
-- [ ] `pos backup-db`
+- [ ] Back up: **Ctrl+D**, **Ctrl+6**, **Back up now**
 
 **Each night**
 - [ ] Screen clear, parked bills dealt with
@@ -448,7 +450,7 @@ Print this and tick it.
 - [ ] Z-report filed
 
 **Each week**
-- [ ] `pos check-db` before opening
+- [ ] Check the database before opening: **Ctrl+D**, **Ctrl+6**, **Check it**
 
 **Through the pilot, note down**
 - [ ] Any GST figure a customer or the accountant queried

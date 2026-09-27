@@ -1,0 +1,176 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+<!--
+  The till's look, kept apart from the application that starts it.
+
+  Split out so it can be loaded on its own. App.xaml carries x:Class, which makes it an
+  application definition rather than a plain dictionary, and WPF refuses to load one of those into
+  anything but the App it belongs to - so while the palette lived there, no test could read the
+  brushes the screen actually uses without starting the whole lane. ThemeContrastTests measures
+  these values, and a colour that stops being legible has to fail a test rather than wait to be
+  noticed on a counter.
+-->
+
+
+    <!-- High contrast on a bright shop floor, and legible at arm's length. -->
+    <SolidColorBrush x:Key="Surface" Color="#FF0A0D13" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF111722" />
+    <SolidColorBrush x:Key="SurfaceHeader" Color="#FF141C2B" />
+    <SolidColorBrush x:Key="Ink" Color="#FFF8FAFC" />
+    <SolidColorBrush x:Key="InkMuted" Color="#FF94A3B8" />
+
+    <!--
+      The quietest ink on the screen, and it still has to be legible.
+
+      It was #FF64748B, which reads well enough on a developer's monitor and measures 3.15:1 against
+      a selected row - below the 4.5:1 that normal-size text needs to stay readable on a cheap panel
+      under shop lighting. That mattered because this is not only the line number: it is the MRP
+      column, and a price nobody can quite read is worse than one that was never shown.
+
+      #FF8292A8 is the smallest step that clears 4.5:1 on every background this is drawn against. It
+      sits closer to InkMuted than it used to, which is the cost of the change; the two are still
+      distinguishable, and legibility is worth more here than the width of that gap.
+      ThemeContrastTests holds the figures and fails if either moves back.
+    -->
+    <SolidColorBrush x:Key="InkDim" Color="#FF8292A8" />
+
+    <SolidColorBrush x:Key="Accent" Color="#FF38BDF8" />
+    <SolidColorBrush x:Key="Positive" Color="#FF10B981" />
+
+    <!--
+      Money off. Was #FFF43F5E, which measured 4.09:1 on a selected row - so the one figure on the
+      line saying a customer is being charged less than the shelf price was the hardest to read on
+      the row the cashier had actually selected. Lightened to clear 4.5:1 everywhere; still
+      unmistakably red, and still never the same colour as money taken.
+    -->
+    <SolidColorBrush x:Key="Negative" Color="#FFF85D76" />
+    <SolidColorBrush x:Key="Line" Color="#FF232B38" />
+
+    <!-- The row a scan just landed on, and the tint that separates one row from the next. -->
+    <SolidColorBrush x:Key="RowActive" Color="#FF16283A" />
+    <SolidColorBrush x:Key="RowAlt" Color="#FF141A25" />
+
+    <!--
+      Figures use a monospaced face so a column of them lines up on the decimal point and a digit
+      never shifts as the value changes. Segoe UI and Cascadia Mono are both on every Windows the
+      till runs on, so nothing has to be shipped or installed for this to render.
+    -->
+    <FontFamily x:Key="FigureFont">Cascadia Mono, Consolas, Courier New</FontFamily>
+
+    <Style TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="FontFamily" Value="Segoe UI" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+
+    <!-- The stock header template paints itself light, which is illegible on this background. -->
+    <Style TargetType="DataGridColumnHeader">
+      <Setter Property="Background" Value="{StaticResource Surface}" />
+      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
+
+      <!--
+        6px, not 8. The line grid carries thirteen columns and several of them are sized by their
+        header rather than their values ("CGST %" is wider than "2.5"), so horizontal padding here
+        is multiplied thirteen times over. At 8px the row no longer fitted a 1920px till and the
+        Total column — the one figure on a line that nobody should have to scroll to see — fell off
+        the right-hand edge.
+      -->
+      <Setter Property="Padding" Value="6,6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+
+    <Style TargetType="DataGridCell">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="DataGridCell">
+            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <!--
+            A tint, not a solid fill.
+
+            The selected row used to be painted solid accent with dark text. That worked for the
+            columns set in plain ink and ruined the ones deliberately set quiet — the HSN and the
+            barcode kept their muted grey and went nearly invisible against bright blue. A tint
+            leaves every column the colour it was chosen to be and still says which row is current.
+          -->
+          <Setter Property="Background" Value="{StaticResource RowActive}" />
+
+          <!--
+            And the ink is held as well as the fill, which the tint alone did not do.
+
+            Selecting a row hands the cell the theme's highlight-text colour, which is meant for a
+            solid highlight and is close to unreadable over a tint on a dark grid. It showed only on
+            the columns that take their colour by inheritance - the item name, the quantity and the
+            rate - because every other column sets its own foreground in an ElementStyle and so was
+            never affected. The result was that selecting a line dimmed precisely the three things a
+            cashier reads off it while a customer waits.
+
+            Setting it here restores those three. The columns with an explicit foreground still win,
+            because that is set on the TextBlock itself, so the quiet ones stay quiet.
+          -->
+          <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!--
+      The side panel's sections. The bill grid has a heading row that says what each column is; the
+      panel beside it was a bare list of numbers, so the same figures were harder to find there than
+      in the grid. These give it the same structure.
+    -->
+    <Style x:Key="SectionHeading" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,1,10,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Right-aligned and tabular, so a column of figures lines up on the decimal point. -->
+    <Style x:Key="FieldValue" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Margin" Value="0,1,0,1" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Padding" Value="6,2" />
+
+      <!--
+        Without this a row is only as wide as its content, so a Grid column set to * inside an item
+        template collapses and the columns run into each other — a search result reads
+        "Sugar LooseSUG001" instead of laying the name, code and price out across the row.
+      -->
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="{StaticResource Accent}" />
+          <Setter Property="Foreground" Value="#FF06121C" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+
+</ResourceDictionary>

@@ -9,6 +9,13 @@ namespace Pos.App.ViewModels;
 /// <summary>One bar in the hourly chart, already scaled to the tallest.</summary>
 public sealed record HourBar(string Label, decimal Amount, double Fraction, string Tooltip);
 
+/// <summary>One day in the trend, already scaled to the best day in the window.</summary>
+/// <remarks>
+/// Separate from <see cref="HourBar"/> only so the two cannot be bound to each other's chart by
+/// accident: a day labelled "09" beside an hour labelled "09" would look like data, not a mistake.
+/// </remarks>
+public sealed record TrendBar(string Label, decimal Amount, double Fraction, string Tooltip);
+
 /// <summary>One row of a ranked list with a bar beside it.</summary>
 public sealed record RankedRow(string Name, string Detail, string Amount, double Fraction);
 
@@ -30,6 +37,7 @@ public sealed class OwnerViewModel : ObservableObject
     private readonly IStockStore _stock;
     private readonly Func<TaxMode, string?> _applyTaxMode;
     private readonly Func<PinCredential?, string?> _applyPin;
+    private readonly Func<int, string, string?>? _saveWebPage;
     private readonly string _laneId;
 
     private int _days = 30;
@@ -47,7 +55,11 @@ public sealed class OwnerViewModel : ObservableObject
         TaxMode taxMode,
         bool isPinSet,
         Func<TaxMode, string?> applyTaxMode,
-        Func<PinCredential?, string?> applyPin)
+        Func<PinCredential?, string?> applyPin,
+
+        // Writes the figures now on screen as a web page, for sending to an accountant. Optional so
+        // the screen still builds on a lane wired without one; the button is off when it is absent.
+        Func<int, string, string?>? saveWebPage = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(gather);
@@ -56,6 +68,7 @@ public sealed class OwnerViewModel : ObservableObject
         _stock = stock ?? throw new ArgumentNullException(nameof(stock));
         _applyTaxMode = applyTaxMode ?? throw new ArgumentNullException(nameof(applyTaxMode));
         _applyPin = applyPin ?? throw new ArgumentNullException(nameof(applyPin));
+        _saveWebPage = saveWebPage;
         _gather = () => gather(_days);
 
         TaxMode = taxMode;
@@ -67,9 +80,12 @@ public sealed class OwnerViewModel : ObservableObject
     public string LaneId => _laneId;
 
     public ObservableCollection<HourBar> Hourly { get; } = [];
+    public ObservableCollection<TrendBar> Daily { get; } = [];
     public ObservableCollection<RankedRow> TopItems { get; } = [];
     public ObservableCollection<RankedRow> Tenders { get; } = [];
     public ObservableCollection<RankedRow> Categories { get; } = [];
+    public ObservableCollection<RankedRow> BestMargins { get; } = [];
+    public ObservableCollection<RankedRow> WorstMargins { get; } = [];
     public ObservableCollection<GstSlab> GstSlabs { get; } = [];
     public ObservableCollection<StockLevel> Stock { get; } = [];
 
@@ -79,8 +95,47 @@ public sealed class OwnerViewModel : ObservableObject
     public string PeriodDigital { get; private set; } = "0.00";
     public string PeriodDiscount { get; private set; } = "0.00";
 
+    /// <summary>What a customer spends per visit — computed already, never shown until now.</summary>
+    public string PeriodAverageBasket { get; private set; } = "0.00";
+
     public string TodayNetSales { get; private set; } = "0.00";
     public string TodayBills { get; private set; } = "0";
+
+    // ---- What the shop earned, as opposed to what it took ----------------------------------------
+
+    /// <summary>Takings less cost, over the items that carried a cost price.</summary>
+    public string PeriodProfit { get; private set; } = "0.00";
+
+    /// <summary>That profit as a share of what those items sold for.</summary>
+    public string PeriodMargin { get; private set; } = "—";
+
+    /// <summary>
+    /// How much of the window's takings the margin figures can honestly speak for.
+    /// </summary>
+    /// <remarks>
+    /// Shown beside every margin on this screen rather than tucked away. An owner who reads a margin
+    /// built on a third of the catalogue and believes it covers the shop will make a confident bad
+    /// decision, and the figure itself gives no hint either way.
+    /// </remarks>
+    public string MarginCoverage { get; private set; } = string.Empty;
+
+    /// <summary>False when no item sold in the window carried a cost price at all.</summary>
+    public bool HasMargins { get; private set; }
+
+    // ---- Cancelled sales -------------------------------------------------------------------------
+
+    public string VoidLine { get; private set; } = string.Empty;
+    public bool HasVoids { get; private set; }
+
+    // ---- Who is buying ---------------------------------------------------------------------------
+
+    public string CustomerLine { get; private set; } = string.Empty;
+    public string ReturningLine { get; private set; } = string.Empty;
+
+    // ---- Loyalty, and what it owes ---------------------------------------------------------------
+
+    public string PointsLine { get; private set; } = string.Empty;
+    public string PointsOwed { get; private set; } = "0";
 
     public string ReadIn { get; private set; } = string.Empty;
 
@@ -268,19 +323,53 @@ public sealed class OwnerViewModel : ObservableObject
         PeriodCash = Money(d.Range.Cash);
         PeriodDigital = Money(d.Range.Digital);
         PeriodDiscount = Money(d.Range.Discount);
+        PeriodAverageBasket = Money(d.Range.AverageBasket);
 
         TodayNetSales = Money(d.Today.NetSales);
         TodayBills = d.Today.Bills.ToString("N0", Indian);
 
         ReadIn = $"read in {d.Elapsed.TotalMilliseconds:N0} ms";
 
+        FillMargins(d);
+        FillVoids(d);
+        FillCustomers(d);
+        FillPoints(d);
+
         foreach (var name in new[]
                  {
                      nameof(PeriodNetSales), nameof(PeriodBills), nameof(PeriodCash), nameof(PeriodDigital),
-                     nameof(PeriodDiscount), nameof(TodayNetSales), nameof(TodayBills), nameof(ReadIn),
+                     nameof(PeriodDiscount), nameof(PeriodAverageBasket), nameof(TodayNetSales),
+                     nameof(TodayBills), nameof(ReadIn),
+                     nameof(PeriodProfit), nameof(PeriodMargin), nameof(MarginCoverage), nameof(HasMargins),
+                     nameof(VoidLine), nameof(HasVoids),
+                     nameof(CustomerLine), nameof(ReturningLine),
+                     nameof(PointsLine), nameof(PointsOwed),
                  })
         {
             Raise(name);
+        }
+
+        // The trend. Bills per day would be a flatter, less useful line than what they came to, so
+        // the bar is takings and the count rides along in the tooltip.
+        Daily.Clear();
+        var bestDay = d.Daily.Count == 0 ? 0m : d.Daily.Max(p => p.NetSales);
+
+        // The series is dense — a day the shop did not trade is a zero rather than a gap, or the
+        // chart would put Monday beside Thursday and read as a steady week. That makes ninety bars
+        // at the longest setting, so only every nth one is labelled; the rest keep their bar and
+        // their tooltip. Labels under all ninety would be a grey smear.
+        var every = d.Daily.Count <= 31 ? 1 : (d.Daily.Count + 14) / 15;
+
+        for (var i = 0; i < d.Daily.Count; i++)
+        {
+            var day = d.Daily[i];
+
+            Daily.Add(new TrendBar(
+                i % every == 0 ? day.Date.ToString("dd MMM", Indian) : string.Empty,
+                day.NetSales,
+                bestDay == 0m ? 0 : (double)(day.NetSales / bestDay),
+                $"{day.Date.ToString("ddd dd MMM", Indian)} — {Money(day.NetSales)} over {day.Bills} bill(s)"
+                + (day.Discount > 0m ? $", {Money(day.Discount)} discounted" : string.Empty)));
         }
 
         Hourly.Clear();
@@ -342,6 +431,130 @@ public sealed class OwnerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// What the shop earned, and an honest account of how much of the shop that covers.
+    /// </summary>
+    /// <remarks>
+    /// Margins exist only where an item carried a cost price at the moment it was sold, which on a
+    /// catalogue loaded without a <c>cost_price</c> column is nowhere at all. That case shows as a
+    /// sentence saying so, not as a profit of zero — a shop reading zero would conclude it earned
+    /// nothing rather than that nobody had told the software what anything cost.
+    /// </remarks>
+    private void FillMargins(DashboardData d)
+    {
+        var priced = d.Margins.Priced;
+
+        HasMargins = priced.Count > 0;
+
+        BestMargins.Clear();
+        WorstMargins.Clear();
+
+        if (!HasMargins)
+        {
+            PeriodProfit = "—";
+            PeriodMargin = "—";
+            MarginCoverage = d.Margins.UnpricedItems == 0
+                ? "No item sold in this period carried a cost price, so there is nothing to work a margin from."
+                : $"None of the {d.Margins.UnpricedItems} item(s) sold carried a cost price. Add a cost_price "
+                  + "column to the catalogue and import it again to see what the shop earns.";
+            return;
+        }
+
+        var profit = priced.Sum(i => i.Profit);
+        var pricedSales = d.Margins.PricedSales;
+
+        PeriodProfit = Money(profit);
+        PeriodMargin = pricedSales == 0m
+            ? "—"
+            : (profit / pricedSales * 100m).ToString("N1", Indian) + "%";
+
+        MarginCoverage = d.Margins.UnpricedItems == 0
+            ? $"Covers all {Money(pricedSales)} of this period's takings."
+            : $"Covers {d.Margins.Coverage.ToString("N1", Indian)}% of takings — {d.Margins.UnpricedItems} item(s) "
+              + $"worth {Money(d.Margins.UnpricedSales)} carry no cost price and are left out.";
+
+        // Ranked by what each item actually earned rather than by its percentage. A 60% margin on
+        // something that sells twice a month is a worse use of shelf space than 8% on rice, and a
+        // list ordered by percentage puts the wrong one at the top.
+        Rank(BestMargins, priced.OrderByDescending(i => i.Profit).Take(6));
+        Rank(WorstMargins, priced.OrderBy(i => i.Profit).Take(6));
+
+        void Rank(ObservableCollection<RankedRow> into, IEnumerable<ItemPerformance> items)
+        {
+            var rows = items.ToList();
+            var widest = rows.Count == 0 ? 0m : rows.Max(i => Math.Abs(i.Profit));
+
+            foreach (var item in rows)
+            {
+                into.Add(new RankedRow(
+                    item.Name,
+                    $"{item.MarginPercent.ToString("N1", Indian)}% on {item.Quantity.ToString("0.###", Indian)} sold",
+                    Money(item.Profit),
+                    widest == 0m ? 0 : (double)(Math.Abs(item.Profit) / widest)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sales that were rung up and then cancelled.
+    /// </summary>
+    /// <remarks>
+    /// Shown even when the figure is small. A void is the ordinary correction for a mistake at the
+    /// counter, and it is also the shape a till fraud takes; the point of putting it on the owner's
+    /// screen is that a number which climbs is visible without anybody going looking for it.
+    /// </remarks>
+    private void FillVoids(DashboardData d)
+    {
+        HasVoids = d.Voids.Count > 0;
+
+        // Against everything rung up, not against what survived. A voided sale stops being a settled
+        // bill the moment it is cancelled, so measuring it against settled bills alone would report
+        // a shop that cancelled its only sale as having cancelled nothing out of nothing.
+        var rungUp = d.Range.Bills + d.Voids.Count;
+
+        VoidLine = d.Voids.Count == 0
+            ? "No sale was cancelled in this period."
+            : $"{d.Voids.Count} sale(s) cancelled, {Money(d.Voids.Value)} in all"
+              + (rungUp == 0
+                  ? "."
+                  : $" — {((decimal)d.Voids.Count / rungUp * 100m).ToString("N1", Indian)}% of bills rung up.");
+    }
+
+    private void FillCustomers(DashboardData d)
+    {
+        var mix = d.Customers;
+
+        CustomerLine = mix.TotalBills == 0
+            ? "No bills in this period."
+            : $"{mix.IdentifiedBills} of {mix.TotalBills} bill(s) went to somebody the shop knows "
+              + $"({Money(mix.IdentifiedSales)}), the rest to walk-ins ({Money(mix.WalkInSales)}).";
+
+        ReturningLine = mix.DistinctCustomers == 0
+            ? "No customer was identified by mobile number, so there is nothing to tell about regulars."
+            : $"{mix.DistinctCustomers} customer(s) seen, {mix.ReturningCustomers} of them more than once"
+              + (mix.DistinctCustomers == 0
+                  ? "."
+                  : $" ({((decimal)mix.ReturningCustomers / mix.DistinctCustomers * 100m).ToString("N0", Indian)}% came back).");
+    }
+
+    /// <summary>
+    /// Loyalty in and out, and what the scheme still owes.
+    /// </summary>
+    /// <remarks>
+    /// <c>OutstandingBalance</c> is the one figure here that is a liability rather than a
+    /// performance: every point enrolled customers hold can be spent against a future bill, and a
+    /// shop that has never seen the total has no idea what it has promised away.
+    /// </remarks>
+    private void FillPoints(DashboardData d)
+    {
+        PointsOwed = d.Points.OutstandingBalance.ToString("N0", Indian);
+
+        PointsLine = d.Points.Earned == 0 && d.Points.Redeemed == 0
+            ? "No points were earned or spent in this period."
+            : $"{d.Points.Earned.ToString("N0", Indian)} earned, "
+              + $"{d.Points.Redeemed.ToString("N0", Indian)} spent in this period.";
+    }
+
     private void LoadStock()
     {
         Stock.Clear();
@@ -387,6 +600,32 @@ public sealed class OwnerViewModel : ObservableObject
 
         LoadStock();
         return null;
+    }
+
+    /// <summary>True when this lane can write the figures out as a page.</summary>
+    public bool CanSaveWebPage => _saveWebPage is not null;
+
+    /// <summary>
+    /// Writes the figures now on screen as a web page, over the same period the screen is showing.
+    /// </summary>
+    /// <remarks>
+    /// The page carries turnover, margins and cost prices, and it is an ordinary file once written —
+    /// the PIN that guards this screen cannot follow it out. Whoever saves it chooses where, and the
+    /// screen says so rather than leaving it somewhere predictable by default.
+    /// </remarks>
+    /// <returns>What went wrong, or null when it was written.</returns>
+    public string? SaveAsWebPage(string path)
+    {
+        if (_saveWebPage is null)
+            return "Saving the figures as a page is not set up on this lane.";
+
+        if (string.IsNullOrWhiteSpace(path))
+            return "Choose where to save it first.";
+
+        var problem = _saveWebPage(_days, path);
+
+        Status = problem ?? $"Saved the last {_days} days to {path}.";
+        return problem;
     }
 
     private static string Money(decimal value) => value.ToString("N2", Indian);

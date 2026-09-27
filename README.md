@@ -85,9 +85,19 @@ run-acceptance
 ```
 
 Drives the shipped executables end to end — catalogue import, search, billing, weighed lines,
-discounts, hold and recall, split tender, reprint, day close — photographs the till at each step,
-and writes `artifacts\acceptance\acceptance-report.html`: one self-contained file with the
-screenshots embedded.
+discounts, hold and recall, split tender, reprint, day close, and then the owner's screen: the PIN
+in front of it, the figures, stock, the catalogue, the bill preview, settings and maintenance —
+photographs each step, and writes `artifacts\acceptance\acceptance-report.html`: one self-contained
+file with the screenshots embedded.
+
+The owner's screen is walked **last**, once the lane has sold something and closed a day, so the
+figures have figures in them and the day-end list has a report to list. Run first it would
+photograph six empty screens and call them covered.
+
+**A screenshot is not a check.** Two of these assert on something other than the picture: a backup
+taken from the screen has to appear in the lane's backup folder, and the six tab captures have to
+differ from one another. Both exist because the first version of this walkthrough photographed the
+same tab six times, against a build whose sixth tab did not exist yet, and reported six passes.
 
 Checks are reported in two sections, because they fail for opposite reasons. A **positive** check
 failing means something is broken. A **negative** check failing means something that should have
@@ -328,10 +338,15 @@ Copy the folder to the lane, then:
 
 ```
 1. copy settings.json to %LOCALAPPDATA%\RetailPOS\ and edit it   (see SETTINGS.md)
-2. pos test-hardware                                             (see HARDWARE_SIGNOFF.md)
-3. pos import-items --file catalogue.csv --dry-run, then for real
-4. Pos.App.exe
+2. Pos.App.exe, then Ctrl+D for the owner's screen
+3. Ctrl+4  check the printer, drawer and scale, and look at the bill
+4. Ctrl+3  add items one at a time, or load a catalogue file
 ```
+
+Everything a shop does day to day is on those screens — billing, stock, the catalogue, the hardware
+checks, the figures, backups, the database check, reprinting a Z-report, restoring a snapshot. The
+`pos` tool does all of it from a command line too, for support and for a scripted rollout, and it is
+the way in when the till itself will not open.
 
 ## Checking the hardware
 
@@ -344,7 +359,19 @@ They are kept out of the billing screen and behind the owner's PIN because check
 means printing test pages and firing drawers, which is not something to leave where a cashier can
 reach it mid-sale.
 
-The same checks run from a command line, for support and for a scripted rollout. Both drive one
+## Looking after the lane
+
+From the owner's screen — `Ctrl+D`, then `Ctrl+6` for Maintenance. Back up now, check the database
+for damage and compact it, read or reprint any day-end report the lane has taken, and put a snapshot
+back if the database is damaged.
+
+Restoring asks for the snapshot's own date to be typed rather than offering a Yes button. It throws
+away every sale rung up since that snapshot, and a question answered by reflex is the wrong guard
+for that; the command line asks for a typed `y/N` for the same reason. Compacting stays switched off
+until a check comes back clean, because it rewrites every page — on a damaged file that is the
+surest way to finish it off.
+
+The same work runs from a command line, for support and for a scripted rollout. Both drive one
 implementation, so a lane signed off from the window is the lane the sign-off sheet describes:
 
 ```
@@ -356,6 +383,8 @@ pos test-hardware                      # every configured peripheral
 pos test-hardware --printer --drawer   # just these
 pos receipt-preview --width 32         # render a sample receipt, no hardware needed
 pos list-ports                         # what serial ports this machine can see
+pos restore-db --from backups\<file>   # put a snapshot back, checked first
+pos dashboard [--days 90] [--out …]    # the figures as a web page
 ```
 
 The printer and drawer checks show what should happen, do it, then ask the operator to confirm what

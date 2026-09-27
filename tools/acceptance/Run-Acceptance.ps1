@@ -643,6 +643,23 @@ if (-not $NoUi) {
         -Passed $refusedAfterClose `
         -Detail 'The day has been filed. Changing a figure somebody has already acted on is not a correction.'
 
+    # The owner's figures agree with the till.
+    #
+    # The sale above was parked and recalled before it was paid for, and that is the case the
+    # figures once got wrong: a recalled sale carries the token it was parked under, the dashboard
+    # read that token as "not a sale", and the owner's screen reported a lane that had sold nothing
+    # beside a day-end report of one bill for 495.00. A screenshot of the figures tab passed while
+    # showing 0.00, so this asks the same query the screen uses, and checks the number.
+    $afterSale = Join-Path $workspace 'dashboard-after-sale.html'
+    $r = Invoke-Pos @('dashboard', '--out', $afterSale) -StdIn @('Maligai26')
+    $countsIt = $r.Output -match 'Bills\s*:\s*1\b'
+    $valuesIt = $r.Output -match 'Net sales\s*:\s*495\.'
+
+    Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The figures count a sale that was parked first' `
+        -Expected 'one bill, 495 — the same sale the day-end report closed' `
+        -Actual (Short $r.Output 6) -Passed ($countsIt -and $valuesIt) `
+        -Detail 'Parking is ordinary at a counter. A sale that spent a minute parked is still a sale.'
+
     $r = Invoke-Pos @('close-day', '--preview')
     $nothingLeft = $r.Output -match 'விற்பனை இல்லை|NO SALES'
     Add-Result -Kind Positive -Feature 'Day close' -Name 'The day really did close' `

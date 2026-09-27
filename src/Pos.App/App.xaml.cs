@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 using Pos.App.Input;
 using Pos.App.ViewModels;
@@ -158,7 +159,9 @@ public partial class App : Application
 
                 // Suggestions come off the same index the till searches on, so what the shop is
                 // offered is what the shop actually sells.
-                new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))));
+                new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))),
+
+                BuildMaintenanceViewModel(settings, database, heldBills, printer));
         };
 
         MainWindow = billingView;
@@ -216,6 +219,31 @@ public partial class App : Application
                 return null;
             },
 
+            // Rendered by the same page the `pos dashboard` command writes, so a shop that sends one
+            // to its accountant sends the same document either way.
+            saveWebPage: (days, path) =>
+            {
+                try
+                {
+                    var to = DateTimeOffset.Now;
+                    var from = new DateTimeOffset(to.Date.AddDays(-(days - 1)), to.Offset);
+                    var data = new DashboardQuery(database).Gather(settings.LaneId, from, to, topItems: 10);
+
+                    if (Path.GetDirectoryName(path) is { Length: > 0 } folder)
+                        Directory.CreateDirectory(folder);
+
+                    File.WriteAllText(path, DashboardPage.Render(data, settings.Store.Name), new UTF8Encoding(true));
+
+                    _log?.Info("owner", $"figures for {days} days saved to {path}");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("owner", "could not save the figures as a page", ex);
+                    return $"Could not save it: {ex.Message}";
+                }
+            },
+
             applyPin: credential =>
             {
                 try
@@ -242,6 +270,33 @@ public partial class App : Application
     /// through a different path from a sale would be checking the wrong thing, but it must also not
     /// be able to disturb the one the counter is using mid-queue.
     /// </remarks>
+    /// <summary>
+    /// Wires the upkeep screen: backups, the database's health, restoring, and the day-end reports
+    /// already taken.
+    /// </summary>
+    /// <remarks>
+    /// The printer is the lane's own, the same one the till settles onto, so a duplicate Z-report
+    /// comes out of the machine the original did. A lane with no printer configured gets a message
+    /// saying so rather than a throw — the rest of the screen still works without one.
+    /// </remarks>
+    private MaintenanceViewModel BuildMaintenanceViewModel(
+        PosSettings settings,
+        PosDatabase database,
+        HeldBillRepository heldBills,
+        IPrinterService printer) =>
+        new(
+            database,
+            DataDirectory,
+            new DayCloseRepository(database, heldBills),
+            new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage, settings.TaxMode),
+            settings.LaneId,
+
+            print: report => printer.IsConfigured
+                ? printer.Print(report.ToEscPos(raster: printer.Raster))
+                : new PrintOutcome(PrintStatus.NoPrinterConfigured, "This lane has no printer configured, so there is nothing to print to."),
+
+            post: action => Dispatcher.Invoke(action));
+
     private HardwareViewModel BuildHardwareViewModel(PosSettings settings) =>
         new(
             settings,

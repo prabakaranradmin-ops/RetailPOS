@@ -68,7 +68,15 @@ $suffix = if ($noTax) { '-NoTax' } else { '-GST' }
 
 if (-not $SkipBuild) {
     Write-Host "Building the $Variant installer first..." -ForegroundColor Cyan
-    & (Join-Path $here 'build-installer.ps1') -Variant $Variant
+
+    # -Version has to reach the build, not just name the folder. Without this, asking for a version
+    # built whatever the git tag said and then labelled the shipment with what was asked for, so a
+    # folder could say 1.6.0 around an installer stamped something else — and the stamp is what a
+    # lane reports when somebody asks which build it is running.
+    $build = @{ Variant = $Variant }
+    if ($Version) { $build.Version = $Version }
+
+    & (Join-Path $here 'build-installer.ps1') @build
     if ($LASTEXITCODE -ne 0) { throw 'The installer build failed; there is nothing to ship.' }
     Write-Host ''
 }
@@ -249,7 +257,8 @@ WHAT IS IN THIS FOLDER
   so it needs a browser and nothing else.
 
   docs\PILOT_RUNBOOK.html    Day-to-day guide. Read this first.
-  docs\SETTINGS.html         Every setting, and which four must be right.
+  docs\SETTINGS.html         Every setting, and which must be right
+                             before the lane opens.
   docs\CATALOGUE_FORMAT.html The item list format, column by column.
   docs\HARDWARE_SIGNOFF.html Bench sheet. Print it and tick it.
   docs\FEATURES.html         Every feature, driven end to end on this exact
@@ -286,26 +295,72 @@ THE ORDER TO DO THINGS IN
      The till will not open until this is done. It names any field
      you missed.
 
-  3. Check the hardware. Open "RetailPOS commands" from the Start
-     Menu, then:
+  3. Check the hardware. Open the till from the desktop shortcut,
+     press Ctrl+D for the owner's screen, then Ctrl+4 for Hardware.
 
-        pos.exe receipt-preview --png preview.png
-        pos.exe test-hardware
+     Test the printer, the drawer and the scale one at a time. Each
+     one says what SHOULD happen before it fires, then asks you what
+     actually happened - no software can see paper leave a printer.
 
-     Look at preview.png BEFORE printing anything. If any Tamil shows
-     as ? or as strange Latin letters, stop - the preview says why.
+     Press "Draw it as the printer will" and look at the picture
+     BEFORE printing anything. If any Tamil shows as ? or as strange
+     Latin letters, stop - the preview says why.
 
      Work through docs\HARDWARE_SIGNOFF.html and keep the sheet.
 
-  4. Load the catalogue.
+  4. Load the catalogue. Still on the owner's screen, press Ctrl+3
+     for Catalogue.
 
+     Right-hand side loads a whole file: pick it, then press
+     "Check the file". It says what WOULD happen and writes nothing.
+     Import only wakes up once that check comes back clean. If it
+     reports problems, nothing was written and the catalogue is
+     exactly as it was - fix the spreadsheet and check it again.
+
+     Left-hand side adds one item at a time. Type the name and it
+     offers an HSN code and its tax rate, preferring codes the shop
+     already uses. Nothing is filled in without being shown to you.
+
+  5. Open the till and ring up a test sale.
+
+     Check the total against the shelf price. Bills settle to the
+     whole rupee by default - Rs.94.50 is taken as Rs.94, with a
+     "Round off" line on the bill so the customer can see it. The
+     tax and the taxable value are untouched. Turn it off in
+     settings.json with "roundOffToRupee": false.
+
+
+
+LOOKING AFTER IT
+
+  Ctrl+D, then Ctrl+6 for Maintenance.
+
+     Back up now         once a quiet afternoon. Closing the day
+                         also backs up automatically.
+     Check it            weekly, before opening. Stop if it
+                         reports problems.
+     Day-end reports     read or reprint any Z-report already
+                         taken, if a sheet goes missing.
+     Restore             put a snapshot back if the database is
+                         damaged. Asks you to type the snapshot's
+                         date, because it throws away every sale
+                         rung up since it was taken.
+
+  Nothing in the day-to-day running of this till needs a command
+  prompt.
+
+
+  ALL OF THE ABOVE STILL WORKS FROM A COMMAND LINE, for support
+  and for setting up several lanes from a script. Open "RetailPOS
+  commands" from the Start Menu:
+
+        pos.exe test-hardware
+        pos.exe receipt-preview --png preview.png
         pos.exe import-items --file catalogue.csv --dry-run
         pos.exe import-items --file catalogue.csv
-
-     Always dry-run first. If it reports problems, NOTHING was
-     imported and the catalogue is exactly as it was.
-
-  5. Open the till from the desktop shortcut and ring up a test sale.
+        pos.exe backup-db
+        pos.exe check-db
+        pos.exe close-day --list
 
 
 IF THIS MACHINE HAS TRADED BEFORE

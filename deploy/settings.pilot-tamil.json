@@ -16,6 +16,8 @@
 
   "receiptLanguage": "Tamil",
 
+  "roundOffToRupee": true,
+
   "store": {
     "name": "FILL IN - the shop name, in Tamil",
     "addressLine1": "FILL IN",
