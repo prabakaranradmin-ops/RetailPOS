@@ -106,8 +106,24 @@ public sealed class InvoiceLine
 
     /// <summary>
     /// Copies this line, including its quantity and discount. Used by hold/recall so a parked
-    /// bill is restored to exactly the state it was parked in.
+    /// bill is restored to exactly the state it was parked in, and by
+    /// <see cref="InvoiceEngine.SnapshotLines"/> on the way into every settled sale.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Every field belongs here.</strong> This is not only a hold/recall helper — the
+    /// checkout clones each line on its way to being saved, so anything this misses is not merely
+    /// lost from a parked bill, it never reaches the database at all.
+    /// </para>
+    /// <para>
+    /// That is exactly what happened to <see cref="CategorySnapshot"/> and
+    /// <see cref="CostSnapshot"/>. Both were appended to the line later and every other call site
+    /// was updated; this one was not, so every sale settled through the till stored a null category
+    /// and a null cost. Nothing failed — the bill, the tax and the receipt were all correct — but
+    /// the margin figures had nothing to work from and every sale filed itself as Uncategorised.
+    /// A field added to this class has to be added here too.
+    /// </para>
+    /// </remarks>
     public InvoiceLine Clone() => new()
     {
         ItemId = ItemId,
@@ -123,6 +139,8 @@ public sealed class InvoiceLine
         Quantity = Quantity,
         Discount = Discount,
         IsInterState = IsInterState,
+        CategorySnapshot = CategorySnapshot,
+        CostSnapshot = CostSnapshot,
     };
 
     /// <summary>

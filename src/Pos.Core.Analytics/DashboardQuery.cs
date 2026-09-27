@@ -39,14 +39,23 @@ public sealed class DashboardQuery(PosDatabase database)
     private static string Paise0(string column) => string.Format(CultureInfo.InvariantCulture, Paise, column);
 
     /// <summary>
-    /// A settled sale: not voided, and not a parked bill waiting to be recalled.
+    /// A settled sale: anything in <c>invoices</c> that has not been voided.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Voided invoices keep their row and their number — that is what makes the run auditable — but
     /// they are not takings and must not reach a single figure on this page. They get a count and a
     /// value of their own instead.
+    /// </para>
+    /// <para>
+    /// <strong><c>hold_token</c> is not a filter.</strong> It once marked a row as a parked bill,
+    /// but migration 003 moved parked bills to <c>held_bills</c> — a parked bill never has a row
+    /// here at all — and the column now records which parked bill a <em>settled</em> invoice was
+    /// recalled from. Filtering on it dropped every sale that had been parked and then paid for:
+    /// the day-end report counted it and this page said the lane had sold nothing.
+    /// </para>
     /// </remarks>
-    private const string Settled = "i.voided_at IS NULL AND i.hold_token IS NULL";
+    private const string Settled = "i.voided_at IS NULL";
 
     public DashboardData Gather(string laneId, DateTimeOffset from, DateTimeOffset to, int topItems = 10)
     {
@@ -175,7 +184,7 @@ public sealed class DashboardQuery(PosDatabase database)
                    COALESCE(SUM(i.points_earned), 0),
                    COALESCE(SUM(i.points_redeemed), 0)
             FROM invoices i
-            WHERE i.lane_id = $lane AND i.hold_token IS NULL
+            WHERE i.lane_id = $lane
               AND i.created_at >= $from AND i.created_at < $to
             GROUP BY day, hour, identified, voided;
             """);
