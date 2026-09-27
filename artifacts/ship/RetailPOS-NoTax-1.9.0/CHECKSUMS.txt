@@ -1,0 +1,15 @@
+RetailPOS 1.9.0
+Variant: no tax - issues bills of supply
+Built 2026-09-27 20:03
+
+SHA-256:
+e55211b8187843e5144e23251701ecc93ee0b14cab17c0a404e4e173491ec774  docs\CATALOGUE_FORMAT.html
+9e8a015f47dc2c3e0c08b11f64261271c8a5f6bd799a06688301a5c0b32ca553  docs\FEATURES.html
+d21499c45fa5dd3771c6df69e702f68cd4777c9c01f626d92d32def080be4a8e  docs\HARDWARE_SIGNOFF.html
+67896f489fd93516b321a3d43327ec0201a4c58d306114e1ac879b9390061f9b  docs\PILOT_RUNBOOK.html
+1afdbf353380cbaf49c0433e21c8c24f75d9a2471122ae3963c6a84e632753d1  docs\SETTINGS.html
+f572be0e6a1f3da7f9bede3207de9c855c088f232fbcbbd2dca8e0396fdc5dcf  RetailPOS-NoTax-Setup-1.9.0.exe
+57066c22c38a31ebae2221bdeb437cbb3380c12835723c18adf9ad615ffd9a4e  START-HERE.txt
+73a8f57077d4085f0a81a7f1ffb81d82bfce2638a1af58b425dcf7acf0a6c270  templates\catalog_template.csv
+533f11b77e21b7b27420f43265ccf5037f35867e79b0b305106237dceef98a19  templates\settings.json
+e2997a01f82144bc0a95cbab86dcd22d5db5c5d3c386ab8b07296489884ce8ba  templates\settings.pilot-tamil.json

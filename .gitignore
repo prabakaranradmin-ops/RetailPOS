@@ -21,8 +21,8 @@ artifacts/*
 # and the shipment moves to a GitHub Release, where the cap is 2 GB.
 !artifacts/ship/
 artifacts/ship/*
-!artifacts/ship/RetailPOS-GST-1.4.3/
-!artifacts/ship/RetailPOS-NoTax-1.4.3/
+!artifacts/ship/RetailPOS-GST-1.9.0/
+!artifacts/ship/RetailPOS-NoTax-1.9.0/
 
 # The assembled Pages site. Generated from artifacts/ship on every deploy, never edited.
 _site/
