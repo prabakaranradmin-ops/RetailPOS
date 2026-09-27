@@ -318,6 +318,58 @@ The screenshot check for that tab had passed while showing 0.00. The run now als
 query the screen uses and checks the count against the sale, because a picture that nobody reads is
 not a check.
 
+## Three more wrong figures on the owner's screen — **fixed** *(2026-09-27)*
+
+Found while planning customer credit, which meant reading every line of the dashboard that
+touches a tender. All three are reading faults: the books were right throughout, so each fix is
+retroactive and the missing money reappears.
+
+- **"What should reach the bank" counted money that never would.** The card summed every tender
+  that was not cash, which included store credit — still owed by the customer — and loyalty points
+  redeemed — given away by the shop. `Kpis` now splits takings four ways: cash, **bank** (card and
+  UPI), **credit** and **points**, and a test holds that the four add back up to net sales.
+- **Today's "cash in drawer" on the saved page was negative.** Today's figures were folded without a
+  tender split — a second query was judged not worth it — but today's change was still counted, so
+  on any day the till gave change the page showed a negative drawer. Today now gets its own split.
+- **The first day of every window was missing from every figure.** The window was bound as an
+  `"O"`-format string under a comment claiming that was the shape `created_at` is written in. The
+  driver writes `2026-09-21 10:00:00+05:30`; `"O"` gives `2026-09-21T00:00:00.0000000+05:30`. A
+  space sorts before a `T`, so every sale on a window's first day compared as earlier than its own
+  midnight. The window is now bound as a `DateTimeOffset`, so the driver formats both sides alike.
+
+The third is why a sale rung up today once failed to appear in a test that asked for "today": the
+same comparison, with today as the first day of its own window. Each has a test proven to fail on
+the old code before the fix went in.
+
+## Customers by name — **complete** *(added 2026-09-27, approved)*
+
+The schema had a `customers.name` column from the first migration and the receipt was already
+laid out to print it, but nothing at the till ever filled it: every customer was a mobile number,
+and every bill said so. Lookup was by the exact number only, and the owner had totals across all
+customers but no way to look at one.
+
+- **At the till**, `F7` takes a number or part of a name and lists matches as it is typed; `↓`
+  picks one, `Enter` attaches them with their name and points. A new number is confirmed, then
+  named — `Enter` skips the name so a queue is never held up — and only then added.
+- **Nothing is highlighted until an arrow is pressed.** With the first match picked by default, a
+  new number sharing digits with somebody else's would be committed onto their account.
+- **The confirmation belongs to the number it was given for.** It was a bare flag, so confirming one
+  number and correcting the box to another added the correction unconfirmed.
+- **The owner's Customers tab (`Ctrl+7`)** finds a customer by name or number and shows their
+  visits, spend, average basket, first and last visit, a dense month-by-month chart, what they buy
+  most, and their recent bills. It opens on the best customers; `Ctrl+7` lands in the search box and
+  `↓` drops into the list, so it is usable without a mouse.
+- **Read from the bills, not stored.** `CustomerQuery` asks the books; nothing is kept for the
+  purpose, so a customer's history cannot drift from the sales it came from. Money is summed with
+  the same exact-paise helper as the dashboard (`PaiseSql`), and a test holds the two to the paisa.
+- **Forgetting a customer** deletes their name, number and points and unlinks — not deletes — their
+  bills, which are the shop's tax records and have to outlive whoever they were for. A parked bill
+  lets go of them too, or recalling it would bring them back. The confirmation says plainly that
+  snapshots taken before then still hold them.
+- `pos void-invoice` now says whose sale it is, which is also how the acceptance run proves the name
+  typed at the counter reached the books: on a Tamil lane the customer row prints as a drawn image,
+  label and all, so the name is not in the printer's byte stream to be read back.
+
 Decisions taken:
 - **Import is all or nothing, and reports every problem at once.** A partly loaded catalogue is
   worse than a rejected one: the missing items cannot be sold, nobody knows which they are, and

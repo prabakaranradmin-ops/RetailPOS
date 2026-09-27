@@ -337,10 +337,14 @@ public class TenderFlowTests
 
     /// <summary>
     /// Creating a customer on a mistyped number is worse than one extra keypress, so the first
-    /// commit reports and the second creates.
+    /// commit reports, the second confirms and asks for a name, and the third adds them.
     /// </summary>
+    /// <remarks>
+    /// This was two commits until the till learned to take a name. Nobody is created before the
+    /// name step is committed, so Escape there still backs out of a number confirmed by mistake.
+    /// </remarks>
     [Fact]
-    public void AnUnknownMobileTakesTwoCommitsToBecomeACustomer()
+    public void AnUnknownMobileIsConfirmedThenNamedThenAdded()
     {
         using var till = Till();
         till.Scan("8901234567890");
@@ -355,9 +359,33 @@ public class TenderFlowTests
 
         till.Press(Key.Enter);
 
+        Assert.True(till.ViewModel.IsNamingCustomer);
+        Assert.Null(till.Customers.FindByMobile("9000000001"));
+
+        TypeIntoPane(till, "Lakshmi");
+        till.Press(Key.Enter);
+
         Assert.False(till.ViewModel.IsFindingCustomer);
-        Assert.Equal("9000000001", till.ViewModel.CustomerLabel);
-        Assert.NotNull(till.Customers.FindByMobile("9000000001"));
+        Assert.Equal("Lakshmi", till.ViewModel.CustomerLabel);
+        Assert.Equal("Lakshmi", till.Customers.FindByMobile("9000000001")!.Name);
+    }
+
+    /// <summary>A queue is not held up for a name: an empty commit adds them by number alone.</summary>
+    [Fact]
+    public void TheNameCanBeSkipped()
+    {
+        using var till = Till();
+        till.Scan("8901234567890");
+
+        till.Press(Key.F7);
+        TypeIntoPane(till, "9000000003");
+        till.Press(Key.Enter);
+        till.Press(Key.Enter);
+        till.Press(Key.Enter);
+
+        Assert.False(till.ViewModel.IsFindingCustomer);
+        Assert.Equal("9000000003", till.ViewModel.CustomerLabel);
+        Assert.Null(till.Customers.FindByMobile("9000000003")!.Name);
     }
 
     [Fact]

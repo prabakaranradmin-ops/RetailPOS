@@ -426,6 +426,15 @@ switch (command)
         Console.WriteLine($"  {existing.InvoiceNo}  {existing.Sale.CreatedAt:dd MMM yyyy HH:mm}  {existing.GrandTotal:N2}");
         Console.WriteLine($"  {existing.Sale.Lines.Count} line(s), {existing.Sale.Payments.Count} payment(s)");
 
+        // Whose sale it was, so a void is confirmed against the right customer and a bill that has
+        // loyalty points on it is recognised as one before the points are taken back.
+        if (existing.Sale.Customer is { } customer)
+        {
+            Console.WriteLine(customer.Name is { Length: > 0 } name
+                ? $"  for {name}, {customer.MobileNo}"
+                : $"  for {customer.MobileNo}");
+        }
+
         if (existing.IsVoided)
         {
             Console.Error.WriteLine($"  Already voided at {existing.VoidedAt:dd MMM yyyy HH:mm}.");

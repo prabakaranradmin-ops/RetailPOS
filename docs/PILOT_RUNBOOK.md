@@ -132,7 +132,7 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `F3` | Type an exact quantity |
 | `F4` | Discount on the selected line |
 | `Delete` | Remove the selected line |
-| `F7` | Attach a customer by mobile (needed for loyalty points) |
+| `F7` | Attach a customer by mobile or name (needed for loyalty points) |
 | `F5` | Park the bill |
 | `F6` | Bring a parked bill back |
 | `F12` | **Take payment** |
@@ -146,6 +146,21 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 Taking payment: `F12`, choose the tender with `↑`/`↓`, type the amount, `Enter`. Leave the amount
 blank to take the whole balance. Commit again when it is fully paid. Loyalty points are entered as
 **points, not rupees** — blank redeems the maximum allowed.
+
+### Customers
+
+`F7`, then type their **mobile number** — or a few letters of their **name**, or part of the number.
+People the shop already knows are listed under the box as you type; `↓` picks one and `Enter`
+attaches them, with their name and their points. Nothing is picked until you press an arrow, so a
+new number that happens to share digits with somebody else's is never put on the wrong account.
+
+**A new customer** — type their number and `Enter`: the till says it does not know it. `Enter`
+again confirms the number, and the till asks for their **name**. Type it and `Enter`, or just
+`Enter` to skip it and keep the queue moving. The name prints on their bill from then on, and next
+time the number alone brings it back. `Esc` at any point adds nobody.
+
+Change the number after the first `Enter` and the till asks again — the confirmation belongs to the
+number it was given for, so correcting a mistype cannot add the correction unchecked.
 
 ### Things that will happen
 
@@ -281,6 +296,7 @@ than falling through to closing the day, so reading a report back can never acci
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
 | **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 | **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
+| **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most. For the one you pick: visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 
@@ -290,6 +306,14 @@ carried a `cost_price`. The screen says what share of takings it can speak for r
 reporting a margin for the whole shop — and where nothing carries a cost it says so instead of
 showing a profit of zero. Add a `cost_price` column and import again to fill it in **from that day
 forward**; bills already issued keep what they recorded, which was nothing.
+
+**Customers' names and numbers are personal data.** The shop now holds a list of people, their
+phone numbers and what they buy, so treat it that way: ask before taking a name, keep the owner's
+screen behind a PIN, and when a customer asks to be removed, use **Forget this customer** on the
+Customers tab. Their name, number and points are deleted; their bills stay in the books for tax, but
+no longer say who they were for. Backups taken before that moment still hold them until the oldest
+snapshots are cleared out by newer ones — a restore from an old snapshot would bring them back, so
+forget them again after any restore.
 
 **Put a PIN on it** if a cashier uses this computer — Settings, then *Save PIN*. The screen then asks
 for it before it opens. It is stored scrambled and **cannot be recovered**, so pick something you

@@ -82,7 +82,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private string? _pendingVoidInvoiceNo;
 
     private bool _pendingNewBillConfirmation;
-    private bool _pendingCustomerCreate;
+
+    /// <summary>The number the create confirmation was given for. See <see cref="CommitCustomerLookup"/>.</summary>
+    private string? _pendingCustomerMobile;
+
+    /// <summary>A confirmed new number waiting for its name, or null when not naming anybody.</summary>
+    private string? _namingCustomerMobile;
+
+    private int _selectedCustomerMatchIndex = -1;
     private bool _pendingDayClose;
     private bool _disposed;
 
@@ -307,7 +314,72 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public string EditBuffer
     {
         get => _editBuffer;
-        set => Set(ref _editBuffer, value ?? string.Empty);
+        set
+        {
+            if (Set(ref _editBuffer, value ?? string.Empty) && Mode == BillingMode.Customer && !IsNamingCustomer)
+                RefreshCustomerMatches();
+        }
+    }
+
+    // ---- Finding a customer ------------------------------------------------------------------
+
+    /// <summary>Customers whose name or number matches what has been typed in the customer box.</summary>
+    public ObservableCollection<Customer> CustomerMatches { get; } = [];
+
+    public bool HasCustomerMatches => CustomerMatches.Count > 0;
+
+    /// <summary>
+    /// The highlighted match, or -1 for none.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is highlighted until an arrow key is pressed. With the first match picked by default,
+    /// a cashier typing a brand-new number that happened to share digits with somebody else's would
+    /// press Enter and put the sale on the wrong person's account.
+    /// </remarks>
+    public int SelectedCustomerMatchIndex
+    {
+        get => _selectedCustomerMatchIndex;
+        set => Set(ref _selectedCustomerMatchIndex, value);
+    }
+
+    /// <summary>True while a confirmed new number is waiting for the customer's name.</summary>
+    public bool IsNamingCustomer => _namingCustomerMobile is not null;
+
+    /// <summary>The label over the customer box, which says what it wants typed into it.</summary>
+    public string CustomerPrompt => _namingCustomerMobile is { } mobile
+        ? $"Name for {mobile} - Enter to skip"
+        : "Mobile number, or part of a name";
+
+    private void RefreshCustomerMatches()
+    {
+        CustomerMatches.Clear();
+        SelectedCustomerMatchIndex = -1;
+
+        var text = EditBuffer.Trim();
+
+        // Two letters of a name are enough to narrow it; digits need three, or "98" would list
+        // half the town.
+        var enough = text.All(char.IsDigit) ? 3 : 2;
+
+        if (text.Length >= enough)
+        {
+            foreach (var match in _customers.Search(text, 6))
+                CustomerMatches.Add(match);
+        }
+
+        Raise(nameof(HasCustomerMatches));
+    }
+
+    private void ResetCustomerLookup()
+    {
+        _pendingCustomerMobile = null;
+        _namingCustomerMobile = null;
+        CustomerMatches.Clear();
+        SelectedCustomerMatchIndex = -1;
+
+        Raise(nameof(HasCustomerMatches));
+        Raise(nameof(IsNamingCustomer));
+        Raise(nameof(CustomerPrompt));
     }
 
     public string StatusMessage
@@ -542,6 +614,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Reprint:
             case BillingMode.Void:
             case BillingMode.Cashier:
+                // Leaving mid-way through adding somebody adds nobody: the name step is the last
+                // chance to back out of a number that was confirmed by mistake.
+                ResetCustomerLookup();
                 _pendingVoidInvoiceNo = null;
                 Mode = BillingMode.Billing;
                 EditBuffer = string.Empty;
@@ -715,9 +790,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
+        ResetCustomerLookup();
         Mode = BillingMode.Customer;
         EditBuffer = string.Empty;
-        StatusMessage = "Type the customer's mobile number, then commit.";
+        StatusMessage = "Type the customer's mobile number or part of their name. Arrow down to pick a match.";
     }
 
     /// <summary>Prints a duplicate of a past invoice.</summary>
@@ -750,7 +826,6 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public void CloseDay()
     {
         ClearPendingNewBill();
-        _pendingCustomerCreate = false;
         CancelEdit();
 
         if (_dayClose is null)
@@ -1064,6 +1139,13 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
                 return;
 
             case BillingMode.Customer:
+                if (CustomerMatches.Count > 0 && !IsNamingCustomer)
+                {
+                    SelectedCustomerMatchIndex = Math.Clamp(_selectedCustomerMatchIndex + delta, 0, CustomerMatches.Count - 1);
+                    var picked = CustomerMatches[_selectedCustomerMatchIndex];
+                    StatusMessage = $"{picked.Name ?? picked.MobileNo} - commit to attach.";
+                }
+
                 return;
         }
 
@@ -1375,35 +1457,105 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     // ---- Customer internals ------------------------------------------------------------------
 
+    /// <summary>
+    /// Attaches whoever the customer box points at, or walks a new customer through being added.
+    /// </summary>
+    /// <remarks>
+    /// <para>In order: a highlighted match is attached; a number the shop already knows is attached
+    /// with its name and points; a new number is confirmed, then named, then added.</para>
+    /// <para>
+    /// The confirmation belongs to the number it was given for. It used to be a bare flag, so
+    /// confirming one number and then correcting the box to another added the second without
+    /// asking — the mistyped number the confirmation exists to catch.
+    /// </para>
+    /// </remarks>
     private void CommitCustomerLookup()
     {
-        var mobile = EditBuffer.Trim();
-
-        if (mobile.Length == 0)
+        if (_namingCustomerMobile is { } mobileToName)
         {
-            StatusMessage = "Type a mobile number.";
+            var name = EditBuffer.Trim();
+
+            var added = _customers.Add(new Customer
+            {
+                MobileNo = mobileToName,
+                Name = name.Length == 0 ? null : name,
+                StateCode = _bill.OutletStateCode,
+            });
+
+            ResetCustomerLookup();
+            AttachCustomer(added);
             return;
         }
 
-        var existing = _customers.FindByMobile(mobile);
-
-        if (existing is not null)
+        if (_selectedCustomerMatchIndex >= 0 && _selectedCustomerMatchIndex < CustomerMatches.Count)
         {
+            var picked = CustomerMatches[_selectedCustomerMatchIndex];
+            ResetCustomerLookup();
+            AttachCustomer(picked);
+            return;
+        }
+
+        var typed = EditBuffer.Trim();
+
+        if (typed.Length == 0)
+        {
+            StatusMessage = "Type a mobile number or part of a name.";
+            return;
+        }
+
+        if (_customers.FindByMobile(typed) is { } existing)
+        {
+            ResetCustomerLookup();
             AttachCustomer(existing);
             return;
         }
 
-        // Creating a customer on a mistyped number is worse than making the cashier confirm, so
-        // the first press reports and the second creates.
-        if (!_pendingCustomerCreate)
+        // Letters are a search, not a number to add somebody under.
+        if (!LooksLikeAPhoneNumber(typed))
         {
-            _pendingCustomerCreate = true;
-            StatusMessage = $"No customer on {mobile}. Commit again to add them.";
+            StatusMessage = CustomerMatches.Count > 0
+                ? "Arrow down to pick one of these, or type a mobile number."
+                : $"No customer matches '{typed}'. Type their mobile number to add them.";
             return;
         }
 
-        _pendingCustomerCreate = false;
-        AttachCustomer(_customers.Add(new Customer { MobileNo = mobile, StateCode = _bill.OutletStateCode }));
+        // Creating a customer on a mistyped number is worse than making the cashier confirm, so
+        // the first press reports and the second moves on to the name.
+        if (!string.Equals(_pendingCustomerMobile, typed, StringComparison.Ordinal))
+        {
+            _pendingCustomerMobile = typed;
+            StatusMessage = $"No customer on {typed}. Commit again to add them.";
+            return;
+        }
+
+        _pendingCustomerMobile = null;
+        _namingCustomerMobile = typed;
+
+        CustomerMatches.Clear();
+        SelectedCustomerMatchIndex = -1;
+        EditBuffer = string.Empty;
+
+        Raise(nameof(HasCustomerMatches));
+        Raise(nameof(IsNamingCustomer));
+        Raise(nameof(CustomerPrompt));
+
+        StatusMessage = $"Adding {typed}. Type their name, or commit to skip it.";
+    }
+
+    /// <summary>Digits, with the spaces, dashes and leading plus people type into numbers.</summary>
+    private static bool LooksLikeAPhoneNumber(string text)
+    {
+        var digits = 0;
+
+        foreach (var c in text)
+        {
+            if (char.IsDigit(c))
+                digits++;
+            else if (c is not (' ' or '-' or '+'))
+                return false;
+        }
+
+        return digits >= 6;
     }
 
     private void AttachCustomer(Customer customer)
@@ -1622,7 +1774,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private void ClearPendingConfirmations()
     {
         _pendingNewBillConfirmation = false;
-        _pendingCustomerCreate = false;
+        _pendingCustomerMobile = null;
         _pendingDayClose = false;
     }
 

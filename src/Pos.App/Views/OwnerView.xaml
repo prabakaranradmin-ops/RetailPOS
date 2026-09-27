@@ -240,10 +240,17 @@
               </Border>
               <Border Style="{StaticResource Card}">
                 <StackPanel>
-                  <TextBlock Text="CARD, UPI AND CREDIT" Style="{StaticResource Heading}" Margin="0" />
-                  <TextBlock Text="{Binding PeriodDigital, Mode=OneWay}" Style="{StaticResource Figure}" />
+                  <!--
+                    Card and UPI only. This card said "card, UPI and credit" beside "what should
+                    reach the bank", and counted store credit - still owed - and points - given
+                    away - as money on its way to the bank account.
+                  -->
+                  <TextBlock Text="CARD AND UPI" Style="{StaticResource Heading}" Margin="0" />
+                  <TextBlock Text="{Binding PeriodBank, Mode=OneWay}" Style="{StaticResource Figure}" />
                   <TextBlock Text="what should reach the bank"
                              Style="{StaticResource Label}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding PeriodNotBanked, Mode=OneWay}" Foreground="{StaticResource Negative}"
+                             FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" />
                 </StackPanel>
               </Border>
             </UniformGrid>
@@ -1086,6 +1093,191 @@
               </Border>
             </Grid>
           </Grid>
+        </Grid>
+      </TabItem>
+
+      <!-- ==== Customers ==== -->
+      <TabItem Header="Customers  (Ctrl+7)">
+        <Grid x:Name="CustomersTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Finding them -->
+          <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,14,0">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <TextBlock Grid.Row="0" Text="FIND A CUSTOMER" Style="{StaticResource Heading}" />
+              <TextBlock Grid.Row="1" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="Type part of a name or a mobile number. Leave it empty to see who spends most." />
+              <TextBox Grid.Row="2" x:Name="CustomerSearch" Padding="8,6" Margin="0,0,0,10"
+                       Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}"
+                       PreviewKeyDown="CustomerSearch_PreviewKeyDown" />
+
+              <DataGrid Grid.Row="3" x:Name="CustomerResults"
+                        ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}"
+                        AutoGenerateColumns="False" IsReadOnly="True"
+                        Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                        GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                        HeadersVisibility="Column" Foreground="{StaticResource Ink}"
+                        SelectionMode="Single" RowHeight="32">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="Customer" Binding="{Binding Label}" Width="*" />
+                  <DataGridTextColumn Header="Visits" Binding="{Binding Visits}" Width="60" />
+                  <DataGridTextColumn Header="Spent" Binding="{Binding Spent, StringFormat={}{0:N2}}" Width="100" />
+                </DataGrid.Columns>
+              </DataGrid>
+
+              <TextBlock Grid.Row="4" Text="{Binding Status, Mode=OneWay}" Style="{StaticResource Label}"
+                         TextWrapping="Wrap" Margin="0,8,0,0" />
+            </Grid>
+          </Border>
+
+          <!-- Nobody picked yet -->
+          <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center"
+                     Style="{StaticResource Label}" FontSize="15" TextWrapping="Wrap" MaxWidth="420"
+                     TextAlignment="Center"
+                     Visibility="{Binding ShowsHint, Converter={StaticResource BoolToVisibility}}"
+                     Text="Pick a customer from the list to see what they buy, how often they come in, and when they were last here." />
+
+          <!-- The one picked -->
+          <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                        Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                <StackPanel>
+                  <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" />
+                  <TextBlock Style="{StaticResource Label}" Margin="0,2,0,12">
+                    <Run Text="{Binding Mobile, Mode=OneWay}" /><Run Text="  ·  " />
+                    <Run Text="{Binding Points, Mode=OneWay}" /><Run Text=" points  ·  " />
+                    <Run Text="{Binding SinceLastVisit, Mode=OneWay}" />
+                  </TextBlock>
+
+                  <UniformGrid Rows="1">
+                    <StackPanel Margin="0,0,12,0">
+                      <TextBlock Text="VISITS" Style="{StaticResource Label}" />
+                      <TextBlock Text="{Binding Visits, Mode=OneWay}" Style="{StaticResource Figure}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,12,0">
+                      <TextBlock Text="SPENT IN ALL" Style="{StaticResource Label}" />
+                      <TextBlock Text="{Binding Spent, Mode=OneWay}" Style="{StaticResource Figure}"
+                                 Foreground="{StaticResource Positive}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,12,0">
+                      <TextBlock Text="A BASKET" Style="{StaticResource Label}" />
+                      <TextBlock Text="{Binding AverageBasket, Mode=OneWay}" Style="{StaticResource Figure}" />
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="FIRST / LAST IN" Style="{StaticResource Label}" />
+                      <TextBlock FontSize="15" Margin="0,6,0,0">
+                        <Run Text="{Binding FirstVisit, Mode=OneWay}" /><LineBreak />
+                        <Run Text="{Binding LastVisit, Mode=OneWay}" />
+                      </TextBlock>
+                    </StackPanel>
+                  </UniformGrid>
+                </StackPanel>
+              </Border>
+
+              <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
+                  <StackPanel>
+                    <TextBlock Text="MONTH BY MONTH" Style="{StaticResource Heading}" />
+                    <ItemsControl ItemsSource="{Binding Months}" Height="150">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Grid Margin="2,0" ToolTip="{Binding Tooltip}">
+                            <Grid.RowDefinitions>
+                              <RowDefinition Height="*" />
+                              <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                              <Grid.RowDefinitions>
+                                <RowDefinition Height="{Binding Fraction, Converter={StaticResource Rest}}" />
+                                <RowDefinition Height="{Binding Fraction, Converter={StaticResource Share}}" />
+                              </Grid.RowDefinitions>
+                              <Border Grid.Row="1" CornerRadius="3,3,0,0" MinHeight="2"
+                                      Background="{StaticResource Positive}" Opacity="0.8" />
+                            </Grid>
+                            <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Label}"
+                                       HorizontalAlignment="Center" Margin="0,5,0,0" FontSize="10" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
+                               Text="A month they did not come in is drawn as nothing, not left out - a regular who has stopped coming shows as a gap at the end." />
+                  </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0">
+                  <StackPanel>
+                    <TextBlock Text="WHAT THEY BUY" Style="{StaticResource Heading}" />
+                    <ItemsControl ItemsSource="{Binding TopItems}" ItemTemplate="{StaticResource RankedRowTemplate}" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                <StackPanel>
+                  <TextBlock Text="RECENT BILLS" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding RecentBills}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}" RowHeight="30"
+                            MaxHeight="260">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" />
+                      <DataGridTextColumn Header="When" Binding="{Binding At, StringFormat=dd MMM yyyy  HH:mm}" Width="170" />
+                      <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="60" />
+                      <DataGridTextColumn Header="Paid" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="100" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="THEIR DETAILS" Style="{StaticResource Heading}" />
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Name" Style="{StaticResource Label}"
+                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBox Grid.Column="1" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8,6" Margin="0,0,10,0" />
+                    <Button Grid.Column="2" Content="Save _name" Padding="16,6" Click="SaveCustomerName_Click" />
+                  </Grid>
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="The name prints on their bills from now on. The mobile number is how the till finds them, so it is not changed here." />
+                  <Button Content="_Forget this customer" Padding="16,6" HorizontalAlignment="Left"
+                          Click="ForgetCustomer_Click" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
+                             Text="For a customer who asks to be removed. Their name, number and points are deleted; their bills are kept for the shop's books but no longer say who they were for. This cannot be undone." />
+                </StackPanel>
+              </Border>
+
+            </StackPanel>
+          </ScrollViewer>
         </Grid>
       </TabItem>
 

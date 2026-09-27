@@ -633,6 +633,13 @@ if (-not $NoUi) {
         -Expected '495.25 — three lines less a 49.00 discount' `
         -Actual (Short $r.Output 3) -Passed $totalRight
 
+    # The customer named at the counter is on the stored sale. Asked of the books rather than read
+    # off the printed bill: on this Tamil lane the customer row is drawn as dots, label and all, so
+    # the name is in the picture and not in the byte stream.
+    $named = $r.Output -match 'for Lakshmi, 9500012345'
+    Add-Result -Kind Positive -Feature 'Customers' -Name 'The sale is filed under the customer named at the counter' `
+        -Expected 'for Lakshmi, 9500012345' -Actual (Short $r.Output 4) -Passed $named
+
     $linesRight = $r.Output -match '3 line\(s\), 2 payment\(s\)'
     Add-Result -Kind Positive -Feature 'Invoicing' -Name 'Three lines and both tenders were stored' `
         -Expected '3 line(s), 2 payment(s)' -Actual (Short $r.Output 3) -Passed $linesRight

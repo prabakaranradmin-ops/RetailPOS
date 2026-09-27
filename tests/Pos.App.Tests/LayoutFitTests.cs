@@ -290,7 +290,7 @@ public class LayoutFitTests : IDisposable
     }
 
     [Fact]
-    public void TheOwnersScreenOpensOnSixTabs()
+    public void TheOwnersScreenOpensOnSevenTabs()
     {
         Wpf.Run(() =>
         {
@@ -302,7 +302,7 @@ public class LayoutFitTests : IDisposable
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
 
-                Assert.Equal(6, tabs.Items.Count);
+                Assert.Equal(7, tabs.Items.Count);
             }
             finally
             {
@@ -311,7 +311,65 @@ public class LayoutFitTests : IDisposable
         });
     }
 
-    private OwnerView BuildOwnerView()
+    /// <summary>
+    /// The Customers tab with somebody on it.
+    /// </summary>
+    /// <remarks>
+    /// Opened empty, the tab shows a sentence and nothing else, so "every tab fits" said nothing
+    /// about the panel an owner actually uses: two charts side by side, a list of bills, a name box
+    /// with its button, and the button that forgets a customer. That panel only exists once a
+    /// customer is picked, so one is.
+    /// </remarks>
+    [Fact]
+    public void TheCustomersTabFitsWithACustomerOnIt()
+    {
+        var items = new ItemRepository(_temp.Database);
+        items.UpsertRange([Catalogue.Item(sku: "OIL001", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m)]);
+
+        var customers = new CustomerRepository(_temp.Database);
+        var lakshmi = customers.Add(new Customer { MobileNo = "9876543210", Name = "Lakshmi Narayanan Venkataraman" });
+
+        var bill = new InvoiceEngine("33");
+        bill.AddItem(items.FindBySku("OIL001")!);
+        bill.SetCustomer(lakshmi);
+
+        var basket = new TenderBasket(bill.Totals.AmountPayable);
+        basket.Add(TenderType.Cash, bill.Totals.AmountPayable);
+
+        new CheckoutService(new InvoiceRepository(_temp.Database), customers, new RecordingDrawerService())
+            .Complete("L1", bill, basket);
+
+        var screen = new CustomersViewModel(new Pos.Core.Analytics.CustomerQuery(_temp.Database), customers);
+
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView(screen);
+
+            try
+            {
+                Wpf.LayOut(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 6;
+
+                screen.Search();
+                screen.Selected = screen.Results[0];
+                window.UpdateLayout();
+
+                Assert.True(screen.HasSelection);
+
+                AssertEveryButtonIsReachable(window, "the Customers tab with a customer on it");
+                AssertNoButtonLabelIsCutOff(window, "the Customers tab with a customer on it");
+                AssertNothingOverflowsSideways(window, "the Customers tab with a customer on it");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    private OwnerView BuildOwnerView(CustomersViewModel? customers = null)
     {
         var settings = Settings();
         var items = new ItemRepository(_temp.Database);
@@ -343,6 +401,9 @@ public class LayoutFitTests : IDisposable
             new CatalogueImportViewModel(items),
             new HardwareViewModel(settings, rasterizer: null, confirm: _ => true, post: action => action()),
             new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))),
-            maintenance);
+            maintenance,
+            customers ?? new CustomersViewModel(
+                new Pos.Core.Analytics.CustomerQuery(_temp.Database),
+                new CustomerRepository(_temp.Database)));
     }
 }

@@ -627,7 +627,8 @@
               BorderBrush="{StaticResource Line}" BorderThickness="1">
         <StackPanel>
           <TextBlock Text="Customer" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="Mobile number" Foreground="{StaticResource InkMuted}" FontSize="12" Margin="0,12,0,0" />
+          <TextBlock Text="{Binding CustomerPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+                     FontSize="12" Margin="0,12,0,0" />
           <TextBox x:Name="CustomerBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
                    FontSize="24" Padding="8,6" Margin="0,4,0,0"
@@ -635,6 +636,36 @@
                    Foreground="{StaticResource Ink}"
                    CaretBrush="{StaticResource Accent}"
                    BorderBrush="{StaticResource Line}" />
+
+          <!--
+            Customers the shop already knows, matched on name or number as it is typed. Picked with
+            the arrow keys, like the item results; nothing is highlighted until an arrow is pressed,
+            so a new number that shares digits with somebody else's cannot be committed onto them.
+          -->
+          <ListBox ItemsSource="{Binding CustomerMatches}"
+                   SelectedIndex="{Binding SelectedCustomerMatchIndex, Mode=OneWay}"
+                   Visibility="{Binding HasCustomerMatches, Converter={StaticResource BoolToVisibility}}"
+                   Focusable="False" Margin="0,10,0,0" MaxHeight="230"
+                   ItemContainerStyle="{StaticResource TintedListItem}"
+                   Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" FontSize="15" TextTrimming="CharacterEllipsis"
+                             Text="{Binding Name, TargetNullValue='(no name)'}" />
+                  <TextBlock Grid.Column="1" FontSize="15" Margin="12,0,0,0"
+                             FontFamily="{StaticResource FigureFont}" Text="{Binding MobileNo}" />
+                  <TextBlock Grid.Column="2" FontSize="13" Margin="12,0,0,0" VerticalAlignment="Center"
+                             Text="{Binding LoyaltyBalance, StringFormat={}{0} pts}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
         </StackPanel>
       </Border>
     </Border>

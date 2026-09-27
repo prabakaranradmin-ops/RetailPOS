@@ -173,4 +173,37 @@
     </Style>
 
 
+    <!--
+      A pick-list row that stays readable when it is the one picked.
+
+      The general ListBoxItem style above fills a selected row with the accent colour and sets its
+      foreground dark - but the TextBlock style at the top of this file sets ink explicitly, and
+      text in an item template takes that over the row's foreground. White on the light accent is
+      about 2:1, which is the same class of fault as the bill grid's selected line. This row is
+      tinted instead, like the grid, and marked with an accent bar so the choice is still obvious
+      from across a counter. Ink on the tint is 14.35:1; ThemeContrastTests holds that figure.
+    -->
+    <Style x:Key="TintedListItem" TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                    BorderThickness="3,0,0,0" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActive}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
 </ResourceDictionary>

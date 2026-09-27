@@ -112,4 +112,29 @@ public interface ICustomerStore
 
     /// <summary>Writes back a balance after a sale has redeemed and accrued points.</summary>
     void UpdateLoyaltyBalance(long customerId, int balance);
+
+    /// <summary>
+    /// Customers whose name or mobile number contains the text, best matches first.
+    /// </summary>
+    /// <remarks>
+    /// A mobile number that starts with the digits typed ranks above one that merely contains
+    /// them, and a name that starts with the letters above one that contains them: a cashier
+    /// typing "98765" or "Lak" means the start. Blank text finds nobody rather than everybody.
+    /// </remarks>
+    IReadOnlyList<Customer> Search(string text, int limit = 8);
+
+    /// <summary>Gives a customer a name, changes it, or clears it with null or blank.</summary>
+    void Rename(long customerId, string? name);
+
+    /// <summary>
+    /// Removes a customer's record, keeping every bill that was issued to them.
+    /// </summary>
+    /// <remarks>
+    /// For a customer who asks to be forgotten. Their bills are unlinked rather than deleted: an
+    /// invoice is the shop's record of a sale and its tax, and it has to survive whoever it was
+    /// for. What goes is the name, the number and the points, and the link that let their
+    /// purchases be read back as one person's history.
+    /// </remarks>
+    /// <returns>How many bills were unlinked, or -1 if there was no such customer.</returns>
+    int Forget(long customerId);
 }

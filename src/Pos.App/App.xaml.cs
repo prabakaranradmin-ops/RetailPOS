@@ -161,7 +161,11 @@ public partial class App : Application
                 // offered is what the shop actually sells.
                 new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))),
 
-                BuildMaintenanceViewModel(settings, database, heldBills, printer));
+                BuildMaintenanceViewModel(settings, database, heldBills, printer),
+
+                // The same store the till attaches customers through, so a name saved on the owner's
+                // screen is the name the next bill prints.
+                new CustomersViewModel(new CustomerQuery(database), customers));
         };
 
         MainWindow = billingView;

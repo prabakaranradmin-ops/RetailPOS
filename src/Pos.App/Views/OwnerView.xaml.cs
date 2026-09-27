@@ -23,6 +23,7 @@ public partial class OwnerView : Window
     private readonly HardwareViewModel _hardware;
     private readonly NewItemViewModel _newItem;
     private readonly MaintenanceViewModel _maintenance;
+    private readonly CustomersViewModel _customers;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -35,8 +36,10 @@ public partial class OwnerView : Window
         CatalogueImportViewModel catalogue,
         HardwareViewModel hardware,
         NewItemViewModel newItem,
-        MaintenanceViewModel maintenance)
+        MaintenanceViewModel maintenance,
+        CustomersViewModel customers)
     {
+        ArgumentNullException.ThrowIfNull(customers);
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(hardware);
@@ -50,10 +53,27 @@ public partial class OwnerView : Window
         _hardware = hardware;
         _newItem = newItem;
         _maintenance = maintenance;
+        _customers = customers;
         DataContext = viewModel;
 
         HardwareTab.DataContext = hardware;
         MaintenanceTab.DataContext = maintenance;
+        CustomersTab.DataContext = customers;
+
+        // The list is read when the tab is first opened rather than with the window, so opening
+        // the owner's screen to glance at today's takings does not also read every customer.
+        Tabs.SelectionChanged += (_, e) =>
+        {
+            if (e.OriginalSource != Tabs || Tabs.SelectedItem is not TabItem { Content: Grid { Name: "CustomersTab" } })
+                return;
+
+            if (_customers.Results.Count == 0)
+                _customers.Search();
+
+            // Straight into the search box, so Ctrl+7 then typing a name is the whole lookup. Left
+            // to itself focus stays on the tab header, and the only way into the box is the mouse.
+            Dispatcher.BeginInvoke(() => CustomerSearch.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+        };
         SingleItemPanel.DataContext = newItem;
 
         // An item added by hand changes the reorder list the same way a file does.
@@ -136,7 +156,7 @@ public partial class OwnerView : Window
         // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
         if (e.KeyboardDevice.Modifiers == ModifierKeys.Control &&
-            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6)
+            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6 or Key.D7)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
@@ -154,6 +174,67 @@ public partial class OwnerView : Window
     private async void ShowReport_Click(object sender, RoutedEventArgs e) => await _maintenance.ShowReport();
 
     private async void Reprint_Click(object sender, RoutedEventArgs e) => await _maintenance.Reprint();
+
+    // ---- Customers -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Down or Enter in the search box drops into the results, on the first match.
+    /// </summary>
+    /// <remarks>
+    /// A text box swallows the arrow keys, so without this the list under it could only be reached
+    /// with the mouse or a run of Tabs. From the list the arrows move between customers and each one
+    /// is shown as it is reached.
+    /// </remarks>
+    private void CustomerSearch_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Down or Key.Enter) || _customers.Results.Count == 0)
+            return;
+
+        _customers.Selected ??= _customers.Results[0];
+
+        CustomerResults.UpdateLayout();
+        CustomerResults.ScrollIntoView(_customers.Selected);
+
+        if (CustomerResults.ItemContainerGenerator.ContainerFromItem(_customers.Selected) is DataGridRow row)
+            row.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+        else
+            CustomerResults.Focus();
+
+        e.Handled = true;
+    }
+
+    private void SaveCustomerName_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.SaveName() is { } problem)
+            Say(problem);
+    }
+
+    private void ForgetCustomer_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_customers.HasSelection)
+        {
+            Say("Pick a customer from the list first.");
+            return;
+        }
+
+        // Said in full, because it cannot be taken back: there is no copy of a forgotten customer
+        // anywhere in the lane, which is the point of it.
+        if (MessageBox.Show(
+                this,
+                $"Forget {_customers.Title} ({_customers.Mobile})?\n\n"
+                + "Their name, mobile number and loyalty points are deleted. Their bills stay in the "
+                + "shop's books but no longer say who they were for.\n\n"
+                + "This cannot be undone. Snapshots taken before now still hold them until they age out.",
+                "Forget this customer?",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning) != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        if (_customers.Forget() is { } problem)
+            Say(problem);
+    }
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {

@@ -77,6 +77,87 @@ public sealed class CustomerRepository : ICustomerStore
             throw new InvalidOperationException($"No customer with id {customerId}.");
     }
 
+    public IReadOnlyList<Customer> Search(string text, int limit = 8)
+    {
+        var term = text?.Trim() ?? string.Empty;
+
+        if (term.Length == 0 || limit < 1)
+            return [];
+
+        // LIKE with the wildcards escaped: a name containing % or _ is data, not a pattern.
+        var escaped = term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {SelectColumns}
+            FROM customers
+            WHERE mobile_no LIKE $contains ESCAPE '\' OR name LIKE $contains ESCAPE '\'
+            ORDER BY
+                CASE
+                    WHEN mobile_no LIKE $starts ESCAPE '\' THEN 0
+                    WHEN name LIKE $starts ESCAPE '\' THEN 1
+                    ELSE 2
+                END,
+                name IS NULL, name COLLATE NOCASE, mobile_no
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$contains", $"%{escaped}%");
+        command.Parameters.AddWithValue("$starts", $"{escaped}%");
+        command.Parameters.AddWithValue("$limit", limit);
+
+        var found = new List<Customer>();
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+            found.Add(Map(reader));
+
+        return found;
+    }
+
+    public void Rename(long customerId, string? name)
+    {
+        var tidy = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE customers SET name = $name WHERE id = $id;";
+        command.Parameters.AddWithValue("$name", (object?)tidy ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", customerId);
+
+        if (command.ExecuteNonQuery() == 0)
+            throw new InvalidOperationException($"No customer with id {customerId}.");
+    }
+
+    public int Forget(long customerId)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        int Run(string sql)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = sql;
+            command.Parameters.AddWithValue("$id", customerId);
+            return command.ExecuteNonQuery();
+        }
+
+        // Both tables reference the customer, and foreign keys are enforced, so the links go
+        // first. A parked bill loses its customer too: it would otherwise bring them back.
+        var unlinked = Run("UPDATE invoices SET customer_id = NULL WHERE customer_id = $id;");
+        Run("UPDATE held_bills SET customer_id = NULL WHERE customer_id = $id;");
+
+        if (Run("DELETE FROM customers WHERE id = $id;") == 0)
+        {
+            transaction.Rollback();
+            return -1;
+        }
+
+        transaction.Commit();
+        return unlinked;
+    }
+
     private static Customer Map(SqliteDataReader reader) => new()
     {
         Id = reader.GetInt64(0),

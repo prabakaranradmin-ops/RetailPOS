@@ -229,6 +229,23 @@ function Invoke-TillWalkthrough {
             -Expected 'the same three lines and the same discount' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
+        # --- A new customer, named at the counter --------------------------------------------
+        # A number the lane has never seen: confirmed once, then asked for a name. Named here so
+        # the owner's Customers tab, walked later, has somebody real to show.
+        Send-Keys '{F7}' 800
+        Send-Keys '9500012345{ENTER}' 900
+        Send-Keys '{ENTER}' 900
+        $shot = Save-Shot 'till-07b-customer-name'
+        Add-Result -Kind Positive -Feature 'Customers' -Name 'A new customer is asked for their name' `
+            -Expected 'the number confirmed, then a box asking for the name, with Enter to skip' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys 'Lakshmi{ENTER}' 1000
+        $shot = Save-Shot 'till-07c-customer'
+        Add-Result -Kind Positive -Feature 'Customers' -Name 'The customer is on the bill by name' `
+            -Expected 'Lakshmi attached to the bill' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
         # --- Closing the day with a bill on screen is refused -------------------------------
         Send-Keys '+{F12}' 900
         $shot = Save-Shot 'till-08-close-refused'
@@ -362,6 +379,18 @@ function Invoke-TillWalkthrough {
             -Expected 'a full integrity check, reporting the lane sound' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
+        # --- Customers -----------------------------------------------------------------------
+        # Keyboard only, as a shopkeeper would: Ctrl+7 lands in the search box, a few letters of
+        # the name narrow the list, Down drops into it on the first match and shows them.
+        Send-Keys '^7' 1300
+        Send-Keys 'Lak' 900
+        Send-Keys '{DOWN}' 1500
+        $shot = Save-Shot 'owner-11-customers' -Foreground
+        Add-Result -Kind Positive -Feature 'Customers' -Name 'The owner can look a customer up by name' `
+            -Expected 'Lakshmi found from three letters, with her visits, spend, what she bought and her bills' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'The customer added at the counter a few minutes earlier in this run.'
+
         Send-Keys '{ESC}' 1200
         $shot = Save-Shot 'owner-10-back-to-billing'
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Escape goes back to billing' `
@@ -376,7 +405,8 @@ function Invoke-TillWalkthrough {
         # cannot tell that from success. Identical files mean the keystroke did not move anything.
         $tabs = @(
             'owner-02-figures.png', 'owner-03-stock.png', 'owner-04-catalogue.png',
-            'owner-05-hardware.png', 'owner-06-settings.png', 'owner-07-maintenance.png')
+            'owner-05-hardware.png', 'owner-06-settings.png', 'owner-07-maintenance.png',
+            'owner-11-customers.png')
 
         $seen = @{}
         $repeats = @()
@@ -396,8 +426,8 @@ function Invoke-TillWalkthrough {
         }
 
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Each tab shows a different screen' `
-            -Expected 'six tabs, six distinct screens' `
-            -Actual $(if ($repeats.Count -eq 0) { 'all six differ' } else { $repeats -join '; ' }) `
+            -Expected 'seven tabs, seven distinct screens' `
+            -Actual $(if ($repeats.Count -eq 0) { 'all seven differ' } else { $repeats -join '; ' }) `
             -Passed ($repeats.Count -eq 0) `
             -Detail 'Two identical captures mean a Ctrl+N did not reach its tab, whatever the other checks say.'
 
