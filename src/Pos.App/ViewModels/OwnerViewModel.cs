@@ -92,7 +92,14 @@ public sealed class OwnerViewModel : ObservableObject
     public string PeriodNetSales { get; private set; } = "0.00";
     public string PeriodBills { get; private set; } = "0";
     public string PeriodCash { get; private set; } = "0.00";
-    public string PeriodDigital { get; private set; } = "0.00";
+    /// <summary>Card and UPI only: the money that should reach the bank.</summary>
+    public string PeriodBank { get; private set; } = "0.00";
+
+    /// <summary>
+    /// What was not paid in money that reaches anybody: owed on store credit, or paid in points.
+    /// Empty when there was neither, so the card does not carry a line of zeroes every day.
+    /// </summary>
+    public string PeriodNotBanked { get; private set; } = string.Empty;
     public string PeriodDiscount { get; private set; } = "0.00";
 
     /// <summary>What a customer spends per visit — computed already, never shown until now.</summary>
@@ -321,7 +328,14 @@ public sealed class OwnerViewModel : ObservableObject
         PeriodNetSales = Money(d.Range.NetSales);
         PeriodBills = d.Range.Bills.ToString("N0", Indian);
         PeriodCash = Money(d.Range.Cash);
-        PeriodDigital = Money(d.Range.Digital);
+        PeriodBank = Money(d.Range.Bank);
+        PeriodNotBanked = (d.Range.Credit, d.Range.PointsRedeemed) switch
+        {
+            (0m, 0m) => string.Empty,
+            (var credit, 0m) => $"{Money(credit)} owed on store credit - not in the bank",
+            (0m, var points) => $"{Money(points)} paid in points - not in the bank",
+            (var credit, var points) => $"{Money(credit)} owed on store credit, {Money(points)} paid in points - neither in the bank",
+        };
         PeriodDiscount = Money(d.Range.Discount);
         PeriodAverageBasket = Money(d.Range.AverageBasket);
 
@@ -337,7 +351,7 @@ public sealed class OwnerViewModel : ObservableObject
 
         foreach (var name in new[]
                  {
-                     nameof(PeriodNetSales), nameof(PeriodBills), nameof(PeriodCash), nameof(PeriodDigital),
+                     nameof(PeriodNetSales), nameof(PeriodBills), nameof(PeriodCash), nameof(PeriodBank), nameof(PeriodNotBanked),
                      nameof(PeriodDiscount), nameof(PeriodAverageBasket), nameof(TodayNetSales),
                      nameof(TodayBills), nameof(ReadIn),
                      nameof(PeriodProfit), nameof(PeriodMargin), nameof(MarginCoverage), nameof(HasMargins),

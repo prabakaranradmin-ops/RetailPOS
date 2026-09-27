@@ -70,7 +70,14 @@ public static class DashboardPage
         Card(p, "Net sales", Money(t.NetSales), $"gross {Money(t.GrossSales)}, less {Money(t.Discount)} off");
         Card(p, "Bills", t.Bills.ToString("N0", India), t.Bills == 0 ? "nothing yet" : $"{Money(t.AverageBasket)} average basket");
         Card(p, "Cash in drawer", Money(t.CashInDrawer), $"{Money(t.Cash)} taken, {Money(t.ChangeGiven)} change");
-        Card(p, "Digital", Money(t.Digital), "UPI, cards and store credit");
+        Card(p, "To the bank", Money(t.Bank), "card and UPI");
+
+        // Only when there is some. A card that says "on credit 0.00" every day is a card nobody reads.
+        if (t.Credit != 0m || t.PointsRedeemed != 0m)
+        {
+            Card(p, "Owed to you", Money(t.Credit),
+                t.PointsRedeemed == 0m ? "on store credit" : $"on store credit; {Money(t.PointsRedeemed)} paid in points");
+        }
 
         p.Append("</div>");
     }

@@ -42,7 +42,9 @@ public class DashboardTests(ITestOutputHelper output) : IDisposable
         decimal discount = 0m,
         int pointsEarned = 0,
         int pointsRedeemed = 0,
-        string lane = Lane)
+        string lane = Lane,
+        DateTimeOffset? at = null,
+        decimal? handedOver = null)
     {
         // A fractional quantity means the thing is weighed — the domain refuses 2.75 of something
         // counted in pieces, and rightly so.
@@ -53,14 +55,16 @@ public class DashboardTests(ITestOutputHelper output) : IDisposable
 
         var totals = InvoiceTotals.From(lines);
 
+        var paid = handedOver ?? totals.GrandTotal;
+
         var sale = new SaleDraft(
             lane,
-            _today.AddDays(-daysAgo).AddHours(hour),
+            at ?? _today.AddDays(-daysAgo).AddHours(hour),
             customer,
             lines,
             totals,
-            [new Tender(tender, totals.GrandTotal)],
-            ChangeDue: 0m,
+            [new Tender(tender, paid)],
+            ChangeDue: paid - totals.GrandTotal,
             PointsRedeemed: pointsRedeemed,
             PointsEarned: pointsEarned,
             RecalledFromToken: null);
@@ -275,9 +279,88 @@ public class DashboardTests(ITestOutputHelper output) : IDisposable
         var d = Gather();
 
         Assert.Equal(189m, d.Range.Cash);
-        Assert.Equal(378m, d.Range.Digital);
+        Assert.Equal(378m, d.Range.Bank);
         Assert.Equal(189m, d.Range.CashInDrawer);
         Assert.Equal(567m, d.Tenders.Sum(t => t.Amount));
+    }
+
+    /// <summary>
+    /// A sale on the first day of the window is in the window.
+    /// </summary>
+    /// <remarks>
+    /// The window used to be bound as an "O"-format string - "2026-08-19T00:00:00.0000000+05:30" -
+    /// against created_at, which the driver writes as "2026-08-19 10:00:00+05:30". A space sorts
+    /// before a T, so every sale on the window's first day compared as earlier than its own midnight
+    /// and was dropped: the first day of every 7, 30 and 90-day view was missing from every figure.
+    /// </remarks>
+    [Fact]
+    public void ASaleOnTheFirstDayOfTheWindowIsCounted()
+    {
+        // Gather(7) runs from midnight seven days back; this sale is mid-morning that same day.
+        Sell(10, [("Toor Dal", 189m, 5m, 1m)], daysAgo: 7);
+
+        var d = Gather(7);
+
+        Assert.Equal(1, d.Range.Bills);
+        Assert.Equal(189m, d.Range.NetSales);
+        Assert.Equal(189m, d.Range.Cash);
+        Assert.Single(d.TopItems);
+    }
+
+    /// <summary>
+    /// Today's cash in the drawer is what was taken today less today's change - not zero less it.
+    /// </summary>
+    /// <remarks>
+    /// Today's figures used to be folded without a tender split, as not worth a second query. The
+    /// change handed back was still counted, so the page's "cash in drawer" for today came out
+    /// negative on any day the till had given change: take 200 for a 189 bill and it said -11.00.
+    /// Timed at the real clock, because "today" is the machine's today.
+    /// </remarks>
+    [Fact]
+    public void TodaysCashInTheDrawerIsTakenLessChangeNotANegativeNumber()
+    {
+        var now = DateTimeOffset.Now;
+
+        Sell(0, [("Toor Dal", 189m, 5m, 1m)], TenderType.Cash, at: now.AddSeconds(-5), handedOver: 200m);
+        Sell(0, [("Toor Dal", 189m, 5m, 1m)], TenderType.Upi, at: now.AddSeconds(-4));
+
+        var d = new DashboardQuery(_temp.Database).Gather(Lane, now.AddDays(-1), now.AddMinutes(1));
+
+        Assert.Equal(200m, d.Today.Cash);
+        Assert.Equal(11m, d.Today.ChangeGiven);
+        Assert.Equal(189m, d.Today.CashInDrawer);
+        Assert.Equal(189m, d.Today.Bank);
+    }
+
+    /// <summary>
+    /// Money owed and money given away are not money in the bank.
+    /// </summary>
+    /// <remarks>
+    /// "Digital" used to be every tender that was not cash, and the owner's screen labelled it
+    /// "what should reach the bank". That counted store credit — which the customer still owes —
+    /// and loyalty points redeemed — which the shop gave away — as money on its way to the bank
+    /// account. An owner reconciling a bank statement against it would come up short by exactly
+    /// the credit and the points, and go looking for money that was never going to arrive.
+    /// </remarks>
+    [Fact]
+    public void CreditAndPointsAreNotCountedAsMoneyInTheBank()
+    {
+        Sell(9, [("Toor Dal", 189m, 5m, 1m)], TenderType.Cash);
+        Sell(10, [("Toor Dal", 189m, 5m, 1m)], TenderType.Upi);
+        Sell(11, [("Toor Dal", 189m, 5m, 1m)], TenderType.Card);
+        Sell(12, [("Toor Dal", 189m, 5m, 1m)], TenderType.StoreCredit);
+        Sell(13, [("Toor Dal", 189m, 5m, 1m)], TenderType.LoyaltyPoints);
+
+        var d = Gather();
+
+        Assert.Equal(189m, d.Range.Cash);
+        Assert.Equal(378m, d.Range.Bank);
+        Assert.Equal(189m, d.Range.Credit);
+        Assert.Equal(189m, d.Range.PointsRedeemed);
+
+        // Every rupee of takings is in exactly one of the four places, and none is counted twice.
+        // Cash kept, not cash taken: change handed back was never takings.
+        Assert.Equal(d.Range.NetSales, d.Range.CashInDrawer + d.Range.Bank + d.Range.Credit + d.Range.PointsRedeemed);
     }
 
     // ---- Customers -----------------------------------------------------------------------------

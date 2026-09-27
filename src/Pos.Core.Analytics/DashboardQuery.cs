@@ -30,13 +30,11 @@ public sealed class DashboardQuery(PosDatabase database)
 {
     private readonly PosDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
 
-    /// <summary>Amount columns are text; this turns one into exact paise for summing.</summary>
-    private const string Paise = "CAST(ROUND(CAST({0} AS REAL) * 100) AS INTEGER)";
-
-    private static string Sum(string column) => $"SUM({string.Format(CultureInfo.InvariantCulture, Paise, column)})";
+    /// <summary>Amount columns are text; this sums one as exact paise. See <see cref="PaiseSql"/>.</summary>
+    private static string Sum(string column) => PaiseSql.Sum(column);
 
     /// <summary>The same conversion without the SUM, for use inside one.</summary>
-    private static string Paise0(string column) => string.Format(CultureInfo.InvariantCulture, Paise, column);
+    private static string Paise0(string column) => PaiseSql.Of(column);
 
     /// <summary>
     /// A settled sale: anything in <c>invoices</c> that has not been voided.
@@ -82,13 +80,19 @@ public sealed class DashboardQuery(PosDatabase database)
         var lines = ReadLineFacts(connection, laneId, from, to);
         var tenders = ReadTenders(connection, laneId, from, to);
 
+        // Today's split gets its own read. It used to be skipped as not worth a query, which left
+        // today's cash at zero while today's change was counted - so the page's "cash in drawer"
+        // for today came out negative on any day the till had given change. One day of payments
+        // against the same index is a few milliseconds.
+        var todayTenders = ReadTenders(connection, laneId, startOfToday > from ? startOfToday : from, to);
+
         var data = new DashboardData
         {
             LaneId = laneId,
             From = from,
             To = to,
             GeneratedAt = now,
-            Today = Fold(facts.Where(f => f.At >= startOfToday && f.At <= now), tenders: null),
+            Today = Fold(facts.Where(f => f.At >= startOfToday && f.At <= now), todayTenders),
             Range = Fold(facts, tenders),
             Hourly = FoldHourly(facts),
             Daily = FoldDaily(facts, from, to),
@@ -234,13 +238,17 @@ public sealed class DashboardQuery(PosDatabase database)
             change += f.Change;
         }
 
-        // Today's card wants a cash split too, but running a second payments query for one day is
-        // not worth it — the day's own figures come from the same scan, and the split is only shown
-        // for the range when it has been read anyway.
-        var cash = tenders?.Where(t => t.Tender == "Cash").Sum(t => t.Amount) ?? 0m;
-        var digital = tenders?.Where(t => t.Tender != "Cash").Sum(t => t.Amount) ?? 0m;
+        decimal Taken(params TenderType[] kinds) =>
+            tenders?.Where(t => kinds.Any(k => t.Tender == Label(k))).Sum(t => t.Amount) ?? 0m;
 
-        return new Kpis(bills, net + discount, discount, net, tax, cash, digital, change);
+        // Each tender in exactly one place. Store credit is owed, not banked, and points are given
+        // away, not banked; lumping them in with card and UPI overstated the bank by both.
+        var cash = Taken(TenderType.Cash);
+        var bank = Taken(TenderType.Card, TenderType.Upi);
+        var credit = Taken(TenderType.StoreCredit);
+        var points = Taken(TenderType.LoyaltyPoints);
+
+        return new Kpis(bills, net + discount, discount, net, tax, cash, bank, credit, points, change);
     }
 
     private static List<HourlyBucket> FoldHourly(IReadOnlyList<InvoiceFacts> facts)
@@ -598,16 +606,20 @@ public sealed class DashboardQuery(PosDatabase database)
         var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Parameters.AddWithValue("$lane", lane);
-        command.Parameters.AddWithValue("$from", Timestamp(from));
-        command.Parameters.AddWithValue("$to", Timestamp(to));
+        command.Parameters.AddWithValue("$from", from);
+        command.Parameters.AddWithValue("$to", to);
         return command;
     }
 
-    /// <summary>
-    /// The same shape <c>created_at</c> is written in, so the comparison is a string comparison the
-    /// index can seek on rather than a conversion applied to every row.
-    /// </summary>
-    private static string Timestamp(DateTimeOffset moment) => moment.ToString("O", CultureInfo.InvariantCulture);
+    // The window is bound as a DateTimeOffset, so the driver formats it exactly as it formatted
+    // created_at when the invoice was written, and the comparison stays a plain string comparison
+    // the index can seek on.
+    //
+    // It used to be formatted here with "O", under a comment saying that was the shape created_at
+    // is written in. It is not: the driver writes "2026-09-21 10:00:00+05:30", with a space, and "O"
+    // gives "2026-09-21T00:00:00.0000000+05:30", with a T. A space sorts before a T, so every sale
+    // on the first day of a window compared as earlier than that day's midnight and was left out -
+    // the first day of every 7, 30 and 90-day view, missing from every figure on the page.
 
     private static decimal Rupees(long paise) => paise / 100m;
 

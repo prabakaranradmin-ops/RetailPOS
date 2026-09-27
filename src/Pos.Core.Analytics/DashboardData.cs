@@ -2,6 +2,19 @@ namespace Pos.Core.Analytics;
 
 /// <summary>The four figures a shopkeeper checks first.</summary>
 /// <param name="Bills">Settled invoices. Voided ones are not sales and are counted separately.</param>
+/// <param name="Cash">Cash taken, before change handed back. See <see cref="CashInDrawer"/>.</param>
+/// <param name="Bank">Card and UPI: the money that should arrive in the bank account.</param>
+/// <param name="Credit">
+/// Paid on store credit - money the customer still owes. Not in the drawer and not in the bank.
+/// </param>
+/// <param name="PointsRedeemed">
+/// Paid with loyalty points - money the shop gave away. It never arrives anywhere.
+/// </param>
+/// <remarks>
+/// Split four ways because the four answer different questions. It used to be cash and "digital",
+/// with digital meaning every other tender, shown as "what should reach the bank" - which counted
+/// what customers owe and what the shop gave away as money on its way to the bank account.
+/// </remarks>
 public sealed record Kpis(
     int Bills,
     decimal GrossSales,
@@ -9,7 +22,9 @@ public sealed record Kpis(
     decimal NetSales,
     decimal Tax,
     decimal Cash,
-    decimal Digital,
+    decimal Bank,
+    decimal Credit,
+    decimal PointsRedeemed,
     decimal ChangeGiven)
 {
     /// <summary>Average basket value: what a customer spends per visit.</summary>
@@ -18,7 +33,7 @@ public sealed record Kpis(
     /// <summary>What should be in the drawer: cash taken, less change handed back.</summary>
     public decimal CashInDrawer => Cash - ChangeGiven;
 
-    public static Kpis Empty { get; } = new(0, 0m, 0m, 0m, 0m, 0m, 0m, 0m);
+    public static Kpis Empty { get; } = new(0, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m);
 }
 
 /// <param name="Hour">0-23, the shop's local hour.</param>
