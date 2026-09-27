@@ -136,7 +136,18 @@ public partial class App : Application
             settings.ScannerMaxKeystrokeGap,
             invoices: invoices,
             dayClose: dayClose,
-            cashierName: settings.DefaultCashierName);
+            cashierName: settings.DefaultCashierName,
+
+            // The till's own drawer and printer, and whoever is on the till when the money is
+            // handed over - so the day-end report puts a cash repayment on the right shift.
+            credit: new CreditService(
+                new CreditRepository(database),
+                drawer,
+                TimeProvider.System,
+                printer,
+                new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
+                _log,
+                () => viewModelRef?.CashierName));
 
         viewModelRef = viewModel;
 
@@ -165,7 +176,7 @@ public partial class App : Application
 
                 // The same store the till attaches customers through, so a name saved on the owner's
                 // screen is the name the next bill prints.
-                new CustomersViewModel(new CustomerQuery(database), customers));
+                new CustomersViewModel(new CustomerQuery(database), customers, new CreditRepository(database)));
         };
 
         MainWindow = billingView;

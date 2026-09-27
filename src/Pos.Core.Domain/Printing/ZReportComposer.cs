@@ -113,18 +113,22 @@ public sealed class ZReportComposer
             report.Blank();
             report.Text(Labels.NoSalesInThisPeriod, TextAlignment.Center, bold: true);
             report.Blank();
+
+            // No sales is not the same as no money. A day on which somebody only came in to settle
+            // their khata still has cash in the drawer to count, and a report that just said "no
+            // sales" would leave it unexplained.
+            if (day.CollectedCredit)
+            {
+                WriteDrawer(report, day);
+                WriteCollections(report, day);
+            }
+
             WriteHeldBills(report, day);
             report.Cut();
             return report;
         }
 
-        // What has to be counted, first and large.
-        report.Text(Labels.CashInDrawerShouldBe, TextAlignment.Center);
-        report.Text(Amount(day.CashExpected), TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
-        report.Blank();
-        report.Columns($"  {Labels.CashTaken}", Amount(day.TotalOf(TenderType.Cash)));
-        report.Columns($"  {Labels.ChangeGiven}", Amount(day.ChangeGiven));
-        report.Rule();
+        WriteDrawer(report, day);
 
         report.Text(Labels.Sales, bold: true);
         report.Columns(Labels.Invoices, day.InvoiceCount.ToString(CultureInfo.InvariantCulture));
@@ -170,6 +174,8 @@ public sealed class ZReportComposer
         foreach (var tender in day.Tenders)
             report.Columns($"{Label(tender.Type)} ({tender.PaymentCount})", Amount(tender.Amount));
 
+        WriteCollections(report, day);
+
         if (day.PointsRedeemed > 0 || day.PointsEarned > 0)
         {
             report.Rule();
@@ -187,6 +193,52 @@ public sealed class ZReportComposer
 
         report.Cut();
         return report;
+    }
+
+    /// <summary>
+    /// What has to be counted, first and large, with the lines that add up to it.
+    /// </summary>
+    /// <remarks>
+    /// Cash paid back on credit is printed as its own line rather than folded into "cash taken".
+    /// Folded in, the drawer figure would agree with the count but "cash taken" would no longer be
+    /// what the bills took, and the tender total below would stop matching it.
+    /// </remarks>
+    private void WriteDrawer(ReceiptBuilder report, DayCloseSummary day)
+    {
+        report.Text(Labels.CashInDrawerShouldBe, TextAlignment.Center);
+        report.Text(Amount(day.CashExpected), TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
+        report.Blank();
+        report.Columns($"  {Labels.CashTaken}", Amount(day.TotalOf(TenderType.Cash)));
+        report.Columns($"  {Labels.ChangeGiven}", Amount(day.ChangeGiven));
+
+        if (day.CreditCollectedCash != 0m)
+            report.Columns($"  {Labels.CreditCollectedInCash}", Amount(day.CreditCollectedCash));
+
+        report.Rule();
+    }
+
+    /// <summary>
+    /// Money customers paid back against earlier credit.
+    /// </summary>
+    /// <remarks>
+    /// On its own, below the tenders and outside the sales. It is not a sale - the goods were sold,
+    /// and taxed, on the day they went out on credit - so counting it again here would double the
+    /// takings and the tax. It still arrived today, which is why it is on today's report at all.
+    /// </remarks>
+    private void WriteCollections(ReceiptBuilder report, DayCloseSummary day)
+    {
+        if (!day.CollectedCredit)
+            return;
+
+        report.Rule();
+        report.Text($"{Labels.CreditCollected} ({day.CreditCollectedCount})", bold: true);
+        report.Columns(Labels.Cash, Amount(day.CreditCollectedCash));
+
+        if (day.CreditCollectedToBank != 0m)
+            report.Columns(Labels.CreditCollectedToBank, Amount(day.CreditCollectedToBank));
+
+        report.Columns(Labels.Total, Amount(day.CreditCollected), bold: true);
+        report.Text(Labels.CreditCollectedNote);
     }
 
     /// <summary>

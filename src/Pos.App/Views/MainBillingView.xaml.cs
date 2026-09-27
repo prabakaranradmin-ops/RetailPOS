@@ -174,11 +174,16 @@ public partial class MainBillingView : Window
                 Dispatcher.BeginInvoke(() => Focus(CashierBox));
                 break;
 
+            case nameof(BillingViewModel.IsCollecting) when _viewModel.IsCollecting:
+                Dispatcher.BeginInvoke(() => Focus(CollectBox));
+                break;
+
             case nameof(BillingViewModel.IsTendering)
                 or nameof(BillingViewModel.IsFindingCustomer)
                 or nameof(BillingViewModel.IsReprinting)
                 or nameof(BillingViewModel.IsVoiding)
-                or nameof(BillingViewModel.IsSettingCashier):
+                or nameof(BillingViewModel.IsSettingCashier)
+                or nameof(BillingViewModel.IsCollecting):
                 if (!InAPane())
                     Dispatcher.BeginInvoke(FocusSearchBox);
                 break;
@@ -191,7 +196,8 @@ public partial class MainBillingView : Window
         || _viewModel.IsFindingCustomer
         || _viewModel.IsReprinting
         || _viewModel.IsVoiding
-        || _viewModel.IsSettingCashier;
+        || _viewModel.IsSettingCashier
+        || _viewModel.IsCollecting;
 
     private static void Focus(TextBox box)
     {
@@ -239,6 +245,7 @@ public partial class MainBillingView : Window
             (PosAction.HoldBill, "Hold"),
             (PosAction.RecallBill, "Recall"),
             (PosAction.FindCustomer, "Customer"),
+            (PosAction.ReceivePayment, "Credit"),
             (PosAction.OwnerView, "Owner"),
             (PosAction.ReprintInvoice, "Reprint"),
             (PosAction.NewBill, "New"),

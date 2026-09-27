@@ -45,6 +45,9 @@ public sealed class Keymap
         [new(Key.OemMinus)] = PosAction.DecrementQuantity,
 
         [new(Key.F7)] = PosAction.FindCustomer,
+
+        // Beside F7 on purpose: the customer first, then what they owe.
+        [new(Key.F8)] = PosAction.ReceivePayment,
         [new(Key.F12)] = PosAction.Tender,
 
         [new(Key.P, ModifierKeys.Control)] = PosAction.ReprintInvoice,

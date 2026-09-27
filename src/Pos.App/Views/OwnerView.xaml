@@ -203,7 +203,7 @@
 
       <!-- ==== The figures ==== -->
       <TabItem Header="The figures  (Ctrl+1)">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
+        <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel>
 
             <UniformGrid Rows="1" Margin="0,0,0,16">
@@ -520,7 +520,7 @@
       </TabItem>
 
       <!-- ==== Catalogue ==== -->
-      <TabItem Header="Catalogue  (Ctrl+3)">
+      <TabItem x:Name="CatalogueTabItem" Header="Catalogue  (Ctrl+3)">
         <Grid Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="440" />
@@ -528,7 +528,7 @@
           </Grid.ColumnDefinitions>
 
           <!-- One at a time -->
-          <ScrollViewer x:Name="SingleItemPanel" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
+          <ScrollViewer Tag="Page" x:Name="SingleItemPanel" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
             <Border Style="{StaticResource Card}">
               <StackPanel>
                 <TextBlock Text="ADD ONE ITEM" Style="{StaticResource Heading}" />
@@ -536,7 +536,7 @@
                            Text="For a product the shop has just started stocking. It goes through exactly the same checks a file does, so nothing gets in here that would be refused there." />
 
                 <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,10" />
+                <TextBox x:Name="NewItemName" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,10" />
 
                 <!-- Offered from the name, because the name is the only field that says what the
                      thing is. The shop's own codes come first and are marked as such. -->
@@ -755,7 +755,7 @@
           </Grid.ColumnDefinitions>
 
           <!-- What to check -->
-          <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
             <StackPanel>
               <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                 <StackPanel>
@@ -824,7 +824,7 @@
             <Border Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
               <Grid>
                 <!-- The running check's progress. -->
-                <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer Tag="Page" x:Name="LogScroll" VerticalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
                   <ItemsControl ItemsSource="{Binding Log}">
                     <ItemsControl.ItemTemplate>
@@ -837,14 +837,14 @@
                 </ScrollViewer>
 
                 <!-- The composed bill, in the face the paper will carry. -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsPreviewText, Converter={StaticResource BoolToVisibility}}">
                   <TextBlock Text="{Binding PreviewText, Mode=OneWay}" Foreground="{StaticResource Ink}"
                              FontFamily="Consolas" FontSize="12.5" />
                 </ScrollViewer>
 
                 <!-- The dots themselves, once they have been drawn. -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsPreviewImage, Converter={StaticResource BoolToVisibility}}">
                   <Border Background="White" Padding="10" HorizontalAlignment="Left">
                     <Image x:Name="PreviewImage" Stretch="None" />
@@ -858,7 +858,7 @@
 
       <!-- ==== Settings ==== -->
       <TabItem Header="Settings  (Ctrl+5)">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
+        <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel MaxWidth="900" HorizontalAlignment="Left">
 
             <!--
@@ -938,7 +938,7 @@
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
 
-          <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
             <StackPanel>
 
               <Border Style="{StaticResource Card}" Margin="0,0,0,12">
@@ -1005,7 +1005,7 @@
 
             <Border Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
               <Grid>
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
                   <ItemsControl ItemsSource="{Binding Log}">
                     <ItemsControl.ItemTemplate>
@@ -1017,7 +1017,7 @@
                   </ItemsControl>
                 </ScrollViewer>
 
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                               Visibility="{Binding HasReport, Converter={StaticResource BoolToVisibility}}">
                   <TextBlock Text="{Binding ReportText, Mode=OneWay}" Foreground="{StaticResource Ink}"
                              FontFamily="Consolas" FontSize="12.5" />
@@ -1111,18 +1111,28 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
 
-              <TextBlock Grid.Row="0" Text="FIND A CUSTOMER" Style="{StaticResource Heading}" />
+              <TextBlock Grid.Row="0" Text="{Binding ResultsHeading, Mode=OneWay}" Style="{StaticResource Heading}" />
               <TextBlock Grid.Row="1" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,8"
                          Text="Type part of a name or a mobile number. Leave it empty to see who spends most." />
               <TextBox Grid.Row="2" x:Name="CustomerSearch" Padding="8,6" Margin="0,0,0,10"
                        Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}"
                        PreviewKeyDown="CustomerSearch_PreviewKeyDown" />
 
-              <DataGrid Grid.Row="3" x:Name="CustomerResults"
+              <!-- What the shop is owed on credit, in all, and the switch to the list of who owes it. -->
+              <StackPanel Grid.Row="3" Margin="0,0,0,10"
+                          Visibility="{Binding HasCredit, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding TotalOwedLine, Mode=OneWay}" Foreground="{StaticResource Negative}"
+                           TextWrapping="Wrap" Margin="0,0,0,6" />
+                <CheckBox Content="Only customers who _owe" IsChecked="{Binding OnlyOwing}"
+                          Foreground="{StaticResource Ink}" />
+              </StackPanel>
+
+              <DataGrid Grid.Row="4" x:Name="CustomerResults"
                         ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}"
                         AutoGenerateColumns="False" IsReadOnly="True"
                         Background="Transparent" RowBackground="Transparent" BorderThickness="0"
@@ -1131,12 +1141,13 @@
                         SelectionMode="Single" RowHeight="32">
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="Customer" Binding="{Binding Label}" Width="*" />
-                  <DataGridTextColumn Header="Visits" Binding="{Binding Visits}" Width="60" />
-                  <DataGridTextColumn Header="Spent" Binding="{Binding Spent, StringFormat={}{0:N2}}" Width="100" />
+                  <DataGridTextColumn Header="Visits" Binding="{Binding Visits}" Width="52" />
+                  <DataGridTextColumn Header="Spent" Binding="{Binding Spent, StringFormat={}{0:N2}}" Width="90" />
+                  <DataGridTextColumn Header="Owes" Binding="{Binding Owed, StringFormat={}{0:N2}}" Width="80" />
                 </DataGrid.Columns>
               </DataGrid>
 
-              <TextBlock Grid.Row="4" Text="{Binding Status, Mode=OneWay}" Style="{StaticResource Label}"
+              <TextBlock Grid.Row="5" Text="{Binding Status, Mode=OneWay}" Style="{StaticResource Label}"
                          TextWrapping="Wrap" Margin="0,8,0,0" />
             </Grid>
           </Border>
@@ -1149,7 +1160,7 @@
                      Text="Pick a customer from the list to see what they buy, how often they come in, and when they were last here." />
 
           <!-- The one picked -->
-          <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+          <ScrollViewer Tag="Page" Grid.Column="1" VerticalScrollBarVisibility="Auto"
                         Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
             <StackPanel>
 
@@ -1161,6 +1172,9 @@
                     <Run Text="{Binding Points, Mode=OneWay}" /><Run Text=" points  ·  " />
                     <Run Text="{Binding SinceLastVisit, Mode=OneWay}" />
                   </TextBlock>
+                  <TextBlock Text="{Binding Owes, Mode=OneWay}" Foreground="{StaticResource Negative}"
+                             FontSize="16" FontWeight="SemiBold" Margin="0,-6,0,12"
+                             Visibility="{Binding OwesAnything, Converter={StaticResource BoolToVisibility}}" />
 
                   <UniformGrid Rows="1">
                     <StackPanel Margin="0,0,12,0">
@@ -1233,6 +1247,27 @@
                   </StackPanel>
                 </Border>
               </Grid>
+
+              <!-- Their khata: every credit purchase and every payment, with what was owed after each.
+                   The one record that settles a disagreement about what somebody owes. -->
+              <Border Style="{StaticResource Card}" Margin="0,0,0,14"
+                      Visibility="{Binding HasKhata, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                  <TextBlock Text="KHATA" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding Khata}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}" RowHeight="30"
+                            MaxHeight="260">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="When" Binding="{Binding At, StringFormat=dd MMM yyyy  HH:mm}" Width="170" />
+                      <DataGridTextColumn Header="What" Binding="{Binding Description}" Width="*" />
+                      <DataGridTextColumn Header="+ / -" Binding="{Binding Change, StringFormat={}{0:N2}}" Width="100" />
+                      <DataGridTextColumn Header="Owed after" Binding="{Binding BalanceAfter, StringFormat={}{0:N2}}" Width="110" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
 
               <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                 <StackPanel>

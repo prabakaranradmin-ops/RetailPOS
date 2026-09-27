@@ -300,6 +300,25 @@ public class MaintenanceTests : IDisposable
         Assert.Equal(1, screen.Closes[0].InvoiceCount);
     }
 
+    /// <summary>The report asked for is nearly always last night's, so Alt+R alone reads it.</summary>
+    [Fact]
+    public void TheNewestReportIsPickedAlready()
+    {
+        SeedCatalogue();
+        Sell();
+        Closes.Close(Lane, DateTimeOffset.Now.AddHours(-1));
+        Sell();
+        Sell();
+        Closes.Close(Lane, DateTimeOffset.Now);
+
+        var screen = Screen();
+
+        Assert.Equal(2, screen.Closes.Count);
+        Assert.NotNull(screen.SelectedClose);
+        Assert.Equal(2, screen.SelectedClose!.InvoiceCount);
+        Assert.True(screen.CanShowReport);
+    }
+
     [Fact]
     public async Task APastReportCanBeReadWithoutPrintingAnything()
     {

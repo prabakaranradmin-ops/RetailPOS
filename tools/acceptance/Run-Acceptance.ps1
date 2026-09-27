@@ -659,13 +659,23 @@ if (-not $NoUi) {
     # showing 0.00, so this asks the same query the screen uses, and checks the number.
     $afterSale = Join-Path $workspace 'dashboard-after-sale.html'
     $r = Invoke-Pos @('dashboard', '--out', $afterSale) -StdIn @('Maligai26')
-    $countsIt = $r.Output -match 'Bills\s*:\s*1\b'
-    $valuesIt = $r.Output -match 'Net sales\s*:\s*495\.'
+    # Two bills: the parked-and-recalled sale (495.00) and the credit sale (189.00). A repayment is
+    # not a sale, so the 100.00 paid back is in neither figure.
+    $countsIt = $r.Output -match 'Bills\s*:\s*2\b'
+    $valuesIt = $r.Output -match 'Net sales\s*:\s*684\.00'
 
     Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The figures count a sale that was parked first' `
-        -Expected 'one bill, 495 — the same sale the day-end report closed' `
+        -Expected 'two bills, 684.00 - the parked sale and the credit sale, and not the repayment' `
         -Actual (Short $r.Output 6) -Passed ($countsIt -and $valuesIt) `
         -Detail 'Parking is ordinary at a counter. A sale that spent a minute parked is still a sale.'
+
+    # The repayment on the stored Z-report, read back from the books rather than off a picture.
+    $r = Invoke-Pos @('close-day', '--show')
+    $collected = ($r.Output -match 'Credit collected \(1\)') -and ($r.Output -match 'Credit collected in cash')
+    Add-Result -Kind Positive -Feature 'Credit' -Name 'The day-end report shows the credit collected, apart from sales' `
+        -Expected 'a credit-collected section of one payment, and the cash line added to the drawer' `
+        -Actual $(if ($collected) { 'present' } else { 'missing' }) -Passed $collected `
+        -Detail 'Not sales and not taxed - the goods were sold, and taxed, the day they went out on credit.'
 
     $r = Invoke-Pos @('close-day', '--preview')
     $nothingLeft = $r.Output -match 'விற்பனை இல்லை|NO SALES'

@@ -318,6 +318,37 @@ The screenshot check for that tab had passed while showing 0.00. The run now als
 query the screen uses and checks the count against the sale, because a picture that nobody reads is
 not a check.
 
+## Customer credit (khata) — **complete** *(added 2026-09-27, approved)*
+
+The till took "store credit" as a tender and printed it, but nothing recorded who owed what, there
+was no way to take it back, and nothing stopped a walk-in bill going on credit — a debt with nobody
+to collect it from. On the owner's screen it was counted as money on its way to the bank.
+
+- **Nothing is stored as a balance.** What a customer owes is their store-credit payments on bills
+  that were not voided, less their repayments, summed in exact paise each time it is asked
+  (`CreditRepository.OwedPaiseSql`, the one definition, shared with the owner's customer list).
+  Voiding a credit sale therefore takes it off what they owe with nothing having to remember to.
+- **Credit needs a customer**, enforced in `CheckoutService` rather than only on the screen.
+- **Repayments (`F8`)** are recorded in `credit_payments` (migration 011): cash, UPI or card only,
+  never more than is owed, never a fraction of a paisa, checked and written in one transaction so
+  two lanes cannot together take too much. The drawer opens for cash and the customer gets a slip
+  headed PAYMENT RECEIVED — never TAX INVOICE, since nothing was sold.
+- **A repayment is not a sale.** It stays out of net sales and out of the tenders, so every
+  reconciliation on the Z-report still holds, and is listed apart as *credit collected*. The cash
+  part is added to *cash in drawer should be* and to the cashier who took it, so the drawer and the
+  shift split both still count out. Repayments are stamped by the close that reports them, exactly
+  as invoices are, so each is on one Z-report only.
+- **A day with only repayments still closes.** The till no longer calls it "nothing sold", and
+  `pos close-day` no longer demands `--force` for it — that cash would otherwise go unreported.
+- **Reprints stay true.** Change given is not stored but worked back from the drawer figure; the
+  cash repayment comes off first, or a reprinted report would show it as negative change.
+- **A customer who owes cannot be forgotten**, and neither can one the shop owes. Once settled they
+  can be, and their repayments stay — the money was received — but anonymous.
+- **The owner** sees the total owed to the shop, a *who owes what* list most first, and each
+  customer's khata with the balance after every line.
+- The Tamil report and slip keep these labels in English, like the tender names already were,
+  rather than print Tamil composed here that no shopkeeper has checked.
+
 ## Three more wrong figures on the owner's screen — **fixed** *(2026-09-27)*
 
 Found while planning customer credit, which meant reading every line of the dashboard that

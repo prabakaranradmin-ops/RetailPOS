@@ -343,7 +343,7 @@ Copy the folder to the lane, then:
 4. Ctrl+3  add items one at a time, or load a catalogue file
 ```
 
-Everything a shop does day to day is on those screens — billing, customers, stock, the catalogue, the hardware
+Everything a shop does day to day is on those screens — billing, customers, credit, stock, the catalogue, the hardware
 checks, the figures, backups, the database check, reprinting a Z-report, restoring a snapshot. The
 `pos` tool does all of it from a command line too, for support and for a scripted rollout, and it is
 the way in when the till itself will not open.

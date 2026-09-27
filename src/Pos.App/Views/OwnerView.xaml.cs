@@ -64,7 +64,17 @@ public partial class OwnerView : Window
         // the owner's screen to glance at today's takings does not also read every customer.
         Tabs.SelectionChanged += (_, e) =>
         {
-            if (e.OriginalSource != Tabs || Tabs.SelectedItem is not TabItem { Content: Grid { Name: "CustomersTab" } })
+            if (e.OriginalSource != Tabs)
+                return;
+
+            // Ctrl+3 lands in the item name box, so adding one product is Ctrl+3 then typing.
+            if (Tabs.SelectedItem == CatalogueTabItem)
+            {
+                Dispatcher.BeginInvoke(() => NewItemName.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+                return;
+            }
+
+            if (Tabs.SelectedItem is not TabItem { Content: Grid { Name: "CustomersTab" } })
                 return;
 
             if (_customers.Results.Count == 0)
@@ -161,6 +171,49 @@ public partial class OwnerView : Window
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
         }
+
+        // Page Down and Page Up scroll the tab. Without them most of this screen - the margins,
+        // the trend, a customer's khata, a report being read back - could only be reached with a
+        // mouse, on an application that is meant to be driven from the keyboard end to end.
+        if (e.KeyboardDevice.Modifiers == ModifierKeys.None && e.Key is Key.PageDown or Key.PageUp
+            && PageScroller() is { } scroller)
+        {
+            if (e.Key == Key.PageDown)
+                scroller.PageDown();
+            else
+                scroller.PageUp();
+
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// The part of the current tab that Page Down should move: the last visible area marked
+    /// <c>Tag="Page"</c> that has anything to scroll.
+    /// </summary>
+    /// <remarks>
+    /// The last rather than the first, because on the tabs with two - Hardware, Maintenance - the
+    /// second is the content being looked at: the drawn bill, the report read back. Null when
+    /// nothing on the tab needs scrolling, so a grid that pages its own rows still gets the key.
+    /// </remarks>
+    private ScrollViewer? PageScroller()
+    {
+        if (Tabs.SelectedItem is not TabItem { Content: DependencyObject content })
+            return null;
+
+        ScrollViewer? found = null;
+
+        void Walk(DependencyObject node)
+        {
+            if (node is ScrollViewer { Tag: "Page", IsVisible: true } scroller && scroller.ScrollableHeight > 0)
+                found = scroller;
+
+            for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(node); i++)
+                Walk(System.Windows.Media.VisualTreeHelper.GetChild(node, i));
+        }
+
+        Walk(content);
+        return found;
     }
 
     // ---- Maintenance -----------------------------------------------------------------------------

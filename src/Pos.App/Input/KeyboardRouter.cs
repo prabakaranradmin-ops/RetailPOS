@@ -28,6 +28,9 @@ public interface IBillingActions
     void VoidInvoice();
     void SetCashier();
 
+    /// <summary>Take a customer's payment against what they owe on credit.</summary>
+    void ReceivePayment();
+
     /// <summary>Open the owner's screen: the figures, the reorder list and the lane's settings.</summary>
     void OwnerView();
 }
@@ -92,6 +95,7 @@ public sealed class KeyboardRouter
             case PosAction.CloseDay: _target.CloseDay(); break;
             case PosAction.VoidInvoice: _target.VoidInvoice(); break;
             case PosAction.SetCashier: _target.SetCashier(); break;
+            case PosAction.ReceivePayment: _target.ReceivePayment(); break;
             case PosAction.OwnerView: _target.OwnerView(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a

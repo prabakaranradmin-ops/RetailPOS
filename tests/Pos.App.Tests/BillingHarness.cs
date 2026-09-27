@@ -59,6 +59,8 @@ public sealed class BillingHarness : IDisposable
             Printer,
             Backups);
 
+        Credit = new CreditRepository(_temp.Database);
+
         ViewModel = new BillingViewModel(
             new InvoiceEngine(OutletStateCode),
             _temp.Items,
@@ -71,7 +73,9 @@ public sealed class BillingHarness : IDisposable
             TimeSpan.FromMilliseconds(DebounceMs),
             TimeSpan.FromMilliseconds(30),
             invoices: Invoices,
-            dayClose: DayClose);
+            dayClose: DayClose,
+            credit: new CreditService(
+                Credit, Drawer, TimeProvider.System, Printer, Receipts, cashier: () => ViewModel?.CashierName));
 
         Router = new KeyboardRouter(Keymap.Default, ViewModel);
     }
@@ -91,6 +95,9 @@ public sealed class BillingHarness : IDisposable
     public CheckoutService Checkout { get; }
 
     public LoopbackPrinterService Printer { get; }
+
+    /// <summary>Customer credit, read straight from the books this till writes to.</summary>
+    public CreditRepository Credit { get; }
 
     public ReceiptComposer Receipts { get; }
 

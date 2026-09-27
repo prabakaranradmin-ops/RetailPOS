@@ -277,6 +277,11 @@ public sealed class MaintenanceViewModel : ObservableObject
         {
             foreach (var entry in _closes.List(_laneId, 60))
                 Closes.Add(entry);
+
+            // The newest, picked already. The report somebody reaches for is nearly always last
+            // night's - the sheet that jammed - and with nothing picked, "Read it" and "Print a
+            // duplicate" sat disabled until the mouse found the list.
+            SelectedClose = Closes.FirstOrDefault();
         }
         catch (Exception ex)
         {

@@ -68,6 +68,15 @@ function Write-AcceptanceReport {
 
     $positivePassed = @($positive | Where-Object { $_.Passed }).Count
     $negativePassed = @($negative | Where-Object { $_.Passed }).Count
+
+    # The owner reads the report for their own screen, so it is gathered in one place, in the order
+    # it was walked, rather than scattered between the cashier's checks.
+    $isOwner = { param($r) ($r.Shot -like 'owner-*') -or ($r.Feature -in @('Owner screen', 'Maintenance')) }
+    $owner = @($Results | Where-Object { & $isOwner $_ })
+    $ownerPassed = @($owner | Where-Object { $_.Passed }).Count
+    $ownerShots = @($owner | Where-Object { $_.Shot }).Count
+    $tillPositive = @($positive | Where-Object { -not (& $isOwner $_) })
+    $tillNegative = @($negative | Where-Object { -not (& $isOwner $_) })
     $totalFailed = @($Results | Where-Object { -not $_.Passed }).Count
 
     $version = 'unknown'
@@ -221,19 +230,26 @@ $(if ($Stale) { @"
     <div class="tile"><div class="n">$($Results.Count)</div><div class="l">Checks run</div></div>
     <div class="tile ok"><div class="n">$positivePassed / $($positive.Count)</div><div class="l">Positive passed</div></div>
     <div class="tile ok"><div class="n">$negativePassed / $($negative.Count)</div><div class="l">Negative passed</div></div>
+    <div class="tile ok"><div class="n">$ownerPassed / $($owner.Count)</div><div class="l">Owner's screen passed</div></div>
     <div class="tile $(if ($totalFailed) { 'bad' } else { 'ok' })"><div class="n">$totalFailed</div><div class="l">Failed</div></div>
   </div>
 
-  <h2>Positive checks <span class="count">&mdash; things that must work</span></h2>
-  <p class="lede">Each of these drives a feature the way a cashier or a shopkeeper would and
-     confirms it did what it was asked. A failure here means something is broken.</p>
-  $(& $rows $positive 'Nothing ran.')
+  <h2>At the till: positive checks <span class="count">&mdash; things that must work</span></h2>
+  <p class="lede">Each of these drives a feature the way a cashier would and confirms it did what it
+     was asked. A failure here means something is broken.</p>
+  $(& $rows $tillPositive 'Nothing ran.')
 
-  <h2>Negative checks <span class="count">&mdash; things that must be refused</span></h2>
+  <h2>At the till: negative checks <span class="count">&mdash; things that must be refused</span></h2>
   <p class="lede">Each of these asks the software to do something it should not, and passes only if
      it was stopped. A failure here is the more serious of the two: it means something that should
      have been refused went through.</p>
-  $(& $rows $negative 'Nothing ran.')
+  $(& $rows $tillNegative 'Nothing ran.')
+
+  <h2>The owner's screen <span class="count">&mdash; $ownerShots screenshots, in the order walked</span></h2>
+  <p class="lede">Opened with the owner's PIN from the till and walked with the keyboard alone: the
+     figures a page at a time, stock, the catalogue, hardware, settings, maintenance and customers.
+     Where a screen runs past the bottom, each further page is shown as Page Down reached it.</p>
+  $(& $rows $owner 'The owner''s screen was not walked in this run.')
 
   <footer>
     <p>Screenshots are of the running till and are embedded in this file, so it can be filed or sent

@@ -105,6 +105,33 @@ public sealed record ReceiptLabels
     public required string InvoicesVoided { get; init; }
     public required string ValueVoided { get; init; }
     public required string VoidsExcludedNote { get; init; }
+
+    /// <summary>Heading for money customers paid back against what they owed on credit.</summary>
+    public required string CreditCollected { get; init; }
+
+    /// <summary>The drawer line for credit paid back in cash, added to what should be counted.</summary>
+    public required string CreditCollectedInCash { get; init; }
+
+    /// <summary>Credit paid back by card or UPI, which goes to the bank rather than the drawer.</summary>
+    public required string CreditCollectedToBank { get; init; }
+
+    /// <summary>Why the section is not in sales: it is money owed from earlier days, and untaxed.</summary>
+    public required string CreditCollectedNote { get; init; }
+
+    /// <summary>Heading of the slip given to a customer who pays back credit.</summary>
+    public required string PaymentReceived { get; init; }
+
+    /// <summary>What they paid on the slip.</summary>
+    public required string AmountPaid { get; init; }
+
+    /// <summary>What they still owe after paying.</summary>
+    public required string StillOwed { get; init; }
+
+    /// <summary>
+    /// Says what the slip is not. It carries no goods and no tax, and a customer - or an inspector -
+    /// must not be able to mistake it for an invoice.
+    /// </summary>
+    public required string PaymentSlipNote { get; init; }
     public required string ByCashier { get; init; }
     public required string CashierName { get; init; }
     public required string CashHeld { get; init; }
@@ -191,6 +218,14 @@ public sealed record ReceiptLabels
         InvoicesVoided = "Invoices voided",
         ValueVoided = "Value voided",
         VoidsExcludedNote = "Excluded from sales and tax above.",
+        CreditCollected = "Credit collected",
+        CreditCollectedInCash = "Credit collected in cash",
+        CreditCollectedToBank = "By card or UPI",
+        CreditCollectedNote = "Paid back against earlier credit. Not sales, no tax.",
+        PaymentReceived = "PAYMENT RECEIVED",
+        AmountPaid = "Paid",
+        StillOwed = "Still owed",
+        PaymentSlipNote = "Against credit. Not a tax invoice.",
         ByCashier = "By cashier",
         CashierName = "Name",
         CashHeld = "Cash",
@@ -286,6 +321,19 @@ public sealed record ReceiptLabels
         InvoicesVoided = "ரத்து செய்த பில்கள்",
         ValueVoided = "ரத்து செய்த தொகை",
         VoidsExcludedNote = "மேலே உள்ள விற்பனை மற்றும் வரியில் சேர்க்கப்படவில்லை.",
+
+        // Left in English, like the tender names above ("Cash", "Credit"): these name the same
+        // tenders, and a Tamil phrase composed here rather than taken from a real bill would need
+        // the native check the round-off label is still waiting on. Worth replacing once a
+        // shopkeeper says what they call it.
+        CreditCollected = "Credit collected",
+        CreditCollectedInCash = "Credit collected in cash",
+        CreditCollectedToBank = "By card or UPI",
+        CreditCollectedNote = "Paid back against earlier credit. Not sales, no tax.",
+        PaymentReceived = "PAYMENT RECEIVED",
+        AmountPaid = "Paid",
+        StillOwed = "Still owed",
+        PaymentSlipNote = "Against credit. Not a tax invoice.",
         ByCashier = "கேஷியர் வாரியாக",
         CashierName = "பெயர்",
         CashHeld = "ரொக்கம்",

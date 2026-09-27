@@ -109,6 +109,11 @@ public sealed class CheckoutService(
         if (pointsRedeemed > 0 && customer is null)
             throw new InvalidOperationException("Points cannot be redeemed without a customer on the bill.");
 
+        // Store credit is a debt, and a debt with nobody attached to it is one nobody can collect.
+        // Enforced here rather than only on the screen, so there is no route to a walk-in credit sale.
+        if (customer is null && basket.TotalOf(TenderType.StoreCredit) > 0m)
+            throw new InvalidOperationException("Store credit needs a customer on the bill - somebody has to owe it.");
+
         // Accrual is on the net bill — what the customer actually paid for after points came off —
         // so points spent on an invoice never earn points back (SRS section 4).
         var redemptionValue = basket.TotalOf(TenderType.LoyaltyPoints);

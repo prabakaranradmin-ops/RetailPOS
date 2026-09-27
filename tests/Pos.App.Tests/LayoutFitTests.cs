@@ -157,6 +157,48 @@ public class LayoutFitTests : IDisposable
             + string.Join("\n  ", clipped));
     }
 
+    /// <summary>
+    /// No key in the footer is hidden under Pay &amp; Print.
+    /// </summary>
+    /// <remarks>
+    /// The one fault the other checks here could not see: the pills are not buttons, and they did
+    /// not run off the side - they ran underneath. Pills and Pay shared one grid cell, so adding F8
+    /// pushed "Close day" behind the Pay pill on a 1920 screen, found in an acceptance screenshot.
+    /// Overlap is checked with a pixel of slack so two pills that merely touch are not a failure.
+    /// </remarks>
+    private static void AssertNoKeyIsHiddenUnderPay(Window window, string where)
+    {
+        var pills = (ItemsControl)window.FindName("KeyPills");
+        var pay = (FrameworkElement)window.FindName("PayPill");
+
+        Assert.NotNull(pills);
+        Assert.NotNull(pay);
+
+        static Rect Bounds(FrameworkElement element, Visual root) =>
+            element.TransformToAncestor(root).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+        var payBounds = Bounds(pay, window);
+        var hidden = new List<string>();
+
+        for (var i = 0; i < pills.Items.Count; i++)
+        {
+            if (pills.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement pill || !pill.IsVisible)
+                continue;
+
+            var bounds = Bounds(pill, window);
+
+            var overlaps = bounds.Right > payBounds.Left + Slack && bounds.Left < payBounds.Right - Slack
+                && bounds.Bottom > payBounds.Top + Slack && bounds.Top < payBounds.Bottom - Slack;
+
+            if (overlaps)
+                hidden.Add($"{pills.Items[i]} spans {bounds.Left:N0} to {bounds.Right:N0}; Pay starts at {payBounds.Left:N0}");
+        }
+
+        Assert.True(hidden.Count == 0,
+            $"On {where} at {TillWidth}x{TillHeight}, these keys are hidden under Pay & Print:\n  "
+            + string.Join("\n  ", hidden));
+    }
+
     /// <summary>Nothing needs sideways scrolling, because nothing on these screens scrolls sideways.</summary>
     private static void AssertNothingOverflowsSideways(Window window, string where)
     {
@@ -202,6 +244,7 @@ public class LayoutFitTests : IDisposable
 
                 AssertEveryButtonIsReachable(window, "the billing screen");
                 AssertNoButtonLabelIsCutOff(window, "the billing screen");
+                AssertNoKeyIsHiddenUnderPay(window, "the billing screen");
                 AssertNothingOverflowsSideways(window, "the billing screen");
             }
             finally
@@ -237,6 +280,7 @@ public class LayoutFitTests : IDisposable
 
                 AssertEveryButtonIsReachable(window, "the billing screen with a long item name");
                 AssertNoButtonLabelIsCutOff(window, "the billing screen with a long item name");
+                AssertNoKeyIsHiddenUnderPay(window, "the billing screen with a long item name");
                 AssertNothingOverflowsSideways(window, "the billing screen with a long item name");
             }
             finally
@@ -334,12 +378,14 @@ public class LayoutFitTests : IDisposable
         bill.SetCustomer(lakshmi);
 
         var basket = new TenderBasket(bill.Totals.AmountPayable);
-        basket.Add(TenderType.Cash, bill.Totals.AmountPayable);
+        // On credit, so the khata card and the total owed are on screen too - the widest the tab gets.
+        basket.Add(TenderType.StoreCredit, bill.Totals.AmountPayable);
 
         new CheckoutService(new InvoiceRepository(_temp.Database), customers, new RecordingDrawerService())
             .Complete("L1", bill, basket);
 
-        var screen = new CustomersViewModel(new Pos.Core.Analytics.CustomerQuery(_temp.Database), customers);
+        var screen = new CustomersViewModel(
+            new Pos.Core.Analytics.CustomerQuery(_temp.Database), customers, new CreditRepository(_temp.Database));
 
         Wpf.Run(() =>
         {
@@ -357,6 +403,7 @@ public class LayoutFitTests : IDisposable
                 window.UpdateLayout();
 
                 Assert.True(screen.HasSelection);
+                Assert.True(screen.HasKhata);
 
                 AssertEveryButtonIsReachable(window, "the Customers tab with a customer on it");
                 AssertNoButtonLabelIsCutOff(window, "the Customers tab with a customer on it");

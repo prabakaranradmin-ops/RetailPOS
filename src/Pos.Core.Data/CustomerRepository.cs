@@ -143,10 +143,26 @@ public sealed class CustomerRepository : ICustomerStore
             return command.ExecuteNonQuery();
         }
 
-        // Both tables reference the customer, and foreign keys are enforced, so the links go
-        // first. A parked bill loses its customer too: it would otherwise bring them back.
+        // A customer who still owes the shop money is not forgotten. Deleting them would delete the
+        // only record of who the debt belongs to, and the shop has a plain, lawful reason to keep it
+        // until it is settled. Checked in the same transaction as the delete.
+        var owed = CreditRepository.OwedPaise(connection, transaction, customerId);
+
+        if (owed != 0)
+        {
+            transaction.Rollback();
+
+            throw new InvalidOperationException(owed > 0
+                ? $"They still owe {PaiseSql.Rupees(owed):0.00} on credit. Take the payment first, then forget them."
+                : $"The shop owes them {PaiseSql.Rupees(-owed):0.00}. Settle that first, then forget them.");
+        }
+
+        // Every table that references the customer, and foreign keys are enforced, so the links go
+        // first. A parked bill loses its customer too: it would otherwise bring them back. Their
+        // repayments stay - the money was received and its day has to reconcile - but anonymous.
         var unlinked = Run("UPDATE invoices SET customer_id = NULL WHERE customer_id = $id;");
         Run("UPDATE held_bills SET customer_id = NULL WHERE customer_id = $id;");
+        Run("UPDATE credit_payments SET customer_id = NULL WHERE customer_id = $id;");
 
         if (Run("DELETE FROM customers WHERE id = $id;") == 0)
         {

@@ -300,7 +300,9 @@ switch (command)
         if (flags.Contains("--preview"))
             return 0;
 
-        if (preview.TookNothing && !flags.Contains("--force"))
+        // Credit paid back is money to report even on a day with no sales, so it does not need
+        // --force: that flag is for closing a day with nothing in it at all.
+        if (preview.TookNothing && !preview.CollectedCredit && !flags.Contains("--force"))
         {
             Console.WriteLine("Nothing has been sold since the last close. Pass --force to close anyway.");
             return 0;

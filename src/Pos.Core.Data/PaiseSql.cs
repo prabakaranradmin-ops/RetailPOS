@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Pos.Core.Analytics;
+namespace Pos.Core.Data;
 
 /// <summary>
 /// Turns a stored amount into whole paise inside SQL, so money is summed exactly.
@@ -12,7 +12,7 @@ namespace Pos.Core.Analytics;
 /// integer, and integer addition is exact however many rows there are. Shared so that the dashboard
 /// and a customer's history cannot disagree about what the same bills came to.
 /// </remarks>
-internal static class PaiseSql
+public static class PaiseSql
 {
     private const string Pattern = "CAST(ROUND(CAST({0} AS REAL) * 100) AS INTEGER)";
 

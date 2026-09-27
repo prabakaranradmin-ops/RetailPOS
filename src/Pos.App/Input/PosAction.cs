@@ -51,6 +51,9 @@ public enum PosAction
     /// <summary>Say who is on the till, at the start of a shift or when it changes.</summary>
     SetCashier,
 
+    /// <summary>Take a customer's payment against what they owe on credit.</summary>
+    ReceivePayment,
+
     /// <summary>
     /// Open the owner's screen: the figures, what needs reordering, and the lane's settings.
     /// </summary>

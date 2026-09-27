@@ -71,8 +71,22 @@ public sealed record DayCloseSummary(
     int HeldBillsOutstanding,
     int VoidedCount = 0,
     decimal VoidedValue = 0m,
-    IReadOnlyList<CashierTotal>? Cashiers = null)
+    IReadOnlyList<CashierTotal>? Cashiers = null,
+    decimal CreditCollected = 0m,
+    decimal CreditCollectedCash = 0m,
+    int CreditCollectedCount = 0)
 {
+    // CreditCollected is money customers paid back against earlier store credit. It is not a
+    // sale - no tax, no invoice - so it is outside NetSales and outside Tenders, and every
+    // reconciliation above still holds. The part paid in cash is in the drawer, though, so
+    // CashExpected = cash taken - change given + CreditCollectedCash.
+
+    /// <summary>Credit paid back by card or UPI: to the bank, not the drawer.</summary>
+    public decimal CreditCollectedToBank => CreditCollected - CreditCollectedCash;
+
+    /// <summary>True when customers paid anything back on credit during this report.</summary>
+    public bool CollectedCredit => CreditCollected != 0m;
+
     public decimal TotalTax => TotalCgst + TotalSgst + TotalIgst;
 
     /// <summary>Who traded on this report. Empty when nobody was recorded.</summary>

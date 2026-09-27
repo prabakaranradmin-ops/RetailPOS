@@ -132,7 +132,8 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `F3` | Type an exact quantity |
 | `F4` | Discount on the selected line |
 | `Delete` | Remove the selected line |
-| `F7` | Attach a customer by mobile or name (needed for loyalty points) |
+| `F7` | Attach a customer by mobile or name (needed for loyalty points and credit) |
+| `F8` | Take a payment against what a customer owes on credit |
 | `F5` | Park the bill |
 | `F6` | Bring a parked bill back |
 | `F12` | **Take payment** |
@@ -161,6 +162,23 @@ time the number alone brings it back. `Esc` at any point adds nobody.
 
 Change the number after the first `Enter` and the till asks again — the confirmation belongs to the
 number it was given for, so correcting a mistype cannot add the correction unchecked.
+
+### Credit (khata)
+
+**Selling on credit** — attach the customer with `F7` first, then `F12`, `↓` down to **Store credit**,
+and `Enter`. A walk-in bill cannot go on credit: somebody has to owe it. The till says what they now
+owe, and the side panel shows it every time they are attached to a bill.
+
+**Taking it back** — with the bill empty, `F8`. Type their number or part of their name, `↓` to pick
+them, `Enter`. The till says what they owe. Type what they are paying — or just `Enter` for all of
+it — choose **cash, UPI or card** with `↑`/`↓`, and `Enter`. The drawer opens for cash, and a slip
+prints for the customer headed **PAYMENT RECEIVED** — it is not a tax invoice, because nothing was
+sold. More than they owe is refused; so is taking it in credit or points.
+
+**At closing**, money paid back is **not a sale** — the goods and the tax were on the bill they
+bought on credit. The Z-report lists it apart as **Credit collected**, and the cash part is added to
+*cash in drawer should be*, so the drawer still counts out. A day with repayments and no sales still
+needs closing: the till says how much was collected.
 
 ### Things that will happen
 
@@ -296,7 +314,7 @@ than falling through to closing the day, so reading a report back can never acci
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
 | **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 | **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
-| **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most. For the one you pick: visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask. |
+| **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most, or tick **Only customers who owe** for the list of who owes what, most first, with the total the shop is owed. For the one you pick: what they owe and their **khata** (every credit purchase and payment, with the balance after each), visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask — not while they owe anything. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 

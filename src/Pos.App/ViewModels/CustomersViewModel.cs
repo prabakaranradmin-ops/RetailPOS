@@ -25,17 +25,75 @@ public sealed class CustomersViewModel : ObservableObject
 
     private readonly CustomerQuery _query;
     private readonly ICustomerStore _store;
+    private readonly ICreditStore? _credit;
 
+    private bool _onlyOwing;
+    private string _totalOwedLine = string.Empty;
     private string _searchText = string.Empty;
     private CustomerSummary? _selected;
     private CustomerProfile? _profile;
     private string _editName = string.Empty;
     private string _status = string.Empty;
 
-    public CustomersViewModel(CustomerQuery query, ICustomerStore store)
+    public CustomersViewModel(CustomerQuery query, ICustomerStore store, ICreditStore? credit = null)
     {
         _query = query ?? throw new ArgumentNullException(nameof(query));
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _credit = credit;
+    }
+
+    // ---- Credit ----------------------------------------------------------------------------------
+
+    /// <summary>Just the customers who owe, most first: the end-of-month list.</summary>
+    public bool OnlyOwing
+    {
+        get => _onlyOwing;
+        set
+        {
+            if (Set(ref _onlyOwing, value))
+                Search();
+        }
+    }
+
+    /// <summary>What the shop is owed on credit, in all, for the head of the list.</summary>
+    public string TotalOwedLine
+    {
+        get => _totalOwedLine;
+        private set => Set(ref _totalOwedLine, value);
+    }
+
+    public bool HasCredit => _credit is not null;
+
+    /// <summary>The chosen customer's khata, newest first, each line with the balance after it.</summary>
+    public ObservableCollection<CreditMovement> Khata { get; } = [];
+
+    public bool HasKhata => Khata.Count > 0;
+
+    /// <summary>What the chosen customer owes, or empty when they owe nothing.</summary>
+    public string Owes => _profile is { Customer.Owed: > 0m } p ? $"Owes {Money(p.Customer.Owed)} on credit" : string.Empty;
+
+    public bool OwesAnything => _profile is { Customer.Owed: > 0m };
+
+    private void RefreshTotalOwed()
+    {
+        if (_credit is null)
+        {
+            TotalOwedLine = string.Empty;
+            return;
+        }
+
+        try
+        {
+            var owing = _credit.Owing(10_000);
+
+            TotalOwedLine = owing.Count == 0
+                ? "Nobody owes the shop anything on credit."
+                : $"{Money(owing.Sum(o => o.Owed))} owed to the shop by {owing.Count} customer(s).";
+        }
+        catch (Exception ex)
+        {
+            TotalOwedLine = $"What is owed could not be read: {ex.Message}";
+        }
     }
 
     /// <summary>Customers matching the search, or the best customers when it is blank.</summary>
@@ -81,9 +139,13 @@ public sealed class CustomersViewModel : ObservableObject
     }
 
     /// <summary>What the list heading says it is showing.</summary>
-    public string ResultsHeading => _searchText.Trim().Length == 0
-        ? "BEST CUSTOMERS"
-        : $"MATCHING \"{_searchText.Trim()}\"";
+    public string ResultsHeading => (_searchText.Trim().Length == 0, _onlyOwing) switch
+    {
+        (true, true) => "WHO OWES WHAT",
+        (true, false) => "BEST CUSTOMERS",
+        (false, true) => $"OWING, MATCHING \"{_searchText.Trim()}\"",
+        _ => $"MATCHING \"{_searchText.Trim()}\"",
+    };
 
     // ---- The chosen customer ---------------------------------------------------------------------
 
@@ -148,12 +210,14 @@ public sealed class CustomersViewModel : ObservableObject
 
         try
         {
-            foreach (var customer in _query.Find(_searchText, 50))
+            foreach (var customer in _query.Find(_searchText, OnlyOwing ? 500 : 50, OnlyOwing))
                 Results.Add(customer);
 
             Status = Results.Count == 0 && _searchText.Trim().Length > 0
                 ? $"No customer matches \"{_searchText.Trim()}\"."
-                : string.Empty;
+                : Results.Count == 0 && OnlyOwing
+                    ? "Nobody owes anything on credit."
+                    : string.Empty;
         }
         catch (Exception ex)
         {
@@ -162,6 +226,7 @@ public sealed class CustomersViewModel : ObservableObject
         }
 
         Raise(nameof(ResultsHeading));
+        RefreshTotalOwed();
 
         // Keep the customer on screen if they are still in the list, so correcting a search does
         // not throw away the one being looked at - and read them again while at it, since the
@@ -243,6 +308,7 @@ public sealed class CustomersViewModel : ObservableObject
         Months.Clear();
         TopItems.Clear();
         RecentBills.Clear();
+        Khata.Clear();
 
         _profile = null;
 
@@ -265,6 +331,16 @@ public sealed class CustomersViewModel : ObservableObject
 
             foreach (var bill in profile.RecentBills)
                 RecentBills.Add(bill);
+
+            try
+            {
+                foreach (var line in _credit?.History(profile.Customer.Id) ?? [])
+                    Khata.Add(line);
+            }
+            catch (Exception ex)
+            {
+                Status = $"Their khata could not be read: {ex.Message}";
+            }
         }
 
         EditName = _profile?.Customer.Name ?? string.Empty;
@@ -273,7 +349,8 @@ public sealed class CustomersViewModel : ObservableObject
                  {
                      nameof(HasSelection), nameof(ShowsHint), nameof(Title), nameof(Mobile), nameof(Points),
                      nameof(Visits), nameof(Spent), nameof(AverageBasket), nameof(FirstVisit),
-                     nameof(LastVisit), nameof(SinceLastVisit),
+                     nameof(LastVisit), nameof(SinceLastVisit), nameof(Owes), nameof(OwesAnything),
+                     nameof(HasKhata),
                  })
         {
             Raise(name);

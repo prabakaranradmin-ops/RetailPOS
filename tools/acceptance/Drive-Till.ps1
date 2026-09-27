@@ -174,6 +174,51 @@ function Invoke-TillWalkthrough {
         return "$Name.png"
     }
 
+    # Pages down the owner's screen, photographing each page, until the picture stops changing.
+    #
+    # Most of the owner's screen is below the fold - the margins, the trend, a customer's khata, a
+    # report read back - and a walkthrough that photographed only the top of each tab covered the
+    # tabs without covering what is on them. Stops when a page comes out identical to the one before,
+    # which is the bottom; that last duplicate is deleted rather than put in the report twice.
+    function Save-Pages {
+        param(
+            [Parameter(Mandatory)] [string] $First,
+            [Parameter(Mandatory)] [string] $Feature,
+            [Parameter(Mandatory)] [string] $What,
+            [int] $Max = 6
+        )
+
+        $taken = @()
+        $firstPath = Join-Path $Shots $First
+        if (-not (Test-Path $firstPath)) { return ,$taken }
+
+        $previous = (Get-FileHash $firstPath -Algorithm SHA256).Hash
+        $stem = [System.IO.Path]::GetFileNameWithoutExtension($First)
+
+        for ($page = 2; $page -le $Max + 1; $page++) {
+            Send-Keys '{PGDN}' 800
+            $shot = Save-Shot "$stem-p$page" -Foreground
+            if (-not $shot) { break }
+
+            $path = Join-Path $Shots $shot
+            $hash = (Get-FileHash $path -Algorithm SHA256).Hash
+
+            if ($hash -eq $previous) {
+                Remove-Item -LiteralPath $path -Force
+                break
+            }
+
+            Add-Result -Kind Positive -Feature $Feature -Name "$What, page $page" `
+                -Expected 'the next part of the screen, reached with Page Down' -Actual 'captured' `
+                -Passed $true -Shot $shot
+
+            $taken += $shot
+            $previous = $hash
+        }
+
+        return ,$taken
+    }
+
     try {
         $shot = Save-Shot 'till-01-startup'
         Add-Result -Kind Positive -Feature 'Till' -Name 'The till starts on an empty bill' `
@@ -285,6 +330,37 @@ function Invoke-TillWalkthrough {
             -Expected 'a duplicate marked as a reprint' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
+        # --- Credit: a sale on the khata, then some of it paid back --------------------------
+        # After the reprint, so Ctrl+P above still reprinted the main sale. Lakshmi was named at
+        # the counter earlier in this run; her number now brings her straight back.
+        Send-Keys '{F7}' 800
+        Send-Keys '9500012345{ENTER}' 1000
+        Send-Scan '8901234567890'
+        Send-Keys '{F12}' 900
+        Send-Keys '{DOWN}{DOWN}{DOWN}' 600
+        Send-Keys '{ENTER}' 800
+        Send-Keys '{ENTER}' 1500
+        $shot = Save-Shot 'till-12b-credit-sale'
+        Add-Result -Kind Positive -Feature 'Credit' -Name 'A named customer can buy on credit' `
+            -Expected 'the sale settles on store credit and says what she now owes' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        # F8: find her by name, see what she owes, take 100 in cash.
+        Send-Keys '{F8}' 900
+        Send-Keys 'Lak' 900
+        Send-Keys '{DOWN}' 600
+        Send-Keys '{ENTER}' 900
+        $shot = Save-Shot 'till-12c-credit-owed'
+        Add-Result -Kind Positive -Feature 'Credit' -Name 'F8 finds the customer and says what she owes' `
+            -Expected 'Lakshmi owes 189.00, and the box asks for the amount paid' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '100{ENTER}' 1500
+        $shot = Save-Shot 'till-12d-credit-paid'
+        Add-Result -Kind Positive -Feature 'Credit' -Name 'Part of the khata is paid back in cash' `
+            -Expected '100.00 taken, 89.00 still owed, the drawer opened and a slip printed' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
         # --- Day close ------------------------------------------------------------------------
         Send-Keys '+{F12}' 1200
         $shot = Save-Shot 'till-13-close-preview'
@@ -323,6 +399,16 @@ function Invoke-TillWalkthrough {
             -Expected 'takings, the average basket, what the shop earned, and the day by day trend' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
 
+        # The rest of the figures, a page at a time: what earns most and least, day by day, who is
+        # buying and what was cancelled, the busy hours, what sells, how people paid, the departments
+        # and the GST by slab.
+        $figurePages = Save-Pages -First 'owner-02-figures.png' -Feature 'Owner screen' -What 'The figures, further down'
+
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Page Down scrolls the owner''s screen' `
+            -Expected 'the figures move down a page at a time, with no mouse' `
+            -Actual "$($figurePages.Count) further page(s) reached" -Passed ($figurePages.Count -gt 0) `
+            -Detail 'Most of this screen is below the fold. Without Page Down it could only be reached with a mouse.'
+
         Send-Keys '^2' 1100
         $shot = Save-Shot 'owner-03-stock' -Foreground
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Stock shows what needs reordering' `
@@ -335,6 +421,15 @@ function Invoke-TillWalkthrough {
             -Expected 'the single-item form on the left, the file importer on the right' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
 
+        # Ctrl+3 lands in the name box. Typing a product offers its HSN code; nothing is saved,
+        # because nothing presses Add.
+        Send-Keys 'Toor Dal' 1600
+        $shot = Save-Shot 'owner-04b-catalogue-hsn' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Typing a product name offers its HSN code' `
+            -Expected 'suggested HSN codes and GST slabs for "Toor Dal", the shop''s own first' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-04b-catalogue-hsn.png' -Feature 'Owner screen' -What 'The one-item form, further down')
+
         # Alt+B on this tab composes the sample bill. Nothing here touches the printer or the
         # drawer: firing either from an unattended run would put paper and noise into whatever room
         # the machine is sitting in.
@@ -344,12 +439,22 @@ function Invoke-TillWalkthrough {
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The bill can be seen without a printer' `
             -Expected 'the sample bill composed for this lane, no hardware touched' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-05-hardware.png' -Feature 'Owner screen' -What 'The sample bill, further down')
+
+        # Drawn as the printer will burn it - the only way to see a Tamil bill without paper.
+        Send-Keys '%w' 2000
+        $shot = Save-Shot 'owner-05b-hardware-drawn' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The bill is drawn as the printer will print it' `
+            -Expected 'the dots the thermal printer would burn, Tamil included' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-05b-hardware-drawn.png' -Feature 'Owner screen' -What 'The drawn bill, further down')
 
         Send-Keys '^5' 1100
         $shot = Save-Shot 'owner-06-settings' -Foreground
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Settings carry the PIN and what the lane issues' `
             -Expected 'the PIN controls, and the tax mode on a GST build' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-06-settings.png' -Feature 'Owner screen' -What 'Settings, further down')
 
         # --- Maintenance ---------------------------------------------------------------------
         Send-Keys '^6' 1200
@@ -358,6 +463,14 @@ function Invoke-TillWalkthrough {
             -Expected 'the close from a moment ago, with its bills and net sales' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
             -Detail 'A sheet that jams at closing is not a lost report; every close is stored and can be reprinted.'
+
+        # The newest report is picked already, so Alt+R reads it back straight away.
+        Send-Keys '%r' 1600
+        $shot = Save-Shot 'owner-07b-report' -Foreground
+        Add-Result -Kind Positive -Feature 'Maintenance' -Name 'A past day-end report is read back on screen' `
+            -Expected 'the Z-report from a moment ago, printed nowhere, with its credit collected' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-07b-report.png' -Feature 'Maintenance' -What 'The day-end report, further down')
 
         # A backup taken from the screen, and proved on disk rather than from a screenshot.
         $backups = Join-Path $Workspace 'backups'
@@ -390,6 +503,16 @@ function Invoke-TillWalkthrough {
             -Expected 'Lakshmi found from three letters, with her visits, spend, what she bought and her bills' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
             -Detail 'The customer added at the counter a few minutes earlier in this run.'
+
+        # Down her page: what she buys, her khata with the balance after each line, her bills.
+        [void] (Save-Pages -First 'owner-11-customers.png' -Feature 'Customers' -What 'Her details, further down')
+
+        # The end-of-month list: only those who owe, most first, with the total owed.
+        Send-Keys '%o' 1500
+        $shot = Save-Shot 'owner-12-who-owes' -Foreground
+        Add-Result -Kind Positive -Feature 'Customers' -Name 'The owner sees who owes what' `
+            -Expected 'only customers who owe, most first, and the total owed to the shop' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
 
         Send-Keys '{ESC}' 1200
         $shot = Save-Shot 'owner-10-back-to-billing'

@@ -13,7 +13,8 @@ public sealed record CustomerSummary(
     int LoyaltyBalance,
     int Visits,
     decimal Spent,
-    DateTimeOffset? LastVisit)
+    DateTimeOffset? LastVisit,
+    decimal Owed = 0m)
 {
     /// <summary>What the shop calls them: their name when it knows it, their number when it does not.</summary>
     public string Label => string.IsNullOrWhiteSpace(Name) ? MobileNo : Name;
@@ -69,7 +70,11 @@ public sealed class CustomerQuery(PosDatabase database)
     /// Blank shows who spends most, because that is the list an owner opening this screen wants
     /// first. With text, a number or name that starts with it ranks above one that only contains it.
     /// </remarks>
-    public IReadOnlyList<CustomerSummary> Find(string? text, int limit = 50)
+    /// <param name="onlyOwing">
+    /// Just the customers who owe something on credit, most owed first: the list an owner reads at
+    /// the end of the month.
+    /// </param>
+    public IReadOnlyList<CustomerSummary> Find(string? text, int limit = 50, bool onlyOwing = false)
     {
         var term = text?.Trim() ?? string.Empty;
         var escaped = term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
@@ -80,14 +85,17 @@ public sealed class CustomerQuery(PosDatabase database)
             SELECT c.id, c.mobile_no, c.name, c.loyalty_balance,
                    COUNT(i.id),
                    COALESCE(SUM({Paid}), 0),
-                   MAX(i.created_at)
+                   MAX(i.created_at),
+                   {CreditRepository.OwedPaiseSql("c.id")} AS owed
             FROM customers c
             LEFT JOIN invoices i ON i.customer_id = c.id AND i.voided_at IS NULL
             WHERE $term = ''
                OR c.mobile_no LIKE $contains ESCAPE '\'
                OR c.name LIKE $contains ESCAPE '\'
             GROUP BY c.id
+            HAVING $owing = 0 OR owed > 0
             ORDER BY
+                CASE WHEN $owing = 1 THEN -owed ELSE 0 END,
                 CASE WHEN $term = '' THEN 0
                      WHEN c.mobile_no LIKE $starts ESCAPE '\' THEN 0
                      WHEN c.name LIKE $starts ESCAPE '\' THEN 1
@@ -95,6 +103,7 @@ public sealed class CustomerQuery(PosDatabase database)
                 6 DESC, c.name COLLATE NOCASE, c.mobile_no
             LIMIT $limit;
             """;
+        command.Parameters.AddWithValue("$owing", onlyOwing ? 1 : 0);
         command.Parameters.AddWithValue("$term", term);
         command.Parameters.AddWithValue("$contains", $"%{escaped}%");
         command.Parameters.AddWithValue("$starts", $"{escaped}%");
@@ -134,7 +143,8 @@ public sealed class CustomerQuery(PosDatabase database)
             SELECT c.id, c.mobile_no, c.name, c.loyalty_balance,
                    COUNT(i.id),
                    COALESCE(SUM({Paid}), 0),
-                   MAX(i.created_at)
+                   MAX(i.created_at),
+                   {CreditRepository.OwedPaiseSql("c.id")}
             FROM customers c
             LEFT JOIN invoices i ON i.customer_id = c.id AND i.voided_at IS NULL
             WHERE c.id = $id
@@ -153,7 +163,8 @@ public sealed class CustomerQuery(PosDatabase database)
         reader.GetInt32(3),
         reader.GetInt32(4),
         PaiseSql.Rupees(reader.GetInt64(5)),
-        reader.IsDBNull(6) ? null : reader.GetDateTimeOffset(6));
+        reader.IsDBNull(6) ? null : reader.GetDateTimeOffset(6),
+        PaiseSql.Rupees(reader.GetInt64(7)));
 
     private static DateTimeOffset? FirstVisit(SqliteConnection connection, long customerId)
     {

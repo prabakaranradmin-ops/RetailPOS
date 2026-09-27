@@ -62,7 +62,45 @@ public sealed class ReceiptComposer
         return receipt;
     }
 
-    private void WriteHeader(ReceiptBuilder receipt, SettledInvoice invoice, bool isReprint)
+    /// <summary>
+    /// The slip for a customer who pays back what they owed on credit.
+    /// </summary>
+    /// <remarks>
+    /// Headed as a payment, never as a tax invoice: nothing was sold and nothing was taxed - the
+    /// goods and the tax were on the bill they bought on credit. It is what the customer keeps to
+    /// show they paid, which is the only thing that settles a disagreement about a khata.
+    /// </remarks>
+    public ReceiptBuilder ComposeCollection(Customer customer, CreditPayment payment, decimal stillOwed)
+    {
+        ArgumentNullException.ThrowIfNull(customer);
+        ArgumentNullException.ThrowIfNull(payment);
+
+        var receipt = new ReceiptBuilder(PaperWidthChars);
+
+        WriteShop(receipt);
+        receipt.Text(Labels.PaymentReceived, TextAlignment.Center, bold: true);
+        receipt.Rule();
+
+        var at = payment.ReceivedAt.LocalDateTime;
+        receipt.Columns(Labels.Date, at.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture));
+        receipt.Columns(Labels.Time, at.ToString("hh:mm tt", CultureInfo.InvariantCulture));
+        receipt.Columns(Labels.Customer, customer.Name ?? customer.MobileNo);
+
+        if (customer.Name is not null)
+            receipt.Columns(Labels.Mobile, customer.MobileNo);
+
+        receipt.Rule();
+        receipt.Columns($"{Labels.AmountPaid} ({Label(payment.Tender)})", Amount(payment.Amount), bold: true);
+        receipt.Columns(Labels.StillOwed, Amount(stillOwed));
+        receipt.Rule();
+        receipt.Text(Labels.PaymentSlipNote, TextAlignment.Center);
+        receipt.Cut();
+
+        return receipt;
+    }
+
+    /// <summary>Who the shop is: name, address, numbers, licences. Shared by every document it prints.</summary>
+    private void WriteShop(ReceiptBuilder receipt)
     {
         receipt.Text(_store.Name, TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
 
@@ -89,6 +127,11 @@ public sealed class ReceiptComposer
             receipt.Text($"Customer Care - {_store.CustomerCarePhone}", TextAlignment.Center);
 
         receipt.Blank();
+    }
+
+    private void WriteHeader(ReceiptBuilder receipt, SettledInvoice invoice, bool isReprint)
+    {
+        WriteShop(receipt);
 
         // What the document is called is decided by the sale, not by how the lane is set up today.
         // A composition dealer who later registers normally must still reprint last year's bills as

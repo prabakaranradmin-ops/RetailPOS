@@ -30,6 +30,9 @@ public enum BillingMode
 
     /// <summary>Saying who is on the till.</summary>
     Cashier = 6,
+
+    /// <summary>Taking a customer's payment against what they owe on credit.</summary>
+    Collect = 7,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -90,6 +93,17 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     private string? _namingCustomerMobile;
 
     private int _selectedCustomerMatchIndex = -1;
+
+    /// <summary>Customer credit, or null on a lane wired without it.</summary>
+    private readonly CreditService? _credit;
+
+    /// <summary>What the customer on the bill owes, read when they are attached.</summary>
+    private decimal _customerOwes;
+
+    /// <summary>Whose payment is being taken, once they have been found.</summary>
+    private Customer? _collectCustomer;
+
+    private int _selectedCollectTenderIndex;
     private bool _pendingDayClose;
     private bool _disposed;
 
@@ -107,8 +121,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Func<DateTimeOffset>? now = null,
         IInvoiceStore? invoices = null,
         DayCloseService? dayClose = null,
-        string? cashierName = null)
+        string? cashierName = null,
+        CreditService? credit = null)
     {
+        _credit = credit;
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(heldBills);
@@ -267,8 +283,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             Raise(nameof(IsReprinting));
             Raise(nameof(IsVoiding));
             Raise(nameof(IsSettingCashier));
+            Raise(nameof(IsCollecting));
         }
     }
+
+    public bool IsCollecting => _mode == BillingMode.Collect;
 
     public bool IsRecalling => _mode == BillingMode.Recall;
 
@@ -316,7 +335,12 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         get => _editBuffer;
         set
         {
-            if (Set(ref _editBuffer, value ?? string.Empty) && Mode == BillingMode.Customer && !IsNamingCustomer)
+            if (!Set(ref _editBuffer, value ?? string.Empty))
+                return;
+
+            // The same matching serves both places a customer is looked up: attaching one to a bill,
+            // and finding whose payment is being taken.
+            if ((Mode == BillingMode.Customer && !IsNamingCustomer) || (Mode == BillingMode.Collect && _collectCustomer is null))
                 RefreshCustomerMatches();
         }
     }
@@ -369,6 +393,190 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         Raise(nameof(HasCustomerMatches));
     }
+
+    // ---- Credit ------------------------------------------------------------------------------
+
+    /// <summary>What the customer on the bill owes on credit, for the side panel.</summary>
+    public decimal CustomerOwes => _customerOwes;
+
+    /// <summary>
+    /// True when the customer on the bill owes something - the one moment a cashier can mention it
+    /// without a separate conversation.
+    /// </summary>
+    public bool CustomerOwesAnything => _customerOwes > 0m;
+
+    /// <summary>How a repayment can be taken: money only, never more credit or points.</summary>
+    public IReadOnlyList<TenderType> CollectTenders { get; } = [TenderType.Cash, TenderType.Upi, TenderType.Card];
+
+    public int SelectedCollectTenderIndex
+    {
+        get => _selectedCollectTenderIndex;
+        private set => Set(ref _selectedCollectTenderIndex, value);
+    }
+
+    /// <summary>True once the customer is found and the payment itself is being entered.</summary>
+    public bool IsCollectingAmount => _collectCustomer is not null;
+
+    /// <summary>What the payment box is asking for.</summary>
+    public string CollectPrompt => _collectCustomer is { } who
+        ? $"{who.Name ?? who.MobileNo} owes {SafeOwed(who):N2} - amount paid, Enter for all of it"
+        : "Whose payment? Mobile number, or part of a name";
+
+    /// <summary>
+    /// Starts taking a payment against what a customer owes on credit.
+    /// </summary>
+    /// <remarks>
+    /// Only with the bill empty. A repayment is not part of a sale - no goods, no tax, no invoice -
+    /// and taking one halfway through somebody else's bill is how the two get mixed up at the
+    /// counter and on the report.
+    /// </remarks>
+    public void ReceivePayment()
+    {
+        ClearPendingConfirmations();
+        CancelEdit();
+
+        if (_credit is null)
+        {
+            StatusMessage = "Customer credit is not available on this lane.";
+            return;
+        }
+
+        if (Mode == BillingMode.Tender || !_bill.IsEmpty)
+        {
+            StatusMessage = "Finish, park or clear the bill first - a payment against credit is not part of a sale.";
+            return;
+        }
+
+        ResetCustomerLookup();
+        _collectCustomer = null;
+        SelectedCollectTenderIndex = 0;
+
+        Mode = BillingMode.Collect;
+        EditBuffer = string.Empty;
+        RaiseCollect();
+
+        StatusMessage = "Whose payment? Type their mobile number or part of their name, arrow down to pick.";
+    }
+
+    private void CommitCollect()
+    {
+        if (_credit is null)
+            return;
+
+        if (_collectCustomer is null)
+        {
+            var who = _selectedCustomerMatchIndex >= 0 && _selectedCustomerMatchIndex < CustomerMatches.Count
+                ? CustomerMatches[_selectedCustomerMatchIndex]
+                : _customers.FindByMobile(EditBuffer.Trim());
+
+            if (who is null)
+            {
+                StatusMessage = CustomerMatches.Count > 0
+                    ? "Arrow down to pick one of these, or type their full mobile number."
+                    : $"No customer matches '{EditBuffer.Trim()}'.";
+                return;
+            }
+
+            var owed = SafeOwed(who);
+
+            if (owed <= 0m)
+            {
+                StatusMessage = $"{who.Name ?? who.MobileNo} owes nothing on credit.";
+                return;
+            }
+
+            // Set before the box is cleared, so clearing it does not go looking for matches again.
+            _collectCustomer = who;
+            ResetCustomerLookup();
+            EditBuffer = string.Empty;
+            RaiseCollect();
+
+            StatusMessage = $"{who.Name ?? who.MobileNo} owes {owed:N2}. Type what they are paying, or commit for all of it. Up and down for cash, UPI or card.";
+            return;
+        }
+
+        var typed = EditBuffer.Trim();
+        decimal amount;
+
+        if (typed.Length == 0)
+        {
+            amount = SafeOwed(_collectCustomer);
+        }
+        else if (!TryParseAmount(typed, out amount))
+        {
+            StatusMessage = $"'{typed}' is not an amount.";
+            return;
+        }
+
+        var customer = _collectCustomer;
+        var tender = CollectTenders[Math.Clamp(_selectedCollectTenderIndex, 0, CollectTenders.Count - 1)];
+        CollectionResult result;
+
+        try
+        {
+            result = _credit.Collect(customer, amount, tender, _laneId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            // Too much, nothing owed, a fraction of a paisa: said, and the box left as it was so the
+            // amount can be corrected rather than typed again from nothing.
+            StatusMessage = ex.Message;
+            return;
+        }
+
+        var message = $"{customer.Name ?? customer.MobileNo} paid {result.Payment.Amount:N2} by {TenderName(tender)}. "
+            + (result.StillOwed > 0m ? $"{result.StillOwed:N2} still owed." : "Nothing more owed.");
+
+        if (result.Drawer == DrawerKickResult.Failed)
+            message += " THE DRAWER DID NOT OPEN - use the key.";
+
+        if (result.Print.Status == PrintStatus.Failed)
+            message += $" THE SLIP DID NOT PRINT: {result.Print.Detail}.";
+
+        CancelCollect();
+        StatusMessage = message;
+    }
+
+    private void CancelCollect()
+    {
+        _collectCustomer = null;
+        ResetCustomerLookup();
+        Mode = BillingMode.Billing;
+        EditBuffer = string.Empty;
+        RaiseCollect();
+    }
+
+    private void RaiseCollect()
+    {
+        Raise(nameof(IsCollectingAmount));
+        Raise(nameof(CollectPrompt));
+    }
+
+    /// <summary>
+    /// What a customer owes, or nothing if it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// Shown on the side panel of every bill with a customer on it. A database hiccup there costs
+    /// a line of the side panel, not the sale in front of the cashier.
+    /// </remarks>
+    private decimal SafeOwed(Customer customer)
+    {
+        try
+        {
+            return _credit?.Owed(customer) ?? 0m;
+        }
+        catch (Exception)
+        {
+            return 0m;
+        }
+    }
+
+    private static string TenderName(TenderType tender) => tender switch
+    {
+        TenderType.Upi => "UPI",
+        TenderType.Card => "card",
+        _ => "cash",
+    };
 
     private void ResetCustomerLookup()
     {
@@ -584,6 +792,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Cashier:
                 CommitCashier();
                 return;
+
+            case BillingMode.Collect:
+                CommitCollect();
+                return;
         }
 
         if (IsEditing)
@@ -608,6 +820,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
             case BillingMode.Tender:
                 AbandonTender();
+                return;
+
+            case BillingMode.Collect:
+                CancelCollect();
+                StatusMessage = "No payment taken.";
                 return;
 
             case BillingMode.Customer:
@@ -851,9 +1068,18 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             var preview = _dayClose.Preview(_laneId);
 
             _pendingDayClose = true;
+            // A day with no sales is not a day with no money when somebody paid back credit, and
+            // "nothing has been sold" there reads as "nothing to close" - which would leave that
+            // cash off every report.
+            var collected = preview.CollectedCredit
+                ? $" {preview.CreditCollected:0.00} collected on credit."
+                : string.Empty;
+
             StatusMessage = preview.TookNothing
-                ? "Nothing has been sold since the last close. Press again to close anyway."
-                : $"{preview.InvoiceCount} invoice(s), {preview.NetSales:0.00} net, {preview.CashExpected:0.00} expected in the drawer. Press again to close.";
+                ? preview.CollectedCredit
+                    ? $"No sales since the last close, but{collected} {preview.CashExpected:0.00} expected in the drawer. Press again to close."
+                    : "Nothing has been sold since the last close. Press again to close anyway."
+                : $"{preview.InvoiceCount} invoice(s), {preview.NetSales:0.00} net.{collected} {preview.CashExpected:0.00} expected in the drawer. Press again to close.";
 
             return;
         }
@@ -1138,12 +1364,17 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
                 Raise(nameof(SelectedTenderType));
                 return;
 
+            case BillingMode.Collect when _collectCustomer is not null:
+                SelectedCollectTenderIndex = Math.Clamp(_selectedCollectTenderIndex + delta, 0, CollectTenders.Count - 1);
+                return;
+
             case BillingMode.Customer:
+            case BillingMode.Collect:
                 if (CustomerMatches.Count > 0 && !IsNamingCustomer)
                 {
                     SelectedCustomerMatchIndex = Math.Clamp(_selectedCustomerMatchIndex + delta, 0, CustomerMatches.Count - 1);
                     var picked = CustomerMatches[_selectedCustomerMatchIndex];
-                    StatusMessage = $"{picked.Name ?? picked.MobileNo} - commit to attach.";
+                    StatusMessage = $"{picked.Name ?? picked.MobileNo} - commit to {(Mode == BillingMode.Collect ? "take their payment" : "attach")}.";
                 }
 
                 return;
@@ -1266,6 +1497,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (SelectedTenderType == TenderType.LoyaltyPoints)
         {
             AddLoyaltyTender(typed);
+            return;
+        }
+
+        // Said here, where it can be put right, rather than only refused at the end by checkout
+        // with the whole payment already entered.
+        if (SelectedTenderType == TenderType.StoreCredit && !HasCustomer)
+        {
+            StatusMessage = "Store credit needs a customer on the bill - somebody has to owe it. Esc, then F7 to attach them.";
             return;
         }
 
@@ -1404,6 +1643,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         if (result.PointsEarned > 0)
             message += $" {result.PointsEarned} points earned, balance {result.NewLoyaltyBalance}.";
+
+        // A sale that went on the khata says what the customer now owes, in the one moment the
+        // cashier and the customer are both looking at the same screen.
+        if (result.Invoice.Sale.Customer is { } buyer && result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.StoreCredit))
+            message += $" {buyer.Name ?? buyer.MobileNo} now owes {SafeOwed(buyer):N2}.";
 
         if (result.Drawer == DrawerKickResult.Failed)
             message += " The cash drawer did not open — open it by hand.";
@@ -1794,6 +2038,10 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private void RefreshCustomer()
     {
+        _customerOwes = _bill.Customer is { } customer && _credit is not null ? SafeOwed(customer) : 0m;
+
+        Raise(nameof(CustomerOwes));
+        Raise(nameof(CustomerOwesAnything));
         Raise(nameof(Customer));
         Raise(nameof(CustomerLabel));
         Raise(nameof(LoyaltyBalance));
