@@ -362,7 +362,7 @@ public static class DashboardPage
 
         p.Append("<div class=\"panel\"><h3>To reorder <span class=\"aside\">as of now, not for the period</span></h3>");
         p.Append("<div class=\"scroller\"><table class=\"plain\"><thead><tr><th>Item</th><th>Category</th>"
-               + "<th class=\"n\">Have</th><th class=\"n\">Level</th><th class=\"n\">Short by</th></tr></thead><tbody>");
+               + "<th class=\"n\">Have</th><th class=\"n\">Full</th><th class=\"n\">Warns at</th><th class=\"n\">To order</th></tr></thead><tbody>");
 
         foreach (var level in d.LowStock)
         {
@@ -370,9 +370,10 @@ public static class DashboardPage
 
             p.Append($"<tr{state}><td>{Escape(level.Name)}</td>");
             p.Append($"<td class=\"muted\">{Escape(level.Category ?? DashboardQuery.Uncategorised)}</td>");
-            p.Append($"<td class=\"n\">{Quantity(level.Quantity)}</td>");
-            p.Append($"<td class=\"n muted\">{Quantity(level.ReorderLevel ?? 0m)}</td>");
-            p.Append($"<td class=\"n strong\">{(level.ShortBy is { } short_ ? Quantity(short_) : "&mdash;")}</td></tr>");
+            p.Append($"<td class=\"n\">{Quantity(level.Quantity)}{(level.PercentLeft is { } left ? $" <span class=\"muted\">({left:0}%)</span>" : "")}</td>");
+            p.Append($"<td class=\"n muted\">{(level.FullLevel is { } full ? Quantity(full) : "&mdash;")}</td>");
+            p.Append($"<td class=\"n muted\">{Quantity(level.WarnAt ?? level.ReorderLevel ?? 0m)}</td>");
+            p.Append($"<td class=\"n strong\">{(level.ToOrder is { } order ? Quantity(order) : "&mdash;")}</td></tr>");
         }
 
         p.Append("</tbody></table></div>");

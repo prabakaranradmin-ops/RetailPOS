@@ -17,7 +17,7 @@ public sealed class ItemRepository : IItemStore
 
     private const string SelectColumns =
         "id, sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, " +
-        "category, cost_price, stock_qty, reorder_level";
+        "category, cost_price, stock_qty, reorder_level, full_qty";
 
     private readonly PosDatabase _database;
 
@@ -253,10 +253,10 @@ public sealed class ItemRepository : IItemStore
             command.CommandText = """
                 INSERT INTO items
                   (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
-                   category, cost_price, stock_qty, reorder_level)
+                   category, cost_price, stock_qty, reorder_level, full_qty)
                 VALUES
                   ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
-                   $category, $cost, $stock, $reorder)
+                   $category, $cost, $stock, $reorder, $fullInitial)
                 ON CONFLICT (sku) DO UPDATE SET
                   barcode = excluded.barcode,
                   hsn_code = excluded.hsn_code,
@@ -277,14 +277,25 @@ public sealed class ItemRepository : IItemStore
                   -- would silently reset every count to whatever was in a spreadsheet weeks ago,
                   -- and the only sign would be wrong reorder warnings nobody could explain.
                   stock_qty = COALESCE(excluded.stock_qty, items.stock_qty),
-                  reorder_level = COALESCE(excluded.reorder_level, items.reorder_level);
+                  reorder_level = COALESCE(excluded.reorder_level, items.reorder_level),
+
+                  -- Full is what the file says when it says; otherwise a count in the file that
+                  -- takes the shelf higher than it has ever been raises it. A lower count never
+                  -- lowers it: a price revision reloading last month's file is not a stocktake.
+                  full_qty = CASE
+                    WHEN $full IS NOT NULL THEN $full
+                    WHEN excluded.stock_qty IS NOT NULL AND CAST(excluded.stock_qty AS REAL) > 0
+                         AND (items.full_qty IS NULL OR CAST(items.full_qty AS REAL) < CAST(excluded.stock_qty AS REAL))
+                      THEN excluded.stock_qty
+                    ELSE items.full_qty
+                  END;
                 """;
 
             foreach (var name in new[]
                      {
                          "$sku", "$barcode", "$hsn", "$name", "$mrp",
                          "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
-                         "$stock", "$reorder",
+                         "$stock", "$reorder", "$full", "$fullInitial",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -315,10 +326,10 @@ public sealed class ItemRepository : IItemStore
         command.CommandText = """
             INSERT INTO items
               (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
-               category, cost_price, stock_qty, reorder_level)
+               category, cost_price, stock_qty, reorder_level, full_qty)
             VALUES
               ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
-               $category, $cost, $stock, $reorder);
+               $category, $cost, $stock, $reorder, $fullInitial);
             SELECT last_insert_rowid();
             """;
 
@@ -326,7 +337,7 @@ public sealed class ItemRepository : IItemStore
                  {
                      "$sku", "$barcode", "$hsn", "$name", "$mrp",
                      "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
-                     "$stock", "$reorder",
+                     "$stock", "$reorder", "$full", "$fullInitial",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -349,6 +360,10 @@ public sealed class ItemRepository : IItemStore
         command.Parameters["$cost"].Value = (object?)item.CostPrice ?? DBNull.Value;
         command.Parameters["$stock"].Value = (object?)item.StockQty ?? DBNull.Value;
         command.Parameters["$reorder"].Value = (object?)item.ReorderLevel ?? DBNull.Value;
+
+        // What the file said about full, and what a new item starts with: that, or its first count.
+        command.Parameters["$full"].Value = (object?)item.FullLevel ?? DBNull.Value;
+        command.Parameters["$fullInitial"].Value = (object?)(item.FullLevel ?? (item.StockQty is > 0m ? item.StockQty : null)) ?? DBNull.Value;
     }
 
     /// <summary>
@@ -380,5 +395,6 @@ public sealed class ItemRepository : IItemStore
         // out-of-stock warning on the counter screen for something nobody tracks.
         StockQty = reader.IsDBNull(13) ? null : reader.GetDecimal(13),
         ReorderLevel = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
+        FullLevel = reader.IsDBNull(15) ? null : reader.GetDecimal(15),
     };
 }

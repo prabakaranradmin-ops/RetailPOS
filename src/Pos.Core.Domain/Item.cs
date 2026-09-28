@@ -69,18 +69,28 @@ public sealed record Item
     public decimal? StockQty { get; init; }
 
     /// <summary>
-    /// The level at or below which this needs reordering. Null means never warn about it.
+    /// The level at or below which this needs reordering, set by the shop. Null means the shop has
+    /// not said, and the share of <see cref="FullLevel"/> applies instead.
     /// </summary>
     public decimal? ReorderLevel { get; init; }
+
+    /// <summary>
+    /// The most the shelf has been stocked to — what "full" means for this item. Raised by a
+    /// delivery, a count or a catalogue load that takes the shelf higher; lowered only by the owner.
+    /// </summary>
+    public decimal? FullLevel { get; init; }
 
     /// <summary>Whether this item is counted at all.</summary>
     public bool IsStockTracked => StockQty is not null;
 
+    /// <summary>True when the shelf is low at the default share of full. See <see cref="IsLowAt"/>.</summary>
+    public bool IsLowStock => IsLowAt(LowStock.DefaultPercent);
+
     /// <summary>
-    /// True when the shelf is at or below the reorder level. False when either figure is missing —
-    /// an item nobody counts cannot be running low.
+    /// True when the shelf is at or below its reorder level, or — with none set — down to
+    /// <paramref name="percentOfFull"/> of full. An item nobody counts cannot be running low.
     /// </summary>
-    public bool IsLowStock => StockQty is { } have && ReorderLevel is { } floor && have <= floor;
+    public bool IsLowAt(decimal percentOfFull) => LowStock.IsLow(StockQty, ReorderLevel, FullLevel, percentOfFull);
 
     /// <summary>True when the count says there are none left, or worse.</summary>
     public bool IsOutOfStock => StockQty is { } have && have <= 0m;

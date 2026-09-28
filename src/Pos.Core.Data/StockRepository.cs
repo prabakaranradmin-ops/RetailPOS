@@ -7,23 +7,36 @@ namespace Pos.Core.Data;
 /// The shelf count and the ledger behind it.
 /// </summary>
 /// <remarks>
-/// Every change goes through <see cref="Move"/> or <see cref="Set"/>, which write the new balance
-/// and the reason for it in one transaction. Nothing updates <c>items.stock_qty</c> on its own —
-/// a figure that changed with no movement to explain it is exactly the thing the ledger exists to
-/// prevent.
+/// <para>
+/// Every change goes through <see cref="Move"/>, <see cref="Set"/> or <see cref="ApplySheet"/>,
+/// which write the new balance and the reason for it in one transaction. Nothing updates
+/// <c>items.stock_qty</c> on its own — a figure that changed with no movement to explain it is
+/// exactly the thing the ledger exists to prevent.
+/// </para>
+/// <para>
+/// The same write keeps <c>full_qty</c>, what "full" means for the item: a delivery, a count or a
+/// correction that takes the shelf higher than it has been raises it. A sale, a void or a count
+/// going down never lowers it, or every item would look full at whatever it was last down to.
+/// </para>
 /// </remarks>
 public sealed class StockRepository : IStockStore
 {
-    private const string LevelColumns =
-        "i.id, i.sku, i.name, i.category, i.stock_qty, i.reorder_level, i.unit_type";
-
     private readonly PosDatabase _database;
+    private readonly Func<decimal> _percent;
 
-    public StockRepository(PosDatabase database)
+    /// <param name="lowStockPercent">
+    /// The share of full an item without a reorder level warns at, read each time a list is asked
+    /// for, so a change on the owner's screen shows on the next one. 10% when not given.
+    /// </param>
+    public StockRepository(PosDatabase database, Func<decimal>? lowStockPercent = null)
     {
         ArgumentNullException.ThrowIfNull(database);
         _database = database;
+        _percent = lowStockPercent ?? (() => LowStock.DefaultPercent);
     }
+
+    /// <summary>The share of full in force right now.</summary>
+    public decimal LowStockPercent => _percent();
 
     public decimal? Move(long itemId, decimal delta, StockReason reason, string laneId, string? reference = null)
     {
@@ -56,31 +69,68 @@ public sealed class StockRepository : IStockStore
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction();
 
-        decimal current;
+        var balance = WriteIn(connection, transaction, itemId, laneId, reason, reference, next, startCounting: false);
+
+        transaction.Commit();
+        return balance;
+    }
+
+    /// <summary>One movement, inside a transaction somebody else owns.</summary>
+    /// <param name="startCounting">
+    /// Whether an item nobody counts yet may be given a count. A sale must not start counting
+    /// something — the shop never said it wanted it counted — but a stocktake that writes a figure
+    /// down against it has.
+    /// </param>
+    private static decimal? WriteIn(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long itemId,
+        string laneId,
+        StockReason reason,
+        string? reference,
+        Func<decimal, decimal> next,
+        bool startCounting)
+    {
+        object? value;
 
         using (var read = connection.CreateCommand())
         {
             read.Transaction = transaction;
             read.CommandText = "SELECT stock_qty FROM items WHERE id = $id;";
             read.Parameters.AddWithValue("$id", itemId);
-
-            var value = read.ExecuteScalar();
-
-            // No row, or an item nobody counts. Either way there is nothing to move, and this is
-            // not an error — most of a first catalogue will have no stock figure at all.
-            if (value is null || value is DBNull)
-                return null;
-
-            current = Convert.ToDecimal(value);
+            value = read.ExecuteScalar();
         }
 
+        // No row at all, or an item nobody counts. Neither is an error — most of a first catalogue
+        // has no stock figure — and only a count may start one.
+        if (value is null || (value is DBNull && !startCounting))
+            return null;
+
+        var counted = value is not DBNull;
+        var current = counted ? Convert.ToDecimal(value) : 0m;
         var balance = next(current);
+
+        // A delivery, a count or a correction that takes the shelf higher is a restock. A void
+        // puts back what a sale took, which is not the shelf being filled.
+        var restock = reason is StockReason.Import or StockReason.Adjust or StockReason.Count
+                      && (!counted || balance > current);
 
         using (var update = connection.CreateCommand())
         {
             update.Transaction = transaction;
-            update.CommandText = "UPDATE items SET stock_qty = $qty WHERE id = $id;";
+            update.CommandText = """
+                UPDATE items
+                SET stock_qty = $qty,
+                    full_qty = CASE
+                      WHEN $restock = 1 AND CAST($qty AS REAL) > 0
+                           AND (full_qty IS NULL OR CAST(full_qty AS REAL) < CAST($qty AS REAL))
+                        THEN $qty
+                      ELSE full_qty
+                    END
+                WHERE id = $id;
+                """;
             update.Parameters.AddWithValue("$qty", balance);
+            update.Parameters.AddWithValue("$restock", restock ? 1 : 0);
             update.Parameters.AddWithValue("$id", itemId);
             update.ExecuteNonQuery();
         }
@@ -102,7 +152,6 @@ public sealed class StockRepository : IStockStore
             log.ExecuteNonQuery();
         }
 
-        transaction.Commit();
         return balance;
     }
 
@@ -133,18 +182,20 @@ public sealed class StockRepository : IStockStore
         // CAST is needed because the quantities are stored as text to keep them exact; without it
         // SQLite compares '9' against '10' as strings and puts nine below ten.
         command.CommandText = $"""
-            SELECT {LevelColumns}
+            SELECT i.id, i.sku, i.name, i.category, i.stock_qty, i.reorder_level, i.unit_type, i.full_qty,
+                   {LowStockSql.WarnAt("i")} AS warn
             FROM items i
             WHERE i.is_active = 1
               AND i.stock_qty IS NOT NULL
-              {(lowOnly ? "AND i.reorder_level IS NOT NULL AND CAST(i.stock_qty AS REAL) <= CAST(i.reorder_level AS REAL)" : "")}
+              {(lowOnly ? "AND " + LowStockSql.IsLow("i") : "")}
             ORDER BY
-              CASE WHEN i.reorder_level IS NULL THEN 1 ELSE 0 END,
-              CAST(i.stock_qty AS REAL) - CAST(COALESCE(i.reorder_level, '0') AS REAL),
+              CASE WHEN warn IS NULL THEN 1 ELSE 0 END,
+              CAST(i.stock_qty AS REAL) - COALESCE(warn, 0),
               i.name
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 100_000));
+        command.Parameters.AddWithValue("$pct", LowStockSql.Percent(_percent()));
 
         using var reader = command.ExecuteReader();
         var levels = new List<StockLevel>();
@@ -158,7 +209,9 @@ public sealed class StockRepository : IStockStore
                 Category: reader.IsDBNull(3) ? null : reader.GetString(3),
                 Quantity: reader.GetDecimal(4),
                 ReorderLevel: reader.IsDBNull(5) ? null : reader.GetDecimal(5),
-                Unit: (UnitType)reader.GetInt32(6)));
+                Unit: (UnitType)reader.GetInt32(6),
+                FullLevel: reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                WarnAt: reader.IsDBNull(8) ? null : Math.Round((decimal)reader.GetDouble(8), 3)));
         }
 
         return levels;
@@ -198,5 +251,70 @@ public sealed class StockRepository : IStockStore
         }
 
         return movements;
+    }
+
+    public IReadOnlyList<StockSheetItem> Sheet()
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+
+        // By department and then name, the order somebody walks the shelves in, so the sheet can be
+        // filled in on one walk round the shop.
+        command.CommandText = """
+            SELECT id, sku, name, unit_type, stock_qty, full_qty
+            FROM items
+            WHERE is_active = 1
+            ORDER BY COALESCE(category, 'zzz') COLLATE NOCASE, name COLLATE NOCASE;
+            """;
+
+        using var reader = command.ExecuteReader();
+        var items = new List<StockSheetItem>();
+
+        while (reader.Read())
+        {
+            items.Add(new StockSheetItem(
+                reader.GetInt64(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                (UnitType)reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetDecimal(4),
+                reader.IsDBNull(5) ? null : reader.GetDecimal(5)));
+        }
+
+        return items;
+    }
+
+    public int ApplySheet(IReadOnlyList<StockSheetChange> changes, string laneId, string? reference = null)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
+
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        var counted = 0;
+
+        foreach (var change in changes)
+        {
+            if (change.NewCount is { } count)
+            {
+                WriteIn(connection, transaction, change.ItemId, laneId, StockReason.Count, reference, _ => count, startCounting: true);
+                counted++;
+            }
+
+            // After the count, so a full level the owner wrote on the same row is the one that stands.
+            if (change.NewFullLevel is { } full)
+            {
+                using var update = connection.CreateCommand();
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE items SET full_qty = $full WHERE id = $id;";
+                update.Parameters.AddWithValue("$full", full > 0m ? full : DBNull.Value);
+                update.Parameters.AddWithValue("$id", change.ItemId);
+                update.ExecuteNonQuery();
+            }
+        }
+
+        transaction.Commit();
+        return counted;
     }
 }

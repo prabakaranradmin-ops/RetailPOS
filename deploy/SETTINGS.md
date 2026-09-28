@@ -50,6 +50,17 @@ result without using a roll of paper.
 A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
 than letting it reach a customer.
 
+## When stock counts as low
+
+`lowStockPercent` is `10` unless you say otherwise. A counted item with no `reorder_level` of its own
+counts as low when it is down to that share of full. Full is the most its shelf has been stocked
+to, raised by any delivery, count or catalogue load that takes it higher. An item with a
+`reorder_level` warns at that level instead. `0` switches the share off, and anything from `100` up
+stops the lane starting with a reason.
+
+The owner changes it on the owner's screen: **Ctrl+D**, **Ctrl+5**, **Alt+W**, type the share,
+**Enter**. The reorder list, the day-end report and the till's *"Only 3 left"* all follow it at once.
+
 ## Bill layout
 
 `receiptLayout` is `Standard` or `Compact`. The owner changes it from the owner's screen —

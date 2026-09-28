@@ -19,7 +19,8 @@ optional and may be left out altogether.
 | `category` | no | Which part of the shop it belongs to — `Staples`, `Dairy`, `Household`. Free text; whatever you type becomes a slice of the dashboard's department chart. |
 | `cost_price` | no | What you pay for one, tax inclusive like `selling_price`. Must be between `0` and `selling_price`. |
 | `stock_qty` | no | How many are on the shelf now. Leave blank for anything you do not count. |
-| `reorder_level` | no | Warn when the shelf reaches this. Needs a `stock_qty` beside it. |
+| `reorder_level` | no | Warn when the shelf reaches this. Needs a `stock_qty` beside it. Leave it blank to warn at a share of full instead — see **Counting stock**. |
+| `full_level` | no | What "full" is for this item. Leave it blank and the counts decide: the most the shelf has been stocked to. |
 
 ## Units
 
@@ -96,9 +97,9 @@ BAN001,,Poovan Banana,0803,சீப்பு,60,60,0,no
 
 A price of "₹30 a muzham" has no printed MRP, so `mrp` is the price the shop charges.
 
-## The four optional columns
+## The optional columns
 
-`category`, `cost_price`, `stock_qty` and `reorder_level` may be left out of the file entirely, and a
+`category`, `cost_price`, `stock_qty`, `reorder_level` and `full_level` may be left out of the file entirely, and a
 catalogue written before they existed imports unchanged. Individual cells may be blank too — a blank
 means *you have not said*, which is not the same as zero and is treated differently everywhere it
 matters.
@@ -109,10 +110,42 @@ not what it earned. Neither affects billing, a receipt, or a GST return.
 
 ### Counting stock
 
-`stock_qty` starts a count. From then on every sale takes off it, every void puts back, and
-`pos stock --low` says what to order. `reorder_level` is the line below which it warns — the cashier
-sees *"Only 3 left"* when the item is scanned, and the figure goes on the day-end report and the
-dashboard.
+`stock_qty` starts a count. From then on every sale takes off it, every void puts back, and the
+Stock tab (**Ctrl+D**, **Ctrl+2**) says what to order.
+
+**When an item counts as low.** An item with a `reorder_level` warns at that level. Every other
+counted item warns when it is down to **10% of full**, where full is the most its shelf has been
+stocked to:
+- A first count, a delivery, a stock sheet or a catalogue load that takes the shelf higher than it
+  has been raises full.
+- Sales, voids and counts going down never lower it.
+- `full_level` in this file, or on the stock sheet, sets it outright.
+
+The 10% is the owner's to change: **Ctrl+D**, **Ctrl+5**, *When stock counts as low*. 0 switches the
+share off and leaves only the reorder levels.
+
+When an item is low, the cashier sees *"Only 3 left"* as it is scanned, and it goes on the Stock tab
+(with what is left as a share of full, and how many to order to fill it), the day-end report and
+the dashboard.
+
+### Counting in bulk: the stock sheet
+
+A delivery or a stocktake is dozens of counts, and this file needs all nine columns on every row to
+change one. The stock sheet needs only the count:
+1. On the Stock tab, **Alt+S** saves a sheet of the shop's own items: `sku`, `name`, `unit`,
+   `have`, `full_level` and an empty `new_count`.
+2. Open it in Excel and fill in `new_count` for what you counted. Leave the rest blank. Change
+   `full_level` if you want a different full for an item.
+3. Save it as CSV UTF-8, and load it back with **Alt+L**.
+
+The screen says how many counts will change before it writes anything. Only counts and full levels
+change; prices and everything else stay as they are. A blank row is left alone, and a count on an
+item nobody counted yet starts counting it. Like a catalogue, it is all or nothing: one mistake
+(an unknown SKU, a negative count, half a comb of bananas) and nothing changes, with every problem
+listed by line.
+
+If your SKUs are all digits, format that column as text in Excel before saving, or it drops leading
+zeros and `00123` no longer matches anything.
 
 **Leave `stock_qty` blank for anything you do not count.** Loose rice out of a sack, vegetables sold
 by weight — a blank means the item is not counted, and it never appears in a stock list or produces
@@ -124,8 +157,8 @@ software telling you the count and the shelf have parted company.
 
 **Re-importing does not reset your counts.** A blank `stock_qty` on a re-import leaves the live
 figure alone, so changing prices with the same file you first loaded will not quietly restore every
-count to what it was weeks ago. To restate a count deliberately, put the new figure in the cell — or
-correct one item with:
+count to what it was weeks ago. To restate a count deliberately, put the new figure in the cell, use
+the stock sheet, or correct one item on the Stock tab — or from a command line:
 
 ```
 pos stock --set --sku DAL001 --qty 24 --reason "delivery"
@@ -189,6 +222,9 @@ That form goes through the same checks as a file. Nothing gets in by the shorter
 be refused by the longer one.
 
 ## Loading a whole file
+
+To start a file from scratch, **Alt+T** on the Catalogue tab saves a template with every column and
+a few example rows. It is the same `catalog_template.csv` that sits in the install folder.
 
 At the till: **Ctrl+D** for the owner's screen, then **Ctrl+3** for Catalogue. Pick the file, choose
 whether items already in the catalogue may be changed, and press **Check the file**. It reads the

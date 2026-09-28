@@ -1,8 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
+using System.Text;
 using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Import;
 using Pos.Core.Domain.Printing;
 
 namespace Pos.App.ViewModels;
@@ -40,7 +43,9 @@ public sealed class OwnerViewModel : ObservableObject
     private readonly Func<PinCredential?, string?> _applyPin;
     private readonly Func<int, string, string?>? _saveWebPage;
     private readonly Func<ReceiptLayout, string?>? _applyReceiptLayout;
+    private readonly Func<decimal, string?>? _applyLowStockPercent;
     private readonly string _laneId;
+    private string _lowStockPercentText;
 
     private int _days = 30;
     private bool _busy;
@@ -66,7 +71,11 @@ public sealed class OwnerViewModel : ObservableObject
         // Which bill the lane prints, and how to change it. Optional for the same reason: the
         // choice is not offered on a lane wired without somewhere to save it.
         ReceiptLayout receiptLayout = ReceiptLayout.Standard,
-        Func<ReceiptLayout, string?>? applyReceiptLayout = null)
+        Func<ReceiptLayout, string?>? applyReceiptLayout = null,
+
+        // The share of full an item counts as low at, and how to change it for the lane.
+        decimal lowStockPercent = LowStock.DefaultPercent,
+        Func<decimal, string?>? applyLowStockPercent = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(gather);
@@ -77,11 +86,14 @@ public sealed class OwnerViewModel : ObservableObject
         _applyPin = applyPin ?? throw new ArgumentNullException(nameof(applyPin));
         _saveWebPage = saveWebPage;
         _applyReceiptLayout = applyReceiptLayout;
+        _applyLowStockPercent = applyLowStockPercent;
         _gather = () => gather(_days);
 
         TaxMode = taxMode;
         IsPinSet = isPinSet;
         ReceiptLayout = receiptLayout;
+        LowStockPercent = lowStockPercent;
+        _lowStockPercentText = Percent(lowStockPercent);
     }
 
     // ---- What is on screen -----------------------------------------------------------------------
@@ -625,14 +637,163 @@ public sealed class OwnerViewModel : ObservableObject
 
         // An empty list has two very different meanings, and saying which one is the whole point.
         StockHeadline = _stock.List(1).Count == 0
-            ? "No item in this catalogue is counted. Add a stock_qty column to the catalogue and import it again to start."
+            ? "No item is counted yet. Save a stock sheet, fill in the counts, and load it back to start."
             : levels.Count == 0
-                ? "Nothing is at or below its reorder level."
-                : $"{levels.Count} item(s){(LowOnly ? " to reorder" : " counted")}, {OutCount} of them with none left.";
+                ? $"Nothing is low — nothing is at its reorder level or down to {LowRuleText}."
+                : $"{levels.Count} item(s){(LowOnly ? " to reorder" : " counted")}, {OutCount} of them with none left. Low means at its reorder level, or down to {LowRuleText}.";
 
         Raise(nameof(StockHeadline));
         Raise(nameof(LowCount));
         Raise(nameof(OutCount));
+    }
+
+    /// <summary>"10% of full", or what the list says when the share-of-full rule is off.</summary>
+    private string LowRuleText => LowStockPercent > 0m
+        ? $"{Percent(LowStockPercent)}% of full"
+        : "(share of full switched off)";
+
+    // ---- When stock counts as low ------------------------------------------------------------
+
+    /// <summary>The share of full at which an item with no reorder level counts as low.</summary>
+    public decimal LowStockPercent { get; private set; }
+
+    /// <summary>What is typed in the Settings box, before it is saved.</summary>
+    public string LowStockPercentText
+    {
+        get => _lowStockPercentText;
+        set => Set(ref _lowStockPercentText, value);
+    }
+
+    public bool CanChangeLowStockPercent => _applyLowStockPercent is not null;
+
+    /// <summary>Changes when stock counts as low, for this screen, the till and the day-end report.</summary>
+    /// <returns>Null when it took, or why not.</returns>
+    public string? SetLowStockPercent()
+    {
+        if (_applyLowStockPercent is null)
+            return Status = "This lane has nowhere to save it.";
+
+        var text = LowStockPercentText.Trim().TrimEnd('%').Trim();
+
+        if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var percent) || !LowStock.IsValidPercent(percent))
+            return Status = $"'{LowStockPercentText}' is not a share of full. Use a number from 1 to 99, or 0 to switch it off.";
+
+        if (_applyLowStockPercent(percent) is { } problem)
+            return Status = problem;
+
+        LowStockPercent = percent;
+        LowStockPercentText = Percent(percent);
+        Raise(nameof(LowStockPercent));
+
+        LoadStock();
+
+        Status = percent > 0m
+            ? $"An item with no reorder level now counts as low at {Percent(percent)}% of full."
+            : "The share-of-full rule is off. Only items with a reorder level of their own are warned about.";
+
+        return null;
+    }
+
+    private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    // ---- The stock sheet ---------------------------------------------------------------------
+
+    /// <summary>What is wrong with the sheet just loaded, line by line. Empty when nothing is.</summary>
+    public ObservableCollection<string> StockSheetProblems { get; } = [];
+
+    public bool HasStockSheetProblems => StockSheetProblems.Count > 0;
+
+    /// <summary>
+    /// Writes a stock sheet of every active item, to fill in on a walk round the shelves.
+    /// </summary>
+    /// <returns>Null when it was written, or why not.</returns>
+    public string? SaveStockSheet(string path)
+    {
+        try
+        {
+            var items = _stock.Sheet();
+
+            // With a byte-order mark, so Excel opens Tamil item names as Tamil.
+            File.WriteAllText(path, StockSheet.Write(items), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Status = $"Saved a stock sheet of {items.Count} item(s) to {path}. Fill in new_count for what you counted, save it as CSV, and load it back here.";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return Status = $"Could not save it: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Reads a filled-in sheet and works out what it would change. Writes nothing.
+    /// </summary>
+    /// <returns>The plan when the sheet is clean, or null when it is not — with the problems listed.</returns>
+    public StockSheetPlan? CheckStockSheet(string path)
+    {
+        StockSheetProblems.Clear();
+
+        StockSheetPlan plan;
+
+        try
+        {
+            using var reader = ItemCsvParser.OpenText(path);
+            plan = StockSheet.Read(reader, _stock.Sheet());
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not read it: {ex.Message}";
+            Raise(nameof(HasStockSheetProblems));
+            return null;
+        }
+
+        if (!plan.IsClean)
+        {
+            // All of them, not the first: the fix happens in the spreadsheet, in one sitting.
+            foreach (var problem in plan.Problems.Take(50))
+                StockSheetProblems.Add($"Line {problem.Line}, {problem.Column}: {problem.Problem}");
+
+            if (plan.Problems.Count > 50)
+                StockSheetProblems.Add($"... and {plan.Problems.Count - 50} more.");
+
+            Status = plan.Problems.Count == 1
+                ? "One thing needs fixing in the sheet. Nothing was changed."
+                : $"{plan.Problems.Count} things need fixing in the sheet. Nothing was changed.";
+
+            Raise(nameof(HasStockSheetProblems));
+            return null;
+        }
+
+        Raise(nameof(HasStockSheetProblems));
+
+        if (plan.Changes.Count == 0)
+        {
+            Status = "Nothing in that sheet changes a count. Fill in new_count for what you counted.";
+            return null;
+        }
+
+        return plan;
+    }
+
+    /// <summary>Applies a checked sheet: every change, or none.</summary>
+    public string? ApplyStockSheet(StockSheetPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        try
+        {
+            var counted = _stock.ApplySheet(plan.Changes, _laneId, "stock sheet");
+
+            Status = $"{counted} count(s) changed{(plan.FullLevels > 0 ? $" and {plan.FullLevels} full level(s)" : "")} from the stock sheet. "
+                   + $"{plan.Blank} row(s) left blank were left alone.";
+
+            LoadStock();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return Status = $"Nothing was changed: {ex.Message}";
+        }
     }
 
     /// <summary>Corrects the selected item's count, recording what it was changed from and why.</summary>

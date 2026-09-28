@@ -28,6 +28,15 @@ public static class SettingsFile
     public static void SetTaxMode(string path, TaxMode mode) =>
         Patch(path, root => root["taxMode"] = mode.ToString(), fresh => fresh.TaxMode = mode);
 
+    /// <summary>Writes the share of full at which an item counts as low.</summary>
+    public static void SetLowStockPercent(string path, decimal percent)
+    {
+        if (!LowStock.IsValidPercent(percent))
+            throw new ArgumentOutOfRangeException(nameof(percent), percent, "Use 0 to switch it off, or a share below 100.");
+
+        Patch(path, root => root["lowStockPercent"] = percent, fresh => fresh.LowStockPercent = percent);
+    }
+
     /// <summary>Writes which bill layout this lane prints, by name.</summary>
     public static void SetReceiptLayout(string path, ReceiptLayout layout) =>
         Patch(path, root => root["receiptLayout"] = layout.ToString(), fresh => fresh.ReceiptLayout = layout);

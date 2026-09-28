@@ -98,6 +98,15 @@ public sealed class PosSettings
     public ReceiptLayout ReceiptLayout { get; set; } = ReceiptLayout.Standard;
 
     /// <summary>
+    /// When an item with no reorder level of its own counts as low: down to this share of full,
+    /// where full is the most its shelf has been stocked to. 10 unless the owner says otherwise;
+    /// 0 switches it off, leaving only the reorder levels the shop set.
+    /// </summary>
+    /// <remarks>Changed from the owner's screen, Settings.</remarks>
+    [JsonPropertyName("lowStockPercent")]
+    public decimal LowStockPercent { get; set; } = LowStock.DefaultPercent;
+
+    /// <summary>
     /// Whether the bill settles to the whole rupee, with the difference shown as a round-off.
     /// </summary>
     /// <remarks>
@@ -177,6 +186,9 @@ public sealed class PosSettings
 
         if (settings.SearchDebounceMs < 0 || settings.ScannerMaxKeystrokeGapMs <= 0)
             throw new InvalidOperationException($"The settings file at '{path}' has a non-positive timing value.");
+
+        if (!LowStock.IsValidPercent(settings.LowStockPercent))
+            throw new InvalidOperationException($"The settings file at '{path}' has a lowStockPercent of {settings.LowStockPercent}. Use 0 to switch it off, or a share of full below 100.");
 
         // Surfaces an unworkable loyalty scheme here rather than at the moment a cashier tries to
         // redeem against it.

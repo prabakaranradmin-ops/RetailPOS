@@ -19,6 +19,20 @@ public class StockNoteTests
         Catalogue.Item(id: 1, name: "Bath Soap 100g") with { StockQty = stock, ReorderLevel = reorder };
 
     /// <summary>
+    /// With no reorder level of its own, an item warns at the owner's share of full — the same rule
+    /// the reorder list uses, so the counter and the owner's screen agree about what is low.
+    /// </summary>
+    [Fact]
+    public void AnItemWithNoReorderLevelWarnsAtTheOwnersShareOfFull()
+    {
+        var soap = Item(stock: 9m) with { FullLevel = 100m };
+
+        Assert.Contains("Only 9 left", BillingViewModel.StockNote(soap, lowStockPercent: 10m));
+        Assert.Equal(string.Empty, BillingViewModel.StockNote(soap, lowStockPercent: 5m));
+        Assert.Equal(string.Empty, BillingViewModel.StockNote(soap, lowStockPercent: 0m));
+    }
+
+    /// <summary>
     /// The case that matters most. An item nobody counts must produce no note at all — a shop
     /// weighing rice out of a sack would otherwise get a warning on every scan about a figure it
     /// never asked the software to keep.

@@ -325,7 +325,7 @@ switch (command)
 
         // What to reorder, gathered now and printed at the foot of this report only. A reprint
         // months later must not carry today's shelves under last spring's takings.
-        var lowStock = new StockRepository(database).ListLow(50);
+        var lowStock = new StockRepository(database, () => settings.LowStockPercent).ListLow(50);
 
         // The day's books are worth a snapshot before anyone goes home.
         var backup = new DatabaseBackup(database, Path.Combine(dataDirectory, "backups")).Create(DateTimeOffset.Now);
@@ -471,7 +471,7 @@ switch (command)
             log: log,
 
             // So a void here puts the goods back on the shelf count, exactly as one at the till does.
-            stock: new StockRepository(database));
+            stock: new StockRepository(database, () => settings.LowStockPercent));
 
         var voided = checkout.VoidSale(number, ParseStringOption(args, "--reason"));
 
@@ -547,7 +547,7 @@ switch (command)
         var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
         database.EnsureMigrated();
 
-        var data = new DashboardQuery(database).Gather(
+        var data = new DashboardQuery(database, settings.LowStockPercent).Gather(
             settings.LaneId,
             new DateTimeOffset(from, to.Offset),
             to,
@@ -666,7 +666,7 @@ switch (command)
         var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
         database.EnsureMigrated();
 
-        var stock = new StockRepository(database);
+        var stock = new StockRepository(database, () => settings.LowStockPercent);
         var items = new ItemRepository(database);
         var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
 
@@ -727,13 +727,13 @@ switch (command)
         if (levels.Count == 0)
         {
             Console.WriteLine(low
-                ? "  Nothing is at or below its reorder level."
-                : "  No item in this catalogue is counted. Add a stock_qty column and re-import to start.");
+                ? $"  Nothing is low - nothing is at its reorder level or down to {settings.LowStockPercent:0.##}% of full."
+                : "  No item in this catalogue is counted. Load a stock sheet or a stock_qty column to start.");
             return 0;
         }
 
-        Console.WriteLine($"  {"SKU",-16}{"Item",-32}{"Have",8}{"Reorder",12}{"Short by",12}");
-        Console.WriteLine("  " + new string('-', 80));
+        Console.WriteLine($"  {"SKU",-16}{"Item",-32}{"Have",8}{"Full",8}{"Warns at",10}{"To order",10}");
+        Console.WriteLine("  " + new string('-', 84));
 
         foreach (var level in levels)
         {
@@ -742,13 +742,14 @@ switch (command)
             Console.WriteLine(
                 $"  {level.Sku,-16}{name,-32}" +
                 $"{level.Quantity.ToString("0.###", indian),8}" +
-                $"{(level.ReorderLevel?.ToString("0.###", indian) ?? "—"),12}" +
-                $"{(level.ShortBy?.ToString("0.###", indian) ?? ""),12}" +
+                $"{(level.FullLevel?.ToString("0.###", indian) ?? "—"),8}" +
+                $"{(level.WarnAt?.ToString("0.###", indian) ?? "—"),10}" +
+                $"{(level.ToOrder?.ToString("0.###", indian) ?? ""),10}" +
                 (level.IsOut ? "  OUT" : level.IsLow ? "  LOW" : string.Empty));
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {levels.Count} item(s){(low ? " at or below the reorder level" : " counted")}.");
+        Console.WriteLine($"  {levels.Count} item(s){(low ? $" low - at the reorder level, or down to {settings.LowStockPercent:0.##}% of full" : " counted")}.");
 
         return 0;
     }

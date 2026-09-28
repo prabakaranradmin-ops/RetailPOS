@@ -464,9 +464,9 @@
             <TextBlock Grid.Column="0" Text="{Binding StockHeadline, Mode=OneWay}" FontSize="15"
                        VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-              <RadioButton Content="Needs reordering" GroupName="StockFilter" IsChecked="{Binding LowOnly}"
+              <RadioButton Content="_Needs reordering" GroupName="StockFilter" IsChecked="{Binding LowOnly}"
                            Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,14,0" />
-              <RadioButton Content="Everything counted" GroupName="StockFilter"
+              <RadioButton Content="Ever_ything counted" GroupName="StockFilter"
                            Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
             </StackPanel>
           </Grid>
@@ -489,33 +489,71 @@
             </DataGrid.RowStyle>
             <DataGrid.Columns>
               <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" />
-              <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="140" />
-              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="160" />
-              <DataGridTextColumn Header="Have" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="90" />
-              <DataGridTextColumn Header="Reorder at" Binding="{Binding ReorderLevel, StringFormat={}{0:0.###}}" Width="110" />
-              <DataGridTextColumn Header="Short by" Binding="{Binding ShortBy, StringFormat={}{0:0.###}}" Width="110" />
+              <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
+              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="130" />
+              <DataGridTextColumn Header="Have" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" />
+              <DataGridTextColumn Header="Full" Binding="{Binding FullLevel, StringFormat={}{0:0.###}}" Width="80" />
+              <DataGridTextColumn Header="Left" Binding="{Binding PercentLeft, StringFormat={}{0:0}%}" Width="70" />
+              <DataGridTextColumn Header="Warns at" Binding="{Binding WarnAt, StringFormat={}{0:0.###}}" Width="90" />
+              <DataGridTextColumn Header="To order" Binding="{Binding ToOrder, StringFormat={}{0:0.###}}" Width="90" />
             </DataGrid.Columns>
           </DataGrid>
 
-          <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
-            <StackPanel>
-              <TextBlock Text="CORRECT A COUNT — AFTER A DELIVERY, A BREAKAGE OR A RECOUNT"
-                         Style="{StaticResource Heading}" />
-              <TextBlock Text="{Binding AdjustTarget, Mode=OneWay}" Margin="0,0,0,10" />
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="New count" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Text="{Binding NewQuantity, UpdateSourceTrigger=PropertyChanged}" Width="110"
-                         Padding="8,6" Margin="0,0,18,0" />
-                <TextBlock Text="Why" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Text="{Binding AdjustReason, UpdateSourceTrigger=PropertyChanged}" Width="320"
-                         Padding="8,6" Margin="0,0,18,0" />
-                <Button Content="Apply" Padding="18,6" Click="Adjust_Click"
-                        IsEnabled="{Binding CanAdjust, Mode=OneWay}" />
+          <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="420" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,12,0">
+              <StackPanel>
+                <TextBlock Text="CORRECT A COUNT — AFTER A DELIVERY, A BREAKAGE OR A RECOUNT"
+                           Style="{StaticResource Heading}" />
+                <TextBlock Text="{Binding AdjustTarget, Mode=OneWay}" Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="New count" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <TextBox Text="{Binding NewQuantity, UpdateSourceTrigger=PropertyChanged}" Width="90"
+                           Padding="8,6" Margin="0,0,14,0" />
+                  <TextBlock Text="Why" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <TextBox Text="{Binding AdjustReason, UpdateSourceTrigger=PropertyChanged}" Width="220"
+                           Padding="8,6" Margin="0,0,14,0" />
+                  <Button Content="Apply" Padding="18,6" Click="Adjust_Click"
+                          IsEnabled="{Binding CanAdjust, Mode=OneWay}" />
+                </StackPanel>
+                <TextBlock Text="The change and the reason are kept, so a count that stops matching the shelf can be traced back to where it went."
+                           Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
               </StackPanel>
-              <TextBlock Text="The change and the reason are kept, so a count that stops matching the shelf can be traced back to where it went."
-                         Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
+            </Border>
+
+            <!-- A delivery or a stocktake is dozens of counts, not one. -->
+            <Border Grid.Column="1" Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="COUNT IN BULK — A STOCK SHEET" Style="{StaticResource Heading}" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="A sheet of your own items to open in Excel. Fill in new_count for what you counted, save it as CSV, and load it back. Only counts and full levels change; blank rows are left alone." />
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Button Grid.Column="0" Content="_Save a stock sheet…" Padding="10,7" Margin="0,0,5,0"
+                          Click="SaveStockSheet_Click" />
+                  <Button Grid.Column="1" Content="_Load the filled-in sheet…" Padding="10,7" Margin="5,0,0,0"
+                          Click="LoadStockSheet_Click" />
+                </Grid>
+                <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"
+                              Visibility="{Binding HasStockSheetProblems, Converter={StaticResource BoolToVisibility}}">
+                  <ItemsControl ItemsSource="{Binding StockSheetProblems}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" Foreground="{StaticResource Warn}" TextWrapping="Wrap" FontSize="12.5" Margin="0,0,0,3" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </StackPanel>
+            </Border>
+          </Grid>
         </Grid>
       </TabItem>
 
@@ -699,7 +737,10 @@
                          Style="{StaticResource Heading}" />
 
               <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="980" Margin="0,0,0,14"
-                         Text="Save the sheet from Excel as CSV UTF-8, then pick it here. The columns are sku, barcode, name, hsn_code, unit, mrp, selling_price, gst_rate and is_weighed — in any order, in any case. category, cost_price, stock_qty and reorder_level may be added and may be left out. CATALOGUE_FORMAT.md in the install folder is the full list, and catalog_template.csv is a file to start from." />
+                         Text="Save the sheet from Excel as CSV UTF-8, then pick it here. The columns are sku, barcode, name, hsn_code, unit, mrp, selling_price, gst_rate and is_weighed — in any order, in any case. category, cost_price, stock_qty, reorder_level and full_level may be added and may be left out. CATALOGUE_FORMAT.md in the install folder is the full list. For counts alone, use the stock sheet on the Stock tab instead." />
+
+              <Button Content="Save a blank _template to start from…" Padding="14,6" HorizontalAlignment="Left"
+                      Margin="0,0,0,14" Click="SaveCatalogueTemplate_Click" />
 
               <!--
                 The path stretches rather than taking a fixed width. A till screen is often 1366
@@ -958,6 +999,23 @@
 
                 <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820" Margin="0,12,0,0"
                            Text="Both print the quantity with its unit — 3 Pcs, 2.75 Kg, 2 Seepu, 1.5 Muzham — in Tamil on a Tamil bill. The change applies to the next bill; to see it first, go to Hardware (Ctrl+4) and press Alt+B." />
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="LowStockCard" Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="WHEN STOCK COUNTS AS LOW" Style="{StaticResource Heading}" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                  <Label Target="{Binding ElementName=LowStockPercentBox}" Padding="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <AccessText Text="_Warn when an item is down to" Foreground="{StaticResource Ink}" FontSize="14" />
+                  </Label>
+                  <TextBox x:Name="LowStockPercentBox" Text="{Binding LowStockPercentText, UpdateSourceTrigger=PropertyChanged}"
+                           Width="70" Padding="8,6" Margin="0,0,8,0" KeyDown="LowStockPercent_KeyDown" />
+                  <TextBlock Text="% of full" FontSize="14" VerticalAlignment="Center" Margin="0,0,16,0" />
+                  <Button Content="Sa_ve" Padding="18,6" Click="SaveLowStockPercent_Click" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820"
+                           Text="Full is the most an item's shelf has been stocked to — a delivery, a count or a catalogue load that takes it higher raises it, and a stock sheet can set it. An item with a reorder level of its own warns at that level instead. The reorder list, the day-end report and the till's 'only 3 left' all follow this. 0 switches it off." />
               </StackPanel>
             </Border>
 

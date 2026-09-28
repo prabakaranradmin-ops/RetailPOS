@@ -72,7 +72,7 @@ public sealed class ZReportComposer
         {
             report.Columns(
                 level.Name.Length > 26 ? level.Name[..25] + "…" : level.Name,
-                $"{Quantity(level.Quantity)} / {Quantity(level.ReorderLevel ?? 0m)}");
+                $"{Quantity(level.Quantity)} / {Quantity(level.WarnAt ?? level.ReorderLevel ?? 0m)}");
         }
 
         if (lowStock.Count > most)

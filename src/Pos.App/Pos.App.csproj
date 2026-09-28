@@ -19,6 +19,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The same template the installer drops beside the program, carried inside it too, so the
+      Catalogue tab can hand one over wherever the owner asks. One file in the repository, so the two
+      cannot drift.
+    -->
+    <EmbeddedResource Include="..\..\deploy\catalog_template.csv" LogicalName="catalog_template.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Pos.Core.Domain\Pos.Core.Domain.csproj" />
     <ProjectReference Include="..\Pos.Core.Configuration\Pos.Core.Configuration.csproj" />
     <ProjectReference Include="..\Pos.Core.Data\Pos.Core.Data.csproj" />

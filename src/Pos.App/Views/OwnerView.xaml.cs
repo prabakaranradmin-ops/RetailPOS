@@ -143,6 +143,7 @@ public partial class OwnerView : Window
             ModeComposition.IsChecked = _viewModel.TaxMode == TaxMode.Composition;
 
             LayoutCard.Visibility = _viewModel.CanChooseLayout ? Visibility.Visible : Visibility.Collapsed;
+            LowStockCard.Visibility = _viewModel.CanChangeLowStockPercent ? Visibility.Visible : Visibility.Collapsed;
             LayoutStandard.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Standard;
             LayoutCompact.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Compact;
 
@@ -528,6 +529,103 @@ public partial class OwnerView : Window
     {
         if (_viewModel.ApplyAdjustment() is { } problem)
             Say(problem);
+    }
+
+    // ---- The stock sheet ---------------------------------------------------------------------
+
+    private void SaveStockSheet_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save a stock sheet to fill in",
+            Filter = "Spreadsheet (*.csv)|*.csv",
+            FileName = $"stock-sheet-{DateTime.Now:yyyy-MM-dd}.csv",
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_viewModel.SaveStockSheet(dialog.FileName) is { } problem)
+            Say(problem);
+    }
+
+    private void LoadStockSheet_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Load the filled-in stock sheet",
+            Filter = "Spreadsheet (*.csv)|*.csv|Every file (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_viewModel.CheckStockSheet(dialog.FileName) is not { } plan)
+            return;
+
+        // Said before anything is written: a stocktake loaded against the wrong day's sheet is a
+        // hundred wrong counts, and this is the moment it can still be stopped.
+        var ask = $"Change {plan.Counts} count(s)"
+                + (plan.FullLevels > 0 ? $" and {plan.FullLevels} full level(s)" : string.Empty)
+                + $"?\n\n{plan.Blank} row(s) are blank and {plan.Unchanged} match what the count already says; those are left alone. "
+                + "Prices and everything else about the items stay as they are.";
+
+        if (MessageBox.Show(this, ask, "Load the stock sheet?", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+            return;
+
+        if (_viewModel.ApplyStockSheet(plan) is { } problem)
+            Say(problem);
+    }
+
+    private void SaveLowStockPercent_Click(object sender, RoutedEventArgs e) => SaveLowStockPercent();
+
+    private void LowStockPercent_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        SaveLowStockPercent();
+        e.Handled = true;
+    }
+
+    private void SaveLowStockPercent()
+    {
+        if (_viewModel.SetLowStockPercent() is { } problem)
+            Say(problem);
+    }
+
+    private void SaveCatalogueTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save a catalogue template",
+            Filter = "Spreadsheet (*.csv)|*.csv",
+            FileName = "catalog_template.csv",
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            // The template shipped beside the program, carried inside it, byte for byte - mark and all,
+            // so Excel opens its Tamil example as Tamil.
+            using var source = typeof(OwnerView).Assembly.GetManifestResourceStream("catalog_template.csv")
+                ?? throw new InvalidOperationException("the template is missing from this build");
+            using var target = File.Create(dialog.FileName);
+            source.CopyTo(target);
+
+            _catalogue.Say($"Saved a catalogue template to {dialog.FileName}. Its example rows show every column; replace them with your own items.");
+        }
+        catch (Exception ex)
+        {
+            Say($"Could not save it: {ex.Message}");
+        }
     }
 
     private void TaxMode_Checked(object sender, RoutedEventArgs e)

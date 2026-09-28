@@ -26,9 +26,11 @@ namespace Pos.Core.Analytics;
 /// there are. The conversion back to rupees happens once, here.
 /// </para>
 /// </remarks>
-public sealed class DashboardQuery(PosDatabase database)
+/// <param name="lowStockPercent">The share of full an item without a reorder level warns at.</param>
+public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent = LowStock.DefaultPercent)
 {
     private readonly PosDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
+    private readonly decimal _lowStockPercent = lowStockPercent;
 
     /// <summary>Amount columns are text; this sums one as exact paise. See <see cref="PaiseSql"/>.</summary>
     private static string Sum(string column) => PaiseSql.Sum(column);
@@ -123,19 +125,19 @@ public sealed class DashboardQuery(PosDatabase database)
     /// Cheap enough not to matter to the page's timing — it reads a partial index over the item
     /// master, not the invoice history that everything else on this page walks.
     /// </remarks>
-    private static List<StockLevel> ReadLowStock(SqliteConnection connection)
+    private List<StockLevel> ReadLowStock(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT id, sku, name, category, stock_qty, reorder_level, unit_type
-            FROM items
-            WHERE is_active = 1
-              AND stock_qty IS NOT NULL
-              AND reorder_level IS NOT NULL
-              AND CAST(stock_qty AS REAL) <= CAST(reorder_level AS REAL)
-            ORDER BY CAST(stock_qty AS REAL) - CAST(reorder_level AS REAL), name
+        command.CommandText = $"""
+            SELECT i.id, i.sku, i.name, i.category, i.stock_qty, i.reorder_level, i.unit_type, i.full_qty,
+                   {LowStockSql.WarnAt("i")} AS warn
+            FROM items i
+            WHERE i.is_active = 1
+              AND {LowStockSql.IsLow("i")}
+            ORDER BY CAST(i.stock_qty AS REAL) - warn, i.name
             LIMIT 50;
             """;
+        command.Parameters.AddWithValue("$pct", LowStockSql.Percent(_lowStockPercent));
 
         using var reader = command.ExecuteReader();
         var levels = new List<StockLevel>();
@@ -148,8 +150,10 @@ public sealed class DashboardQuery(PosDatabase database)
                 Name: reader.GetString(2),
                 Category: reader.IsDBNull(3) ? null : reader.GetString(3),
                 Quantity: reader.GetDecimal(4),
-                ReorderLevel: reader.GetDecimal(5),
-                Unit: (UnitType)reader.GetInt32(6)));
+                ReorderLevel: reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                Unit: (UnitType)reader.GetInt32(6),
+                FullLevel: reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                WarnAt: Math.Round((decimal)reader.GetDouble(8), 3)));
         }
 
         return levels;

@@ -1,3 +1,4 @@
+using System.IO;
 using Pos.App.ViewModels;
 using Pos.Core.Analytics;
 using Pos.Core.Configuration;
@@ -25,7 +26,7 @@ public class OwnerViewModelTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private StockRepository Stock => new(_temp.Database);
+    private StockRepository Stock => new(_temp.Database, () => _percent);
 
     private Item Stocked(string sku, decimal? qty, decimal? reorder = null)
     {
@@ -70,7 +71,15 @@ public class OwnerViewModelTests : IDisposable
         {
             _layout = layout;
             return _refuseLayoutWith;
+        },
+        lowStockPercent: _percent,
+        applyLowStockPercent: percent =>
+        {
+            _percent = percent;
+            return null;
         });
+
+    private decimal _percent = LowStock.DefaultPercent;
 
     private ReceiptLayout? _layout;
     private string? _refuseLayoutWith;
@@ -88,12 +97,13 @@ public class OwnerViewModelTests : IDisposable
         var owner = Build();
         owner.Refresh();
 
-        Assert.Contains("No item in this catalogue is counted", owner.StockHeadline);
+        Assert.Contains("No item is counted yet", owner.StockHeadline);
 
         Stocked("RICE", qty: 50m, reorder: 5m);
         owner.Refresh();
 
-        Assert.Contains("Nothing is at or below", owner.StockHeadline);
+        Assert.Contains("Nothing is low", owner.StockHeadline);
+        Assert.Contains("10% of full", owner.StockHeadline);
     }
 
     [Fact]
@@ -237,6 +247,148 @@ public class OwnerViewModelTests : IDisposable
         var owner = Build();
         Assert.Null(owner.SetTaxMode(TaxMode.Gst));
         Assert.Equal(TaxMode.Gst, owner.TaxMode);
+    }
+
+    // ---- When stock counts as low ------------------------------------------------------------
+
+    [Fact]
+    public void TheShareOfFullCanBeChangedAndTheListFollows()
+    {
+        var rice = Stocked("RICE", qty: 100m);
+        Stock.Set(rice.Id, 20m, StockReason.Adjust, Lane);
+
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.Empty(owner.Stock);
+        Assert.Equal("10", owner.LowStockPercentText);
+
+        owner.LowStockPercentText = "25";
+        Assert.Null(owner.SetLowStockPercent());
+
+        Assert.Equal(25m, _percent);
+        Assert.Equal(25m, owner.LowStockPercent);
+        Assert.Equal("RICE", Assert.Single(owner.Stock).Sku);
+        Assert.Contains("25% of full", owner.StockHeadline);
+        Assert.Contains("25% of full", owner.Status);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("100")]
+    [InlineData("-5")]
+    public void AShareThatCannotBeMeantIsRefused(string typed)
+    {
+        var owner = Build();
+        owner.LowStockPercentText = typed;
+
+        Assert.NotNull(owner.SetLowStockPercent());
+        Assert.Equal(LowStock.DefaultPercent, _percent);
+    }
+
+    [Fact]
+    public void ZeroSwitchesTheShareOffAndSaysSo()
+    {
+        var owner = Build();
+        owner.LowStockPercentText = "0%";
+
+        Assert.Null(owner.SetLowStockPercent());
+
+        Assert.Equal(0m, _percent);
+        Assert.Contains("off", owner.Status);
+    }
+
+    // ---- The stock sheet -----------------------------------------------------------------------
+
+    [Fact]
+    public void AStockSheetIsSavedFilledInAndLoadedBack()
+    {
+        Stocked("DAL", qty: 12m);
+        Stocked("OIL", qty: null);
+
+        var owner = Build();
+        owner.Refresh();
+
+        var path = Path.Combine(Path.GetTempPath(), $"sheet-{Guid.NewGuid():N}.csv");
+
+        try
+        {
+            Assert.Null(owner.SaveStockSheet(path));
+            Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, File.ReadAllBytes(path).Take(3).ToArray());
+            Assert.Contains("2 item(s)", owner.Status);
+
+            // Filled in the way Excel would give it back: the new counts in the last column.
+            var filled = File.ReadAllLines(path)
+                .Select(line => line.StartsWith("DAL,", StringComparison.Ordinal) ? line + "40"
+                    : line.StartsWith("OIL,", StringComparison.Ordinal) ? line + "24"
+                    : line);
+            File.WriteAllLines(path, filled, new System.Text.UTF8Encoding(true));
+
+            var plan = owner.CheckStockSheet(path);
+
+            Assert.NotNull(plan);
+            Assert.Equal(2, plan!.Counts);
+            Assert.False(owner.HasStockSheetProblems);
+
+            Assert.Null(owner.ApplyStockSheet(plan));
+            Assert.Contains("2 count(s) changed", owner.Status);
+
+            var items = new ItemRepository(_temp.Database);
+            Assert.Equal(40m, items.FindBySku("DAL")!.StockQty);
+            Assert.Equal(24m, items.FindBySku("OIL")!.StockQty);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ASheetWithMistakesListsThemAndChangesNothing()
+    {
+        Stocked("DAL", qty: 12m);
+
+        var owner = Build();
+        var path = Path.Combine(Path.GetTempPath(), $"sheet-{Guid.NewGuid():N}.csv");
+
+        try
+        {
+            File.WriteAllText(path, "sku,new_count\nDAL,forty\nGHOST,3\n");
+
+            Assert.Null(owner.CheckStockSheet(path));
+
+            Assert.True(owner.HasStockSheetProblems);
+            Assert.Equal(2, owner.StockSheetProblems.Count);
+            Assert.Contains("Line 2", owner.StockSheetProblems[0]);
+            Assert.Contains("Nothing was changed", owner.Status);
+            Assert.Equal(12m, new ItemRepository(_temp.Database).FindBySku("DAL")!.StockQty);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ASheetThatChangesNothingSaysSo()
+    {
+        Stocked("DAL", qty: 12m);
+
+        var owner = Build();
+        var path = Path.Combine(Path.GetTempPath(), $"sheet-{Guid.NewGuid():N}.csv");
+
+        try
+        {
+            Assert.Null(owner.SaveStockSheet(path));
+
+            Assert.Null(owner.CheckStockSheet(path));
+            Assert.False(owner.HasStockSheetProblems);
+            Assert.Contains("Nothing in that sheet changes a count", owner.Status);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

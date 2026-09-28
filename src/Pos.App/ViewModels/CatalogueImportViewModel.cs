@@ -110,6 +110,9 @@ public sealed class CatalogueImportViewModel : ObservableObject
         private set => Set(ref _verdict, value);
     }
 
+    /// <summary>Puts something the screen did on the verdict line, where this tab reports.</summary>
+    public void Say(string message) => Verdict = message;
+
     /// <summary>What the catalogue holds right now, so the screen says what it is changing.</summary>
     public string Held
     {

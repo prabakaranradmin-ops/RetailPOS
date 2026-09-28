@@ -412,8 +412,70 @@ function Invoke-TillWalkthrough {
         Send-Keys '^2' 1100
         $shot = Save-Shot 'owner-03-stock' -Foreground
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Stock shows what needs reordering' `
-            -Expected 'the reorder list, and a panel to correct a count' -Actual 'captured' `
-            -Passed ($shot -ne '') -Shot $shot
+            -Expected 'the reorder list with have, full, what is left and what to order, a panel to correct a count, and the stock sheet' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # --- The stock sheet, round trip ----------------------------------------------------------
+        # Alt+S saves a sheet of the shop's own items. Proved on disk, then filled in the way
+        # somebody would after a delivery, and loaded back with Alt+L.
+        $stockFolder = Join-Path $Workspace 'stock'
+        New-Item -ItemType Directory -Force -Path $stockFolder | Out-Null
+        $sheetPath = Join-Path $stockFolder 'stock-sheet.csv'
+
+        Send-Keys '%s' 2000
+        Send-Keys $sheetPath 600
+        Send-Keys '{ENTER}' 2500
+
+        $sheetLines = @(if (Test-Path $sheetPath) { Get-Content $sheetPath -Encoding UTF8 })
+        $sheetRight = $sheetLines.Count -gt 1 -and $sheetLines[0] -eq 'sku,name,unit,have,full_level,new_count' `
+            -and ($sheetLines -match '^SUG001,Sugar Loose,Kg,,,$').Count -eq 1 -and ($sheetLines -match '^DAL001,').Count -eq 1
+        Add-Result -Kind Positive -Feature 'Stock' -Name 'A stock sheet of the shop''s own items is saved from the screen' `
+            -Expected 'every item with its unit, count and full level, and an empty new_count column' `
+            -Actual $(if ($sheetLines.Count) { ($sheetLines | Select-Object -First 3) -join ' | ' } else { 'not on disk' }) `
+            -Passed $sheetRight
+
+        # Sugar is sold loose and was never counted; a count on the sheet starts counting it. Toor
+        # dal gets a delivery that takes it past anything it has held, which makes that full.
+        $filledPath = Join-Path $stockFolder 'stock-sheet-filled.csv'
+        $filled = $sheetLines | ForEach-Object {
+            if ($_ -like 'SUG001,*') { $_ + '12.5' } elseif ($_ -like 'DAL001,*') { $_ + '60' } else { $_ }
+        }
+        [IO.File]::WriteAllLines($filledPath, [string[]]$filled, (New-Object Text.UTF8Encoding($true)))
+
+        Send-Keys '%l' 2000
+        Send-Keys $filledPath 600
+        Send-Keys '{ENTER}' 2500
+        $shot = Save-Shot 'owner-03b-stock-sheet-confirm' -Foreground
+        Add-Result -Kind Positive -Feature 'Stock' -Name 'Loading a sheet asks before it changes anything' `
+            -Expected 'how many counts will change, and that blank rows and prices are left alone' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '{ENTER}' 2000
+        $shot = Save-Shot 'owner-03c-stock-after-sheet' -Foreground
+
+        # Read back by saving the sheet again: what it now says is what the books now hold.
+        $againPath = Join-Path $stockFolder 'stock-sheet-after.csv'
+        Send-Keys '%s' 2000
+        Send-Keys $againPath 600
+        Send-Keys '{ENTER}' 2500
+
+        $after = @(if (Test-Path $againPath) { Import-Csv $againPath -Encoding UTF8 })
+        $sugar = $after | Where-Object { $_.sku -eq 'SUG001' }
+        $dal = $after | Where-Object { $_.sku -eq 'DAL001' }
+        $loaded = $null -ne $sugar -and $sugar.have -eq '12.5' -and $null -ne $dal -and $dal.have -eq '60' -and $dal.full_level -eq '60'
+        Add-Result -Kind Positive -Feature 'Stock' -Name 'The filled-in sheet changes the counts in bulk' `
+            -Expected 'Sugar Loose now counted at 12.5 kg; Toor Dal at 60, and 60 is its new full level' `
+            -Actual $(if ($after.Count) { "Sugar {0} / Toor Dal {1}, full {2}" -f $sugar.have, $dal.have, $dal.full_level } else { 'could not read it back' }) `
+            -Passed $loaded -Shot $shot
+
+        # Alt+Y shows everything counted, with the numbers the owner asked for: have, full, what is
+        # left as a share of it, where it warns and how many to order. Alt+N goes back.
+        Send-Keys '%y' 1200
+        $shot = Save-Shot 'owner-03d-stock-everything' -Foreground
+        Add-Result -Kind Positive -Feature 'Stock' -Name 'Every counted item with its full level and what is left' `
+            -Expected 'have, full, left as a share of full, warns at, and to order - Sugar at 12.5 now among them' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        Send-Keys '%n' 800
 
         Send-Keys '^3' 1100
         $shot = Save-Shot 'owner-04-catalogue' -Foreground
@@ -494,6 +556,22 @@ function Invoke-TillWalkthrough {
             -Expected '"receiptLayout": "Standard" in settings.json' `
             -Actual $(if ($saved -match '"receiptLayout"\s*:\s*"Standard"') { 'saved as Standard' } else { 'not switched back' }) `
             -Passed ($saved -match '"receiptLayout"\s*:\s*"Standard"')
+
+        # When stock counts as low: Alt+W goes to the share, Enter saves it. Proved in the file.
+        Send-Keys '%w' 700
+        Send-Keys '^a' 300
+        Send-Keys '25{ENTER}' 1500
+        $shot = Save-Shot 'owner-06d-settings-low-stock' -Foreground
+        $saved = Get-Content (Join-Path $Workspace 'settings.json') -Raw -Encoding UTF8
+        Add-Result -Kind Positive -Feature 'Stock' -Name 'The owner sets when stock counts as low' `
+            -Expected '"lowStockPercent": 25 in settings.json - an item with no reorder level now warns at 25% of full' `
+            -Actual $(if ($saved -match '"lowStockPercent"\s*:\s*25\b') { 'saved as 25' } else { 'not in settings.json' }) `
+            -Passed ($saved -match '"lowStockPercent"\s*:\s*25\b') -Shot $shot
+
+        # And back to the default, so the rest of the run sees the lane as it was.
+        Send-Keys '%w' 700
+        Send-Keys '^a' 300
+        Send-Keys '10{ENTER}' 1500
 
         # --- Maintenance ---------------------------------------------------------------------
         Send-Keys '^6' 1200

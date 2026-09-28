@@ -23,6 +23,7 @@ public static class Migrator
         "009_stock_and_tax_mode.sql",
         "010_round_off.sql",
         "011_customer_credit.sql",
+        "012_full_level.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

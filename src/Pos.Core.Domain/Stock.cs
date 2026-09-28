@@ -14,6 +14,9 @@ public enum StockReason
 
     /// <summary>Corrected by hand — a delivery, a breakage, a recount.</summary>
     Adjust,
+
+    /// <summary>Counted on a stock sheet and loaded back — a delivery or a stocktake, in bulk.</summary>
+    Count,
 }
 
 /// <summary>One movement in the stock ledger.</summary>
@@ -32,6 +35,11 @@ public sealed record StockMovement(
     string? Reference);
 
 /// <summary>An item's shelf figure, for a listing.</summary>
+/// <param name="FullLevel">The most the shelf has been stocked to, or null if never known.</param>
+/// <param name="WarnAt">
+/// The count it warns at — its reorder level, or its share of full — worked out by whoever read it,
+/// with the share of full that applied then. Null when nothing would make it low.
+/// </param>
 public sealed record StockLevel(
     long ItemId,
     string Sku,
@@ -39,15 +47,39 @@ public sealed record StockLevel(
     string? Category,
     decimal Quantity,
     decimal? ReorderLevel,
-    UnitType Unit)
+    UnitType Unit,
+    decimal? FullLevel = null,
+    decimal? WarnAt = null)
 {
-    public bool IsLow => ReorderLevel is { } floor && Quantity <= floor;
+    public bool IsLow => (WarnAt ?? ReorderLevel) is { } floor && Quantity <= floor;
 
     public bool IsOut => Quantity <= 0m;
 
     /// <summary>How many to buy to get back to the reorder level, or null when there is no level.</summary>
     public decimal? ShortBy => ReorderLevel is { } floor && Quantity < floor ? floor - Quantity : null;
+
+    /// <summary>What is left, as a share of full. Null when full is not known.</summary>
+    public decimal? PercentLeft => FullLevel is { } full && full > 0m
+        ? decimal.Round(Math.Max(Quantity, 0m) / full * 100m, 0, MidpointRounding.ToEven)
+        : null;
+
+    /// <summary>
+    /// How many to buy: back up to full when full is known, else back to the reorder level. What
+    /// the owner reads the list for.
+    /// </summary>
+    public decimal? ToOrder => FullLevel is { } full && full > Quantity
+        ? full - Quantity
+        : ShortBy;
 }
+
+/// <summary>One item as the stock sheet lists it: what it is, what the count says, and what full is.</summary>
+/// <param name="Have">Null when the item is not counted yet. A new count on the sheet starts it.</param>
+public sealed record StockSheetItem(long ItemId, string Sku, string Name, UnitType Unit, decimal? Have, decimal? FullLevel);
+
+/// <summary>One change a loaded stock sheet will make.</summary>
+/// <param name="NewCount">The count to set, or null to leave the count alone.</param>
+/// <param name="NewFullLevel">The full level to set, or null to leave it alone.</param>
+public sealed record StockSheetChange(long ItemId, string Sku, string Name, decimal? Before, decimal? NewCount, decimal? NewFullLevel);
 
 /// <summary>
 /// Reading and moving what is on the shelf.
@@ -78,4 +110,14 @@ public interface IStockStore
 
     /// <summary>One item's history, most recent first.</summary>
     IReadOnlyList<StockMovement> History(long itemId, int limit = 50);
+
+    /// <summary>Every active item, counted or not, for a stock sheet.</summary>
+    IReadOnlyList<StockSheetItem> Sheet();
+
+    /// <summary>
+    /// Applies a checked stock sheet in one go: every change, or none. A count on an item not yet
+    /// counted starts counting it.
+    /// </summary>
+    /// <returns>How many counts changed.</returns>
+    int ApplySheet(IReadOnlyList<StockSheetChange> changes, string laneId, string? reference = null);
 }

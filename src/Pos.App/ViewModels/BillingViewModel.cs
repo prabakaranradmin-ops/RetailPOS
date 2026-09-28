@@ -1285,7 +1285,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         ClearSearch();
         RefreshTotals();
 
-        StatusMessage = $"{item.Name} added.{StockNote(item)}";
+        StatusMessage = $"{item.Name} added.{StockNote(item, LowStockPercent)}";
     }
 
     /// <summary>
@@ -1300,7 +1300,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     /// The figure quoted is the one before this sale, which is what the cashier can check against
     /// what is in their hand.
     /// </remarks>
-    internal static string StockNote(Item item)
+    internal static string StockNote(Item item, decimal lowStockPercent = LowStock.DefaultPercent)
     {
         if (!item.IsStockTracked)
             return string.Empty;
@@ -1308,8 +1308,15 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (item.IsOutOfStock)
             return $"  Stock says none left ({item.StockQty:0.###}) — selling anyway.";
 
-        return item.IsLowStock ? $"  Only {item.StockQty:0.###} left." : string.Empty;
+        return item.IsLowAt(lowStockPercent) ? $"  Only {item.StockQty:0.###} left." : string.Empty;
     }
+
+    /// <summary>
+    /// The share of full at which an item with no reorder level counts as low. Set from the lane's
+    /// settings, and again when the owner changes it, so the counter warns on the same rule the
+    /// owner's reorder list uses.
+    /// </summary>
+    public decimal LowStockPercent { get; set; } = LowStock.DefaultPercent;
 
     private void ClearResults()
     {

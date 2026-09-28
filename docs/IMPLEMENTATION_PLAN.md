@@ -349,6 +349,49 @@ to collect it from. On the owner's screen it was counted as money on its way to 
 - The Tamil report and slip keep these labels in English, like the tender names already were,
   rather than print Tamil composed here that no shopkeeper has checked.
 
+## Low stock as a share of full, and the stock sheet — **complete** *(added 2026-09-28, approved)*
+
+An item warned only at a reorder level the shop had typed for it, so a catalogue without two
+hundred reorder levels never warned at all. Changing counts in bulk meant re-importing the
+catalogue with all nine columns on every row, and nothing on the screen handed over a file to fill
+in.
+
+- **Full is recorded, not asked for.** `items.full_qty` (migration 012) is the most the shelf has
+  been stocked to, and is raised only by a restock:
+  - a first count, a delivery, a stock sheet, a catalogue load or a correction that takes the shelf
+    higher raises it;
+  - a sale, a void or a count going down never lowers it, or every item would look full at
+    whatever it was last down to;
+  - `full_level` in the catalogue or on the stock sheet sets it outright.
+
+  The upgrade gives items already counted the most they are known to have held: their count, or
+  the highest a delivery or correction took them to.
+- **One rule, everywhere** (`LowStock`, and `LowStockSql` for the queries). An item with a reorder
+  level warns at it; any other counted item warns at a share of full, 10% unless the owner changes
+  it (Settings, `Alt+W`; `lowStockPercent`; 0 switches it off). The reorder list, the day-end
+  report, the dashboard page and the till's *"Only N left"* all read it, and a change reaches the
+  till at once. The share is bound as a number: bound as text, SQLite would rank '0' above 0 and the
+  switched-off rule would still fire.
+- **The Stock tab** shows have, full, what is left as a share of full, the level each item warns
+  at, and how many to order to fill it.
+- **The stock sheet** (`StockSheet`, Stock tab `Alt+S` / `Alt+L`) is a CSV of the shop's own items,
+  in the order the shelves are walked, with an empty `new_count` column:
+  - Loading it changes only counts and full levels. Prices cannot be changed through it, however it
+    is edited.
+  - It is checked like a catalogue, every problem at once by line: an unknown SKU, a repeated SKU,
+    a negative count, a fraction of something sold whole.
+  - It says what it will change before it writes, then applies in one transaction.
+  - A blank row is left alone. A count on an item nobody counted yet starts counting it. The ledger
+    records each change as a `Count`.
+- **The catalogue template** is embedded in the program (the same file the installer ships, so the
+  two cannot drift) and saved from the Catalogue tab with `Alt+T`. It had shampoo at 18% and
+  chocolate at 28%; both are 5% now, and it gained a jasmine-by-the-muzham row.
+
+Found on the way:
+- **The loaded-sheet confirmation would have misreported blank rows as unchanged.** The sheet goes
+  out with `full_level` filled in, so a row nobody touched was never empty. A test caught it before
+  a screen did.
+
 ## The monthly GST return — **complete** *(added 2026-09-28, approved)*
 
 The owner's screen had GST by rate over 7, 30 or 90 days. What an accountant files is a calendar

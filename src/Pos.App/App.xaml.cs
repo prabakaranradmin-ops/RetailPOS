@@ -116,7 +116,7 @@ public partial class App : Application
             receipts,
             _log,
             () => viewModelRef?.CashierName,
-            new StockRepository(database));
+            new StockRepository(database, () => settings.LowStockPercent));
 
         var dayClose = new DayCloseService(
             new DayCloseRepository(database, heldBills),
@@ -124,7 +124,7 @@ public partial class App : Application
             printer,
             new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log),
             clock: null,
-            stock: new StockRepository(database));
+            stock: new StockRepository(database, () => settings.LowStockPercent));
 
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode, settings.TaxMode, settings.RoundOffToRupee),
@@ -153,6 +153,7 @@ public partial class App : Application
                 () => viewModelRef?.CashierName));
 
         viewModelRef = viewModel;
+        viewModel.LowStockPercent = settings.LowStockPercent;
 
         var billingView = new MainBillingView(viewModel, keymap, settings);
 
@@ -206,7 +207,7 @@ public partial class App : Application
     private OwnerViewModel BuildOwnerViewModel(PosSettings settings, PosDatabase database, BillingViewModel billing, ReceiptComposer receipts)
     {
         var settingsPath = Path.Combine(DataDirectory, "settings.json");
-        var stock = new StockRepository(database);
+        var stock = new StockRepository(database, () => settings.LowStockPercent);
 
         return new OwnerViewModel(
             settings.LaneId,
@@ -215,7 +216,7 @@ public partial class App : Application
                 var to = System.DateTimeOffset.Now;
                 var from = new DateTimeOffset(to.Date.AddDays(-(days - 1)), to.Offset);
 
-                return new DashboardQuery(database).Gather(settings.LaneId, from, to, topItems: 10);
+                return new DashboardQuery(database, settings.LowStockPercent).Gather(settings.LaneId, from, to, topItems: 10);
             },
             stock,
             settings.TaxMode,
@@ -250,7 +251,7 @@ public partial class App : Application
                 {
                     var to = DateTimeOffset.Now;
                     var from = new DateTimeOffset(to.Date.AddDays(-(days - 1)), to.Offset);
-                    var data = new DashboardQuery(database).Gather(settings.LaneId, from, to, topItems: 10);
+                    var data = new DashboardQuery(database, settings.LowStockPercent).Gather(settings.LaneId, from, to, topItems: 10);
 
                     if (Path.GetDirectoryName(path) is { Length: > 0 } folder)
                         Directory.CreateDirectory(folder);
@@ -303,6 +304,28 @@ public partial class App : Application
                 }
 
                 _log?.Info("settings", $"receipt layout set to {layout}");
+                return null;
+            },
+
+            // Read live by every stock list through the shared settings, and pushed to the till so
+            // its "only N left" follows the same rule as the owner's reorder list.
+            lowStockPercent: settings.LowStockPercent,
+            applyLowStockPercent: percent =>
+            {
+                settings.LowStockPercent = percent;
+                billing.LowStockPercent = percent;
+
+                try
+                {
+                    SettingsFile.SetLowStockPercent(settingsPath, percent);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the low-stock percentage", ex);
+                    return $"Changed for this session, but it could not be saved: {ex.Message}";
+                }
+
+                _log?.Info("settings", $"low stock at {percent}% of full");
                 return null;
             });
     }

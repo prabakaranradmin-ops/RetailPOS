@@ -59,6 +59,7 @@ public static class ItemCsvParser
     private const string CostPrice = "cost_price";
     private const string StockQty = "stock_qty";
     private const string ReorderLevel = "reorder_level";
+    private const string FullLevel = "full_level";
 
     private static readonly string[] RequiredColumns =
         [Sku, Barcode, Name, Hsn, Unit, Mrp, SellingPrice, GstRate, IsWeighed];
@@ -212,6 +213,7 @@ public static class ItemCsvParser
         // cell means this item is not counted, which is a different thing from none being left.
         var stockText = Field(row, header, StockQty);
         var reorderText = Field(row, header, ReorderLevel);
+        var fullText = Field(row, header, FullLevel);
 
         decimal? stock = null;
         decimal? reorder = null;
@@ -229,13 +231,17 @@ public static class ItemCsvParser
                 problems.Add(new ImportProblem(line, ReorderLevel, "a reorder level needs a stock quantity beside it, or nothing will ever be compared against it."));
         }
 
+        // What full is, where the shop wants to say rather than let the counts decide. Blank means
+        // let the counts decide, which is what nearly every row wants.
+        decimal? full = fullText.Length > 0 ? ParseQuantity(fullText, FullLevel, line, problems) : null;
+
         if (unit is null || weighed is null || mrp is null || sellingPrice is null || gstRate is null)
             return null;
 
         if (costText.Length > 0 && cost is null)
             return null;
 
-        if ((stockText.Length > 0 && stock is null) || (reorderText.Length > 0 && reorder is null))
+        if ((stockText.Length > 0 && stock is null) || (reorderText.Length > 0 && reorder is null) || (fullText.Length > 0 && full is null))
             return null;
 
         if (reorderText.Length > 0 && stockText.Length == 0)
@@ -256,6 +262,7 @@ public static class ItemCsvParser
             CostPrice = cost,
             StockQty = stock,
             ReorderLevel = reorder,
+            FullLevel = full,
             IsActive = true,
         };
     }
@@ -362,13 +369,13 @@ public static class ItemCsvParser
 
     // ---- CSV reading -------------------------------------------------------------------------
 
-    private readonly record struct Row(int Line, string[] Fields);
+    internal readonly record struct Row(int Line, string[] Fields);
 
     /// <summary>
     /// Reads the file as CSV, honouring quoted fields so a product name with a comma in it does not
     /// silently shift every column after it.
     /// </summary>
-    private static IEnumerable<Row> ReadRows(TextReader reader)
+    internal static IEnumerable<Row> ReadRows(TextReader reader)
     {
         var fields = new List<string>();
         var field = new StringBuilder();
