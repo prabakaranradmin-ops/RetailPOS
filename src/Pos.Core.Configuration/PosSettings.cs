@@ -85,6 +85,19 @@ public sealed class PosSettings
     public ReceiptLanguage ReceiptLanguage { get; set; } = ReceiptLanguage.English;
 
     /// <summary>
+    /// Which of the two bill layouts this lane prints: <c>Standard</c>, with price, quantity and
+    /// amount columns and every tender, or <c>Compact</c>, the shorter counter bill with one large
+    /// total. Both carry what a tax invoice must.
+    /// </summary>
+    /// <remarks>
+    /// Changed from the owner's screen, Settings. It changes the next bill printed, and a reprint
+    /// of an old bill comes out in whichever layout is set when it is reprinted — the figures are
+    /// the same either way.
+    /// </remarks>
+    [JsonPropertyName("receiptLayout")]
+    public ReceiptLayout ReceiptLayout { get; set; } = ReceiptLayout.Standard;
+
+    /// <summary>
     /// Whether the bill settles to the whole rupee, with the difference shown as a round-off.
     /// </summary>
     /// <remarks>

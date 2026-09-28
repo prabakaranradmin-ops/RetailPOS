@@ -634,8 +634,32 @@
                   </StackPanel>
                 </Grid>
 
-                <CheckBox IsChecked="{Binding IsWeighed}" Foreground="{StaticResource Ink}" Margin="0,0,0,4"
-                          Content="Sold by weight — priced per kilo on the scale" />
+                <Label Target="{Binding ElementName=NewItemUnit}" Padding="0" Margin="0,0,0,3">
+                  <AccessText Text="Sold in — _unit" Style="{x:Null}" Foreground="{StaticResource InkDim}" FontSize="12.5" />
+                </Label>
+                <!--
+                  A list rather than a drop-down: the default drop-down paints its own light face,
+                  which this dark theme's text is unreadable on. Arrow keys move through it, and typing
+                  a letter jumps to the unit whose spelling starts with it - m, u for Muzham.
+                -->
+                <ListBox x:Name="NewItemUnit" ItemsSource="{Binding UnitChoices}" SelectedItem="{Binding Unit}"
+                         TextSearch.TextPath="Code" IsTextSearchEnabled="True" Height="132" Margin="0,0,0,4"
+                         Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         KeyboardNavigation.DirectionalNavigation="Contained">
+                  <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                      <Setter Property="Focusable" Value="True" />
+                      <Setter Property="Padding" Value="8,3" />
+                    </Style>
+                  </ListBox.ItemContainerStyle>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="13" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="{Binding UnitHint}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,4" />
                 <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
                            Text="Leave &quot;on the shelf&quot; blank for anything you do not count, like loose rice out of a sack. Blank means not counted, which is not the same as none left." />
 
@@ -837,14 +861,14 @@
                 </ScrollViewer>
 
                 <!-- The composed bill, in the face the paper will carry. -->
-                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="PreviewTextScroll" Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsPreviewText, Converter={StaticResource BoolToVisibility}}">
                   <TextBlock Text="{Binding PreviewText, Mode=OneWay}" Foreground="{StaticResource Ink}"
                              FontFamily="Consolas" FontSize="12.5" />
                 </ScrollViewer>
 
                 <!-- The dots themselves, once they have been drawn. -->
-                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="PreviewImageScroll" Tag="Page" VerticalScrollBarVisibility="Auto"
                               Visibility="{Binding ShowsPreviewImage, Converter={StaticResource BoolToVisibility}}">
                   <Border Background="White" Padding="10" HorizontalAlignment="Left">
                     <Image x:Name="PreviewImage" Stretch="None" />
@@ -910,6 +934,33 @@
               </StackPanel>
             </Border>
 
+            <Border x:Name="LayoutCard" Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="HOW THE BILL IS LAID OUT" Style="{StaticResource Heading}" />
+
+                <RadioButton x:Name="LayoutStandard" GroupName="Layout" Foreground="{StaticResource Ink}"
+                             Margin="0,4,0,12" Checked="Layout_Checked" Tag="Standard">
+                  <StackPanel Margin="6,0,0,0">
+                    <AccessText Text="_Standard bill" FontSize="15" />
+                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="760" Margin="0,3,0,0"
+                               Text="Rate, quantity and amount in columns, the taxable value, CGST and SGST, and all four tenders — cash, UPI, card and credit — printed on every bill." />
+                  </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="LayoutCompact" GroupName="Layout" Foreground="{StaticResource Ink}"
+                             Margin="0,0,0,4" Checked="Layout_Checked" Tag="Compact">
+                  <StackPanel Margin="6,0,0,0">
+                    <AccessText Text="_Compact counter bill" FontSize="15" />
+                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="760" Margin="0,3,0,0"
+                               Text="Item, quantity and amount, with the HSN, GST and rate under each line, one large Total Amount, and only the tenders actually used. Shorter paper, and still a full tax invoice." />
+                  </StackPanel>
+                </RadioButton>
+
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820" Margin="0,12,0,0"
+                           Text="Both print the quantity with its unit — 3 Pcs, 2.75 Kg, 2 Seepu, 1.5 Muzham — in Tamil on a Tamil bill. The change applies to the next bill; to see it first, go to Hardware (Ctrl+4) and press Alt+B." />
+              </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource Card}">
               <StackPanel>
                 <TextBlock Text="WHO MAY OPEN THIS SCREEN" Style="{StaticResource Heading}" />
@@ -932,9 +983,13 @@
       </TabItem>
       <!-- ==== Maintenance ==== -->
       <TabItem Header="Maintenance  (Ctrl+6)">
+        <!--
+          The jobs down the left, which scrolls, and whatever they produced down the whole of the
+          right. A day-end report is 60-odd lines; squeezed under the lists it showed four at a time.
+        -->
         <Grid x:Name="MaintenanceTab" Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="380" />
+            <ColumnDefinition Width="430" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
 
@@ -990,48 +1045,7 @@
                 </StackPanel>
               </Border>
 
-            </StackPanel>
-          </ScrollViewer>
-
-          <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="*" />
-              <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0" Text="{Binding Summary, Mode=OneWay}" TextWrapping="Wrap"
-                       FontSize="15" Margin="2,0,2,10" />
-
-            <Border Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
-              <Grid>
-                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto"
-                              Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
-                  <ItemsControl ItemsSource="{Binding Log}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding}" Foreground="{StaticResource Ink}"
-                                   FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap" />
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </ScrollViewer>
-
-                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                              Visibility="{Binding HasReport, Converter={StaticResource BoolToVisibility}}">
-                  <TextBlock Text="{Binding ReportText, Mode=OneWay}" Foreground="{StaticResource Ink}"
-                             FontFamily="Consolas" FontSize="12.5" />
-                </ScrollViewer>
-              </Grid>
-            </Border>
-
-            <Grid Grid.Row="2" Margin="0,12,0,0">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-              </Grid.ColumnDefinitions>
-
-              <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                 <StackPanel>
                   <TextBlock Text="DAY-END REPORTS ALREADY TAKEN" Style="{StaticResource Heading}" />
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
@@ -1060,7 +1074,7 @@
                 </StackPanel>
               </Border>
 
-              <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0">
+              <Border Style="{StaticResource Card}">
                 <StackPanel>
                   <TextBlock Text="PUT A SNAPSHOT BACK" Style="{StaticResource Heading}" />
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
@@ -1073,7 +1087,7 @@
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}"
                             SelectionMode="Single" RowHeight="30" Margin="0,0,0,10">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="170" />
+                      <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="150" />
                       <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" />
                       <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
                     </DataGrid.Columns>
@@ -1091,7 +1105,41 @@
                   </StackPanel>
                 </StackPanel>
               </Border>
-            </Grid>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="{Binding Summary, Mode=OneWay}" TextWrapping="Wrap"
+                       FontSize="15" Margin="2,0,2,10" />
+
+            <Border x:Name="MaintenanceOutput" Grid.Row="1" Background="#FF0B0F13" CornerRadius="8" Padding="14,12">
+              <Grid>
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding ShowsLog, Converter={StaticResource BoolToVisibility}}">
+                  <ItemsControl ItemsSource="{Binding Log}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" Foreground="{StaticResource Ink}"
+                                   FontFamily="Consolas" FontSize="12.5" TextWrapping="Wrap" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                              Visibility="{Binding HasReport, Converter={StaticResource BoolToVisibility}}">
+                  <TextBlock Text="{Binding ReportText, Mode=OneWay}" Foreground="{StaticResource Ink}"
+                             FontFamily="Consolas" FontSize="12.5" />
+                </ScrollViewer>
+              </Grid>
+            </Border>
+
           </Grid>
         </Grid>
       </TabItem>

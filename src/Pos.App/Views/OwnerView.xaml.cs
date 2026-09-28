@@ -9,6 +9,7 @@ using Pos.App.ViewModels;
 using Pos.Core.Configuration;
 using Pos.Core.Domain;
 using Pos.Core.Domain.Catalogue;
+using Pos.Core.Domain.Printing;
 
 namespace Pos.App.Views;
 
@@ -124,6 +125,10 @@ public partial class OwnerView : Window
 
             ModeGst.IsChecked = _viewModel.TaxMode == TaxMode.Gst;
             ModeComposition.IsChecked = _viewModel.TaxMode == TaxMode.Composition;
+
+            LayoutCard.Visibility = _viewModel.CanChooseLayout ? Visibility.Visible : Visibility.Collapsed;
+            LayoutStandard.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Standard;
+            LayoutCompact.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Compact;
 
             ApplyTaxMode();
             ApplyPinState();
@@ -335,7 +340,13 @@ public partial class OwnerView : Window
     /// <summary>The paper width to preview against, which is not always the lane's own.</summary>
     private int PreviewWidth() => Width32.IsChecked == true ? 32 : 48;
 
-    private void Preview_Click(object sender, RoutedEventArgs e) => _hardware.ShowPreview(PreviewWidth());
+    // A new bill starts at its top. Left where the last one was read to, a freshly drawn bill opens
+    // on its foot, and the owner checking a layout sees the tender block and not the heading.
+    private void Preview_Click(object sender, RoutedEventArgs e)
+    {
+        _hardware.ShowPreview(PreviewWidth());
+        PreviewTextScroll.ScrollToTop();
+    }
 
     private void PreviewImage_Click(object sender, RoutedEventArgs e)
     {
@@ -356,6 +367,7 @@ public partial class OwnerView : Window
         image.Freeze();
 
         PreviewImage.Source = image;
+        PreviewImageScroll.ScrollToTop();
     }
 
     // ---- Loading a catalogue ---------------------------------------------------------------------
@@ -515,6 +527,22 @@ public partial class OwnerView : Window
             ModeComposition.IsChecked = _viewModel.TaxMode == TaxMode.Composition;
             _settingUp = false;
         }
+    }
+
+    /// <summary>
+    /// No confirmation, unlike the tax mode: the layout is a matter of paper, not of law, and the
+    /// other choice is one key away.
+    /// </summary>
+    private void Layout_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_settingUp || sender is not RadioButton { Tag: string tag })
+            return;
+
+        if (!Enum.TryParse<ReceiptLayout>(tag, out var layout))
+            return;
+
+        if (_viewModel.SetReceiptLayout(layout) is { } problem)
+            Say(problem);
     }
 
     private void SavePin_Click(object sender, RoutedEventArgs e)

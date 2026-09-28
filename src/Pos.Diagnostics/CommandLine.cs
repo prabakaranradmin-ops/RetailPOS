@@ -36,7 +36,7 @@ public static class CommandLine
         "dashboard" => ([], ["--days", "--top", "--out"]),
         "dashboard-pin" => (["--clear"], []),
         "stock" => (["--low", "--set"], ["--sku", "--qty", "--reason", "--limit"]),
-        "receipt-preview" => ([], ["--width", "--png"]),
+        "receipt-preview" => ([], ["--width", "--png", "--layout"]),
         "test-hardware" => (["--printer", "--drawer", "--scanner", "--scale"], ["--seconds"]),
         _ => ([], []),
     };

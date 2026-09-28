@@ -81,13 +81,13 @@ public sealed class PeripheralCheck(
 
     /// <summary>
     /// The sample bill composed exactly as this lane would compose a real one — its store details,
-    /// its paper width, its language, its tax mode and its rounding.
+    /// its paper width, its language, its layout, its tax mode and its rounding.
     /// </summary>
     public ReceiptBuilder Preview(int? paperWidthChars = null)
     {
         var width = paperWidthChars ?? _settings.Hardware.PrinterPaperWidthChars;
 
-        return new ReceiptComposer(_settings.Store.ToProfile(), width, _settings.ReceiptLanguage)
+        return new ReceiptComposer(_settings.Store.ToProfile(), width, _settings.ReceiptLanguage, _settings.ReceiptLayout)
             .Compose(SampleInvoice.Build(
                 _settings.LaneId,
                 _settings.InvoiceNumber.ToFormat(),

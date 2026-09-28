@@ -3,6 +3,7 @@ using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Printing;
 using Pos.TestSupport;
 using Xunit;
 
@@ -63,7 +64,16 @@ public class OwnerViewModelTests : IDisposable
         {
             _pin = credential;
             return null;
+        },
+        receiptLayout: ReceiptLayout.Standard,
+        applyReceiptLayout: layout =>
+        {
+            _layout = layout;
+            return _refuseLayoutWith;
         });
+
+    private ReceiptLayout? _layout;
+    private string? _refuseLayoutWith;
 
     // ---- The reorder list ------------------------------------------------------------------------
 
@@ -227,6 +237,50 @@ public class OwnerViewModelTests : IDisposable
         var owner = Build();
         Assert.Null(owner.SetTaxMode(TaxMode.Gst));
         Assert.Equal(TaxMode.Gst, owner.TaxMode);
+    }
+
+    [Fact]
+    public void TheBillLayoutCanBeSwitchedFromTheScreen()
+    {
+        var owner = Build();
+
+        Assert.True(owner.CanChooseLayout);
+        Assert.Equal(ReceiptLayout.Standard, owner.ReceiptLayout);
+
+        Assert.Null(owner.SetReceiptLayout(ReceiptLayout.Compact));
+
+        Assert.Equal(ReceiptLayout.Compact, _layout);
+        Assert.Equal(ReceiptLayout.Compact, owner.ReceiptLayout);
+        Assert.Contains("compact", owner.Status, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Null(owner.SetReceiptLayout(ReceiptLayout.Standard));
+        Assert.Equal(ReceiptLayout.Standard, _layout);
+    }
+
+    /// <summary>
+    /// The till's composer has already switched when the file fails to save, so the screen shows the
+    /// layout the next bill will actually print in — and says that it will not survive a restart.
+    /// </summary>
+    [Fact]
+    public void ALayoutThatCouldNotBeSavedStillShowsWhatTheTillWillPrint()
+    {
+        _refuseLayoutWith = "Changed for this session, but it could not be saved: disk full";
+        var owner = Build();
+
+        Assert.NotNull(owner.SetReceiptLayout(ReceiptLayout.Compact));
+
+        Assert.Equal(ReceiptLayout.Compact, owner.ReceiptLayout);
+        Assert.Contains("could not be saved", owner.Status);
+    }
+
+    [Fact]
+    public void ALaneWiredWithNowhereToSaveTheLayoutDoesNotOfferIt()
+    {
+        var owner = new OwnerViewModel(Lane, _ => throw new InvalidOperationException(), Stock, TaxMode.Gst, false, _ => null, _ => null);
+
+        Assert.False(owner.CanChooseLayout);
+        Assert.NotNull(owner.SetReceiptLayout(ReceiptLayout.Compact));
+        Assert.Equal(ReceiptLayout.Standard, owner.ReceiptLayout);
     }
 
     [Fact]

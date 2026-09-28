@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Printing;
 
 namespace Pos.Core.Configuration;
 
@@ -26,6 +27,10 @@ public static class SettingsFile
     /// </remarks>
     public static void SetTaxMode(string path, TaxMode mode) =>
         Patch(path, root => root["taxMode"] = mode.ToString(), fresh => fresh.TaxMode = mode);
+
+    /// <summary>Writes which bill layout this lane prints, by name.</summary>
+    public static void SetReceiptLayout(string path, ReceiptLayout layout) =>
+        Patch(path, root => root["receiptLayout"] = layout.ToString(), fresh => fresh.ReceiptLayout = layout);
 
     /// <summary>
     /// Writes the dashboard PIN into the settings file, or removes it when given null.

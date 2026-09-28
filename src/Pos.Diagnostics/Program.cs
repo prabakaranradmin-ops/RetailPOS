@@ -756,6 +756,20 @@ switch (command)
         // Renders the sample receipt as text without touching a printer, which is how the layout
         // gets checked on a bench or against a different paper width.
         var width = ParseWidth(args) ?? settings.Hardware.PrinterPaperWidthChars;
+
+        // Either layout can be looked at before the owner switches to it. The lane's own setting is
+        // the default, so the plain command still shows what this lane prints.
+        if (ParseStringOption(args, "--layout") is { } layoutName)
+        {
+            if (!Enum.TryParse<ReceiptLayout>(layoutName, ignoreCase: true, out var layout) || !Enum.IsDefined(layout))
+            {
+                Console.Error.WriteLine($"'{layoutName}' is not a layout. Use standard or compact.");
+                return 2;
+            }
+
+            settings.ReceiptLayout = layout;
+        }
+
         var receipt = checks.Preview(width);
 
         Console.WriteLine();
@@ -1060,15 +1074,17 @@ static void WriteHelp()
               before changing or clearing one. Keeps somebody out of the
               command; it does not encrypt the database — see SETTINGS.html.
 
-          pos receipt-preview [--width N] [--png <path>]
+          pos receipt-preview [--width N] [--png <path>] [--layout standard|compact]
               Renders a sample receipt as text. Touches no hardware, so it works
               on a bench and against any paper width. --png saves the dots the
               printer would actually burn, which is the only way to check that
-              Tamil came out right without using a roll of paper.
+              Tamil came out right without using a roll of paper. --layout
+              shows the other bill layout without switching the lane to it.
 
           pos import-items --file <path> [--update] [--dry-run]
               Loads a catalogue CSV. Required columns: sku, barcode, name,
-              hsn_code, unit (Pcs/Kg), mrp, selling_price, gst_rate,
+              hsn_code, unit (Pcs, Kg, L, m, or a Tamil unit such as Seepu,
+              Kattu, Padi, Muzham), mrp, selling_price, gst_rate,
               is_weighed — in any order. Optional: category, cost_price,
               stock_qty, reorder_level. Nothing is written unless the whole
               file is clean, so a rejected import leaves the catalogue

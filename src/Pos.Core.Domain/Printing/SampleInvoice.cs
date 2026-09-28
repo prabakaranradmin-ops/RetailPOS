@@ -2,7 +2,8 @@ namespace Pos.Core.Domain.Printing;
 
 /// <summary>
 /// A representative invoice for the printer test and the on-screen preview: two tax slabs, a
-/// discount, a weighed line, a split tender with change, and loyalty movement — so a test print
+/// discount, a weighed line, lines in traditional units, a split tender with change, and loyalty
+/// movement — so a test print
 /// exercises every part of the layout rather than only the easy ones.
 /// </summary>
 /// <remarks>
@@ -47,6 +48,11 @@ public static class SampleInvoice
             Line(2, "Sugar Loose", "1701", null, 45m, 5m * rate, quantity: 2.75m, unit: UnitType.Kilogram),
             Line(3, "Shampoo 340ml", "3305", "8901234567897", 299m, 18m * rate, discount: 49m),
             Line(4, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", "8901234567901", 1_299m, 5m * rate),
+
+            // Sold in the traditional units, so the preview shows how a unit other than a piece or
+            // a kilo prints. Fresh flowers and fruit are nil-rated, so these carry no tax.
+            Line(5, "Malligai Poo (Jasmine)", "0603", null, 30m, 0m, quantity: 2.5m, unit: UnitType.Muzham),
+            Line(6, "Poovan Banana", "0803", null, 60m, 0m, unit: UnitType.Seepu),
         ];
 
         var totals = InvoiceTotals.From(lines, roundToRupee);

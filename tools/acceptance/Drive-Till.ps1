@@ -430,6 +430,16 @@ function Invoke-TillWalkthrough {
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
         [void] (Save-Pages -First 'owner-04b-catalogue-hsn.png' -Feature 'Owner screen' -What 'The one-item form, further down')
 
+        # Alt+U goes to the unit list, and typing a unit's spelling picks it: jasmine by the muzham.
+        # Still nothing is saved.
+        Send-Keys '%u' 700
+        Send-Keys 'muzha' 1200
+        $shot = Save-Shot 'owner-04c-catalogue-unit' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'An item can be sold in a traditional Tamil unit' `
+            -Expected 'the unit list on Muzham (முழம்), saying the till will take part of one' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'Pcs, Kg, L and m, then seepu, kattu, padi, muzham and the other units customers still ask for by name.'
+
         # Alt+B on this tab composes the sample bill. Nothing here touches the printer or the
         # drawer: firing either from an unattended run would put paper and noise into whatever room
         # the machine is sitting in.
@@ -455,6 +465,35 @@ function Invoke-TillWalkthrough {
             -Expected 'the PIN controls, and the tax mode on a GST build' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
         [void] (Save-Pages -First 'owner-06-settings.png' -Feature 'Owner screen' -What 'Settings, further down')
+
+        # Alt+C picks the compact counter bill. Proved on disk, not from the screenshot: the choice
+        # has to survive a restart, which means it has to be in settings.json.
+        Send-Keys '%c' 1200
+        $shot = Save-Shot 'owner-06b-settings-compact' -Foreground
+        $saved = Get-Content (Join-Path $Workspace 'settings.json') -Raw -Encoding UTF8
+        $compactSaved = $saved -match '"receiptLayout"\s*:\s*"Compact"'
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The owner switches to the compact counter bill' `
+            -Expected 'Compact chosen on screen, and "receiptLayout": "Compact" written to settings.json' `
+            -Actual $(if ($compactSaved) { 'saved as Compact' } else { 'not in settings.json' }) `
+            -Passed $compactSaved -Shot $shot
+
+        # And the preview follows at once: the next bill is the compact one.
+        Send-Keys '^4' 1100
+        Send-Keys '%w' 2000
+        $shot = Save-Shot 'owner-06c-compact-bill' -Foreground
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The bill preview shows the compact layout straight away' `
+            -Expected 'item, quantity with its unit, amount; one large Total Amount' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-06c-compact-bill.png' -Feature 'Owner screen' -What 'The compact bill, further down')
+
+        # Back to the standard bill, so the lane is left as it was found.
+        Send-Keys '^5' 1100
+        Send-Keys '%s' 1200
+        $saved = Get-Content (Join-Path $Workspace 'settings.json') -Raw -Encoding UTF8
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The standard bill can be chosen again' `
+            -Expected '"receiptLayout": "Standard" in settings.json' `
+            -Actual $(if ($saved -match '"receiptLayout"\s*:\s*"Standard"') { 'saved as Standard' } else { 'not switched back' }) `
+            -Passed ($saved -match '"receiptLayout"\s*:\s*"Standard"')
 
         # --- Maintenance ---------------------------------------------------------------------
         Send-Keys '^6' 1200

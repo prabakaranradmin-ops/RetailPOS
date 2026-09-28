@@ -13,6 +13,23 @@ public enum ReceiptLanguage
     Tamil = 1,
 }
 
+/// <summary>How a lane lays out its customer's bill. Either way it is the same invoice, in law and in figures.</summary>
+public enum ReceiptLayout
+{
+    /// <summary>
+    /// Price, quantity and amount in columns, the tax block and all four tenders printed every
+    /// time. The layout every lane had before there was a choice.
+    /// </summary>
+    Standard = 0,
+
+    /// <summary>
+    /// The shorter counter bill: item, quantity and amount only, the HSN and GST under each line,
+    /// one large total, and only the tenders actually used. Modelled on the bill Tamil Nadu
+    /// provision stores already hand out.
+    /// </summary>
+    Compact = 1,
+}
+
 /// <summary>
 /// The words on a receipt, in one language.
 /// </summary>
@@ -51,6 +68,16 @@ public sealed record ReceiptLabels
     public required string ParkedAs { get; init; }
 
     public required string ItemName { get; init; }
+
+    /// <summary>The item column's heading on the compact bill, which has less room for it.</summary>
+    public required string ItemShort { get; init; }
+
+    /// <summary>The one large figure at the foot of the compact bill: what is handed over.</summary>
+    public required string TotalAmount { get; init; }
+
+    /// <summary>Who the compact bill is made out to when nobody was named at the counter.</summary>
+    public required string CashCustomer { get; init; }
+
     public required string Rate { get; init; }
     public required string Quantity { get; init; }
     public required string Amount { get; init; }
@@ -165,6 +192,9 @@ public sealed record ReceiptLabels
         ParkedAs = "Parked as",
 
         ItemName = "Item",
+        ItemShort = "Item",
+        TotalAmount = "Total Amount",
+        CashCustomer = "CASH",
         Rate = "Rate",
         Quantity = "Qty",
         Amount = "Amount",
@@ -262,6 +292,12 @@ public sealed record ReceiptLabels
         ParkedAs = "நிறுத்தியது",
 
         ItemName = "பொருளின் பெயர்",
+
+        // These three are as the reference counter bill prints them: the heading in Tamil, and the
+        // total and the walk-in customer in English, which is what the shops' own bills say.
+        ItemShort = "பொருள்",
+        TotalAmount = "Total Amount",
+        CashCustomer = "CASH",
         Rate = "விலை",
         Quantity = "அளவு",
         Amount = "தொகை",

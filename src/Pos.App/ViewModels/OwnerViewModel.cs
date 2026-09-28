@@ -3,6 +3,7 @@ using System.Globalization;
 using Pos.Core.Analytics;
 using Pos.Core.Configuration;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Printing;
 
 namespace Pos.App.ViewModels;
 
@@ -38,6 +39,7 @@ public sealed class OwnerViewModel : ObservableObject
     private readonly Func<TaxMode, string?> _applyTaxMode;
     private readonly Func<PinCredential?, string?> _applyPin;
     private readonly Func<int, string, string?>? _saveWebPage;
+    private readonly Func<ReceiptLayout, string?>? _applyReceiptLayout;
     private readonly string _laneId;
 
     private int _days = 30;
@@ -59,7 +61,12 @@ public sealed class OwnerViewModel : ObservableObject
 
         // Writes the figures now on screen as a web page, for sending to an accountant. Optional so
         // the screen still builds on a lane wired without one; the button is off when it is absent.
-        Func<int, string, string?>? saveWebPage = null)
+        Func<int, string, string?>? saveWebPage = null,
+
+        // Which bill the lane prints, and how to change it. Optional for the same reason: the
+        // choice is not offered on a lane wired without somewhere to save it.
+        ReceiptLayout receiptLayout = ReceiptLayout.Standard,
+        Func<ReceiptLayout, string?>? applyReceiptLayout = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(gather);
@@ -69,10 +76,12 @@ public sealed class OwnerViewModel : ObservableObject
         _applyTaxMode = applyTaxMode ?? throw new ArgumentNullException(nameof(applyTaxMode));
         _applyPin = applyPin ?? throw new ArgumentNullException(nameof(applyPin));
         _saveWebPage = saveWebPage;
+        _applyReceiptLayout = applyReceiptLayout;
         _gather = () => gather(_days);
 
         TaxMode = taxMode;
         IsPinSet = isPinSet;
+        ReceiptLayout = receiptLayout;
     }
 
     // ---- What is on screen -----------------------------------------------------------------------
@@ -267,6 +276,39 @@ public sealed class OwnerViewModel : ObservableObject
             : "This lane now issues a TAX INVOICE. GST is charged and shown.";
 
         return null;
+    }
+
+    /// <summary>Which of the two bill layouts the lane prints.</summary>
+    public ReceiptLayout ReceiptLayout { get; private set; }
+
+    /// <summary>Whether the layout can be changed from here at all.</summary>
+    public bool CanChooseLayout => _applyReceiptLayout is not null;
+
+    /// <summary>
+    /// Switches the bill layout. Unlike the tax mode it needs no open bill to be finished first:
+    /// both layouts print the same invoice, so nothing on the till has to agree with it.
+    /// </summary>
+    /// <returns>Null when it worked, or why it did not.</returns>
+    public string? SetReceiptLayout(ReceiptLayout layout)
+    {
+        if (layout == ReceiptLayout)
+            return null;
+
+        if (_applyReceiptLayout is null)
+            return "This lane has nowhere to save the layout.";
+
+        var refused = _applyReceiptLayout(layout);
+
+        // A save that failed still changed this session, and the message says so; the screen has
+        // to show what the till will actually print.
+        ReceiptLayout = layout;
+        Raise(nameof(ReceiptLayout));
+
+        Status = refused ?? (layout == ReceiptLayout.Compact
+            ? "The next bill prints in the compact layout: item, quantity and amount, with one large total."
+            : "The next bill prints in the standard layout: price, quantity and amount columns, with every tender.");
+
+        return refused;
     }
 
     /// <summary>Sets, changes or clears the PIN in front of this screen.</summary>

@@ -416,6 +416,82 @@ public class LayoutFitTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// A bill previewed again starts at its heading. Found by the acceptance run: after reading one
+    /// bill to its foot, the next preview opened at the foot too, and the heading of the layout the
+    /// owner had just switched to was off the top of the screen.
+    /// </summary>
+    [Fact]
+    public void ANewPreviewOpensAtTheTopOfTheBill()
+    {
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOut(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 3;
+                window.UpdateLayout();
+
+                var show = Wpf.Descendants<Button>(window).Single(b => b.Content is string s && s.Contains("_bill", StringComparison.Ordinal));
+                var scroller = (ScrollViewer)window.FindName("PreviewTextScroll");
+
+                show.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                window.UpdateLayout();
+
+                Assert.True(scroller.ScrollableHeight > 0, "the sample bill should be longer than the screen");
+
+                scroller.ScrollToEnd();
+                window.UpdateLayout();
+                Assert.True(scroller.VerticalOffset > 0);
+
+                show.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                window.UpdateLayout();
+
+                Assert.Equal(0, scroller.VerticalOffset);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// A day-end report read back on the Maintenance tab gets most of the screen. It used to share
+    /// its column with two lists and showed four lines at a time, which is not a report anybody
+    /// can read.
+    /// </summary>
+    [Fact]
+    public void AReportReadBackOnMaintenanceGetsMostOfTheScreen()
+    {
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOut(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 5;
+                window.UpdateLayout();
+
+                var output = (FrameworkElement)window.FindName("MaintenanceOutput");
+
+                Assert.True(output.ActualHeight >= TillHeight * 0.5,
+                    $"the report panel is {output.ActualHeight:0} of {TillHeight} pixels tall");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     private OwnerView BuildOwnerView(CustomersViewModel? customers = null)
     {
         var settings = Settings();
@@ -432,7 +508,9 @@ public class LayoutFitTests : IDisposable
             isPinSet: false,
             applyTaxMode: _ => null,
             applyPin: _ => null,
-            saveWebPage: (_, _) => null);
+            saveWebPage: (_, _) => null,
+            receiptLayout: ReceiptLayout.Standard,
+            applyReceiptLayout: _ => null);
 
         var maintenance = new MaintenanceViewModel(
             _temp.Database,

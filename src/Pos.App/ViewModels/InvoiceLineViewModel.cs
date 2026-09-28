@@ -20,14 +20,13 @@ public sealed class InvoiceLineViewModel(InvoiceLine line) : ObservableObject
     public decimal Quantity => Line.Quantity;
     public UnitType Unit => Line.Unit;
 
-    /// <summary>Short unit label for the grid — "kg" reads faster across a counter than "Kilogram".</summary>
-    public string UnitLabel => Line.Unit switch
-    {
-        UnitType.Kilogram => "kg",
-        UnitType.Litre => "L",
-        UnitType.Metre => "m",
-        _ => "pc",
-    };
+    /// <summary>
+    /// Short unit label for the grid — "kg" reads faster across a counter than "Kilogram". A
+    /// traditional unit shows in Tamil, the word the customer asked for it by.
+    /// </summary>
+    public string UnitLabel => Units.Of(Line.Unit).Group == UnitGroup.Standard
+        ? Units.ScreenLabel(Line.Unit)
+        : Units.Of(Line.Unit).Tamil;
     public decimal Mrp => Line.Mrp;
     public decimal UnitRateExclTax => Line.UnitRateExclTax;
     public decimal Discount => Line.Discount;

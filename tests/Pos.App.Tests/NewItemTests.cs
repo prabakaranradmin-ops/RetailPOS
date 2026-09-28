@@ -1,5 +1,6 @@
 using Pos.App.ViewModels;
 using Pos.Core.Data;
+using Pos.Core.Domain;
 using Pos.Core.Domain.Catalogue;
 using Pos.TestSupport;
 using Xunit;
@@ -82,6 +83,41 @@ public class NewItemTests : IDisposable
         Assert.Equal(string.Empty, form.Sku);
         Assert.Equal(string.Empty, form.Name);
         Assert.Equal("Household", form.Category);
+    }
+
+    /// <summary>
+    /// A traditional unit picked on the form reaches the catalogue, and the form works out whether
+    /// the till may take part of one - the owner is never asked the same thing twice.
+    /// </summary>
+    [Theory]
+    [InlineData(UnitType.Seepu, false)]
+    [InlineData(UnitType.Muzham, true)]
+    [InlineData(UnitType.Padi, true)]
+    [InlineData(UnitType.Kattu, false)]
+    public void AnItemCanBeSoldInATraditionalUnit(UnitType unit, bool fractional)
+    {
+        var form = Filled(Form(), sku: "TRAD01", name: "Loose item", barcode: "", hsn: "0709", gst: "0", mrp: "30");
+        form.Unit = Units.Of(unit);
+
+        Assert.Equal(fractional, form.IsWeighed);
+        Assert.True(form.Save(), string.Join("; ", form.Problems.Select(p => p.Problem)));
+
+        Assert.Equal(unit, Items.FindBySku("TRAD01")!.UnitType);
+    }
+
+    [Fact]
+    public void EveryUnitIsOfferedAndTheFormStartsAtPieces()
+    {
+        var form = Form();
+
+        Assert.Equal(Enum.GetValues<UnitType>().Length, form.UnitChoices.Count);
+        Assert.Equal(UnitType.Each, form.Unit.Type);
+
+        form.Unit = Units.Of(UnitType.Muzham);
+        Assert.Contains("part of one", form.UnitHint);
+
+        form.Clear();
+        Assert.Equal(UnitType.Each, form.Unit.Type);
     }
 
     /// <summary>Most grocery lines sell at the printed price, and typing it twice is a way to mistype it.</summary>

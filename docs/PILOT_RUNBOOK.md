@@ -310,9 +310,9 @@ than falling through to closing the day, so reading a report back can never acci
 |---|---|---|
 | **The figures** | `Ctrl+1` | Takings for the period and for today, the average basket, **what the shop earned** (profit and margin), day by day, when the shop is busy, what sells, what earns most and least, who is buying, what was cancelled, the loyalty points still owed, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
 | **Stock** | `Ctrl+2` | What needs reordering, most depleted first. Correct a count here after a delivery, a breakage or a recount. |
-| **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first. Load a price list or a whole item master from a CSV on the right: check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. |
+| **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first; `Alt+U` picks what it is sold in, from Pcs and Kg to seepu, kattu, padi and muzham. Load a price list or a whole item master from a CSV on the right: check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. |
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
-| **Settings** | `Ctrl+5` | The PIN in front of this screen, and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
+| **Settings** | `Ctrl+5` | The PIN in front of this screen; which bill layout the lane prints — `Alt+S` for the standard bill, `Alt+C` for the compact counter bill; and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 | **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
 | **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most, or tick **Only customers who owe** for the list of who owes what, most first, with the total the shop is owed. For the one you pick: what they owe and their **khata** (every credit purchase and payment, with the balance after each), visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask — not while they owe anything. |
 
@@ -336,6 +336,18 @@ forget them again after any restore.
 **Put a PIN on it** if a cashier uses this computer — Settings, then *Save PIN*. The screen then asks
 for it before it opens. It is stored scrambled and **cannot be recovered**, so pick something you
 will remember. This keeps a cashier out of the figures; it does not encrypt the database.
+
+**Two bill layouts.** The **standard** bill has rate, quantity and amount columns and prints all four
+tenders every time. The **compact counter bill** is shorter: item, quantity and amount, the HSN,
+GST and rate under each line, one large **Total Amount**, only the tenders used, and the cashier,
+till and time at the foot. Both are full tax invoices. Switch under Settings; the next bill follows,
+and **Ctrl+4**, **Alt+W** shows it before a customer does. On both, every quantity prints with its
+unit — `3 Pcs`, `2.75 Kg`, and on a Tamil lane `2 சீப்பு`, `1.5 முழம்`.
+
+**Traditional units.** An item can be sold by the seepu, kattu, padi, muzham and the other units
+customers still ask for by name — the full list is in `CATALOGUE_FORMAT.md`. The price is per unit,
+and the till takes part of one only where that makes sense: 1.5 muzham of jasmine yes, 1.5 combs of
+bananas no.
 
 **Changing what kind of bill the lane issues** is under Settings too — **on the GST build only**. It
 asks before it changes anything, and it is refused while a bill is on the screen; finish or clear
@@ -455,7 +467,9 @@ Known and deliberate, so nobody wastes time looking:
 - **No opening float tracking.** Count it and write it down.
 - **Stock is a count, not an inventory system.** It tells you what is left and what to reorder. It
   does not handle purchase orders, suppliers, batches or expiry, and it never stops a sale.
-- **No report other than the Z-report.** No day-range or item-wise sales reports yet.
+- **No printed report other than the Z-report.** Day-range and item-wise figures are on the owner's
+  screen (**Ctrl+D**) for 7, 30 or 90 days, and can be saved as a web page, but not printed on the
+  till's paper.
 - **Nothing is sent anywhere.** The lane is entirely offline by design. Nothing leaves the machine
   except what you copy off it.
 

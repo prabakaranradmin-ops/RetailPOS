@@ -1,12 +1,54 @@
 namespace Pos.Core.Domain;
 
 /// <summary>How an item is sold, which decides whether quantity may be fractional.</summary>
+/// <remarks>
+/// Persisted as its number in <c>items.unit_type</c> and on every stored line, so existing members
+/// keep their numbers and new ones go at the end. What each one is called and whether it takes a
+/// fraction is in <see cref="Units"/>.
+/// </remarks>
 public enum UnitType
 {
     Each = 0,
     Kilogram = 1,
     Litre = 2,
     Metre = 3,
+
+    // The traditional Tamil units of sale.
+    Seepu = 4,
+    Thaar = 5,
+    Kothu = 6,
+    Kulai = 7,
+    Kattu = 8,
+    Pidi = 9,
+    Mattai = 10,
+    Kooru = 11,
+    Koodai = 12,
+    Sulai = 13,
+    Pal = 14,
+    Muzhu = 15,
+    Keetru = 16,
+    Jodi = 17,
+    Kavuli = 18,
+    Suvadu = 19,
+    Adukku = 20,
+    Saram = 21,
+    Attai = 22,
+    Pottalam = 23,
+    Sittigai = 24,
+    Thuli = 25,
+    Aazhakku = 26,
+    Uzhakku = 27,
+    Padi = 28,
+    AraiPadi = 29,
+    Marakkaal = 30,
+    Kalam = 31,
+    Moottai = 32,
+    Veesai = 33,
+    Thulaam = 34,
+    Muzham = 35,
+    Saan = 36,
+    Maaru = 37,
+    Panthu = 38,
 }
 
 /// <remarks>
@@ -53,7 +95,8 @@ public enum InvoiceStatus
 public static class UnitTypeExtensions
 {
     /// <summary>
-    /// Weighed and measured goods take fractional quantities; discrete goods do not.
+    /// Weighed and measured goods take fractional quantities; counted goods do not — a piece, a
+    /// comb of bananas, a strip of sachets.
     /// </summary>
-    public static bool AllowsFractionalQuantity(this UnitType unit) => unit != UnitType.Each;
+    public static bool AllowsFractionalQuantity(this UnitType unit) => Units.Of(unit).Fractional;
 }

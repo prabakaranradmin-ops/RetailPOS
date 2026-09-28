@@ -25,15 +25,26 @@ public sealed class ReceiptComposer
 
     private readonly StoreProfile _store;
 
+    /// <summary>Narrowest the quantity column goes, so "1 Pcs" never has to be cut.</summary>
+    private const int MinQuantityWidth = 5;
+
+    /// <summary>
+    /// Widest it goes. "12.5 Marakkaal" is as long as a real quantity gets; a bill carrying one
+    /// stacks its long item names above the figures, which is better than cutting the unit.
+    /// </summary>
+    private const int MaxQuantityWidth = 16;
+
     public ReceiptComposer(
         StoreProfile store,
         int paperWidthChars = ReceiptBuilder.Width80Mm,
-        ReceiptLanguage language = ReceiptLanguage.English)
+        ReceiptLanguage language = ReceiptLanguage.English,
+        ReceiptLayout layout = ReceiptLayout.Standard)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         PaperWidthChars = paperWidthChars;
         Language = language;
         Labels = ReceiptLabels.For(language);
+        Layout = layout;
     }
 
     public int PaperWidthChars { get; }
@@ -42,11 +53,20 @@ public sealed class ReceiptComposer
 
     public ReceiptLabels Labels { get; }
 
+    /// <summary>
+    /// Which bill the next sale gets. Settable so the owner's choice reaches the till at once,
+    /// rather than at the next restart with the setting and the paper disagreeing until then.
+    /// </summary>
+    public ReceiptLayout Layout { get; set; }
+
     private bool Paired => PaperWidthChars >= MinPairedLayoutWidth;
 
     public ReceiptBuilder Compose(SettledInvoice invoice, bool isReprint = false)
     {
         ArgumentNullException.ThrowIfNull(invoice);
+
+        if (Layout == ReceiptLayout.Compact)
+            return ComposeCompact(invoice, isReprint);
 
         var sale = invoice.Sale;
         var receipt = new ReceiptBuilder(PaperWidthChars);
@@ -211,10 +231,12 @@ public sealed class ReceiptComposer
     {
         // Price, then quantity, then amount — the order they multiply out in, and the order an
         // Indian counter bill prints them.
+        var quantityWidth = QuantityWidth(sale);
+
         receipt.Row(
             Labels.ItemName,
             new ColumnValue(Labels.Rate, 9),
-            new ColumnValue(Labels.Quantity, 6),
+            new ColumnValue(Labels.Quantity, quantityWidth),
             new ColumnValue(Labels.Amount, 10));
 
         receipt.Rule();
@@ -224,7 +246,7 @@ public sealed class ReceiptComposer
             receipt.Row(
                 line.NameSnapshot,
                 new ColumnValue(Amount(line.Mrp), 9),
-                new ColumnValue(Quantity(line), 6),
+                new ColumnValue(Quantity(line), quantityWidth),
                 new ColumnValue(Amount(line.LineTotal), 10));
 
             // HSN belongs on a bill of supply as much as on a tax invoice — it identifies the
@@ -271,7 +293,14 @@ public sealed class ReceiptComposer
         if (totals.RoundOff != 0m)
             receipt.Columns(Labels.RoundOff, Amount(totals.RoundOff));
 
-        receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.TotalQuantity}: {Quantity(totals.TotalQuantity)}");
+        // A total quantity only means something when every line is counted in the same thing.
+        // Three pieces, two and three-quarter kilos and a comb of bananas do not add up to 6.75.
+        var units = sale.Lines.Select(line => line.Unit).Distinct().ToList();
+
+        if (units.Count == 1)
+            receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.TotalQuantity}: {Units.WithQuantity(totals.TotalQuantity, units[0], Language)}");
+        else
+            receipt.Text($"{Labels.Items}: {totals.LineCount}");
     }
 
     /// <summary>
@@ -480,7 +509,199 @@ public sealed class ReceiptComposer
 
     private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
-    private static string Quantity(InvoiceLine line) => Quantity(line.Quantity);
+    /// <summary>
+    /// The quantity with what it is counted in — "2 சீப்பு", "2.75 Kg" — because a bare 2 does
+    /// not say whether the customer took two combs of bananas or two kilos.
+    /// </summary>
+    private string Quantity(InvoiceLine line) => Units.WithQuantity(line.Quantity, line.Unit, Language);
+
+    /// <summary>As wide as this bill's longest quantity needs, within limits.</summary>
+    private int QuantityWidth(SaleDraft sale) =>
+        Math.Clamp(
+            sale.Lines.Select(line => Quantity(line).Length).Append(Labels.Quantity.Length).Max(),
+            MinQuantityWidth,
+            MaxQuantityWidth);
+
+    // ---- The compact bill --------------------------------------------------------------------
+
+    /// <summary>
+    /// The shorter counter bill: item, quantity with its unit, and amount; the HSN and rate under
+    /// each line; one large total; only the tenders that were used.
+    /// </summary>
+    /// <remarks>
+    /// Shorter, not lighter. Everything a tax invoice has to carry is still here — the GSTIN, the
+    /// number and date, the HSN and rate of every line, and the tax at each slab — and a bill of
+    /// supply still carries its declaration. What goes is what a customer does not read: the four
+    /// tender boxes printed as zeros, and the taxable subtotal above the tax block that already
+    /// breaks it down.
+    /// </remarks>
+    private ReceiptBuilder ComposeCompact(SettledInvoice invoice, bool isReprint)
+    {
+        var sale = invoice.Sale;
+        var receipt = new ReceiptBuilder(PaperWidthChars);
+
+        WriteShop(receipt);
+
+        receipt.Text(
+            sale.TaxMode == TaxMode.Composition ? Labels.BillOfSupply : Labels.TaxInvoice,
+            TextAlignment.Center,
+            bold: true);
+
+        if (isReprint)
+            receipt.Text(Labels.Reprint, TextAlignment.Center, bold: true);
+
+        receipt.Rule();
+        WriteCompactIdentity(receipt, invoice);
+        receipt.Rule();
+        WriteCompactLines(receipt, sale);
+        WriteCompactTotals(receipt, sale);
+        WriteTaxSummary(receipt, sale);
+        WriteCompactPayments(receipt, sale);
+        WriteSavingsAndPoints(receipt, sale);
+
+        // Who billed it, on which till, and when: the line a shop reads back when a customer
+        // returns with a query about "the bill from Tuesday evening".
+        receipt.Blank();
+        var stamp = sale.CreatedAt.ToString("dd-MM-yyyy hh:mm tt", CultureInfo.InvariantCulture);
+        receipt.Text(sale.CashierName is { Length: > 0 } cashier
+            ? $"{cashier}/{sale.LaneId}/{stamp}"
+            : $"{sale.LaneId}/{stamp}");
+
+        WriteFooter(receipt, sale);
+        return receipt;
+    }
+
+    private void WriteCompactIdentity(ReceiptBuilder receipt, SettledInvoice invoice)
+    {
+        var sale = invoice.Sale;
+        var when = sale.CreatedAt.ToString(Paired ? "dd-MM-yyyy hh:mm tt" : "dd-MM-yy HH:mm", CultureInfo.InvariantCulture);
+
+        Pair(receipt, $"{Labels.BillNumber}: {invoice.InvoiceNo}", when);
+
+        // A walk-in customer is still a customer on the bill: "CASH" says nobody was named, which
+        // a blank line would leave the reader to guess.
+        var customer = sale.Customer is { } c ? c.Name ?? c.MobileNo : Labels.CashCustomer;
+        var mobile = sale.Customer is { Name: not null } named ? named.MobileNo : string.Empty;
+
+        Pair(receipt, $"{Labels.Customer}: {customer}", mobile);
+
+        if (sale.RecalledFromToken is { } token)
+            receipt.Columns(Labels.ParkedAs, token);
+    }
+
+    /// <summary>
+    /// Two facts on one line when they fit, and on two when they do not.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReceiptBuilder.Columns"/> keeps the right-hand figure by cutting the left, which
+    /// is right for a label and wrong here: the left is the bill number or the customer's name, and
+    /// a bill number cut to "INV/26-2" is a different bill.
+    /// </remarks>
+    private void Pair(ReceiptBuilder receipt, string left, string right)
+    {
+        if (right.Length == 0)
+        {
+            receipt.Text(left);
+            return;
+        }
+
+        if (left.Length + 1 + right.Length <= PaperWidthChars)
+        {
+            receipt.Columns(left, right);
+            return;
+        }
+
+        receipt.Text(left);
+        receipt.Text(right, TextAlignment.Right);
+    }
+
+    private void WriteCompactLines(ReceiptBuilder receipt, SaleDraft sale)
+    {
+        var quantityWidth = QuantityWidth(sale);
+
+        receipt.Row(
+            Labels.ItemShort,
+            new ColumnValue(Labels.Quantity, quantityWidth),
+            new ColumnValue(Labels.Amount, 10));
+
+        receipt.Rule();
+
+        foreach (var line in sale.Lines)
+        {
+            receipt.Row(
+                line.NameSnapshot,
+                new ColumnValue(Quantity(line), quantityWidth),
+                new ColumnValue(Amount(line.LineTotal), 10));
+
+            // The rate is here rather than in a column of its own: it is what a customer checks
+            // a loose line against — two muzham at thirty — and it costs no width down here.
+            var detail = sale.TaxMode == TaxMode.Composition
+                ? $"  (HSN:{line.HsnSnapshot})"
+                : $"  (HSN:{line.HsnSnapshot}) GST:{Rate(line.GstRate)}%";
+
+            detail += $"  @{Amount(line.Mrp)}";
+
+            if (line.Discount > 0m)
+                detail += $"  less {Amount(line.Discount)}";
+
+            receipt.Text(detail);
+        }
+
+        receipt.Rule();
+    }
+
+    private void WriteCompactTotals(ReceiptBuilder receipt, SaleDraft sale)
+    {
+        var totals = sale.Totals;
+
+        // The total is the sum of the amounts printed above it, which are already after discount —
+        // each discounted line says "less" beside it, and the saving is repeated at the foot. A
+        // discount line here would read as coming off a second time.
+        receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.Total}: {Amount(totals.GrandTotal)}");
+
+        if (totals.RoundOff != 0m)
+            receipt.Columns(string.Empty, $"{Labels.RoundOff}: {(totals.RoundOff > 0m ? "+" : string.Empty)}{Amount(totals.RoundOff)}");
+
+        // The figure the customer hands over, big enough to read across the counter. Double height
+        // only: double width would halve the line and push a five-figure total off the paper.
+        receipt.Rule('=');
+        receipt.Text(
+            $"{Labels.TotalAmount} : {_store.CurrencyPrefix} {Amount(totals.AmountPayable)}",
+            TextAlignment.Right,
+            bold: true,
+            heightMultiplier: 2);
+        receipt.Rule('=');
+    }
+
+    /// <summary>Only the tenders that were used — on this bill a zero is noise, not a figure.</summary>
+    private void WriteCompactPayments(ReceiptBuilder receipt, SaleDraft sale)
+    {
+        var byType = sale.Payments
+            .GroupBy(p => p.Type)
+            .OrderBy(g => g.Key)
+            .Select(g => (Type: g.Key, Amount: Money.ToPresentation(g.Sum(p => p.Amount))))
+            .Where(t => t.Amount != 0m)
+            .ToList();
+
+        if (byType.Count == 0 && sale.ChangeDue <= 0m)
+            return;
+
+        receipt.Blank();
+
+        foreach (var (type, amount) in byType)
+            receipt.Columns(Label(type), Amount(amount));
+
+        if (sale.ChangeDue > 0m)
+            receipt.Columns(Labels.Change, Amount(sale.ChangeDue), bold: true);
+
+        foreach (var payment in sale.Payments)
+        {
+            if (payment.Type is TenderType.LoyaltyPoints || string.IsNullOrWhiteSpace(payment.ReferenceNo))
+                continue;
+
+            receipt.Text($"{Label(payment.Type)} {payment.ReferenceNo}");
+        }
+    }
 
     private string Label(TenderType type) => type switch
     {

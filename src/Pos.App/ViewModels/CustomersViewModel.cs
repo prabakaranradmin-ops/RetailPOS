@@ -379,13 +379,7 @@ public sealed class CustomersViewModel : ObservableObject
 
         foreach (var item in profile.TopItems)
         {
-            var unit = item.Unit switch
-            {
-                UnitType.Kilogram => "kg",
-                UnitType.Litre => "L",
-                UnitType.Metre => "m",
-                _ => "pcs",
-            };
+            var unit = item.Unit == UnitType.Each ? "pcs" : Units.ScreenLabel(item.Unit);
 
             TopItems.Add(new RankedRow(
                 item.Name,

@@ -240,6 +240,52 @@ public class ItemImportTests(ITestOutputHelper output) : IDisposable
         Assert.Contains(result.Problems, p => p.Problem.Contains("contradict"));
     }
 
+    /// <summary>
+    /// A catalogue may name a traditional unit in English letters, in Tamil, or by a common variant,
+    /// and each one lands as the same unit.
+    /// </summary>
+    [Fact]
+    public void TraditionalUnitsImportInEnglishOrTamil()
+    {
+        var result = Import($"""
+            {Header}
+            {Row(sku: "BAN001", barcode: "", name: "Poovan Banana", hsn: "0803", unit: "Seepu", mrp: "60", sellingPrice: "60", gstRate: "0")}
+            {Row(sku: "MAL001", barcode: "", name: "Malligai Poo", hsn: "0603", unit: "முழம்", mrp: "30", sellingPrice: "30", gstRate: "0", isWeighed: "true")}
+            {Row(sku: "PAD001", barcode: "", name: "Ponni Rice", hsn: "1006", unit: "kuruni", mrp: "480", sellingPrice: "480", gstRate: "0", isWeighed: "true")}
+            {Row(sku: "KEE001", barcode: "", name: "Siru Keerai", hsn: "0709", unit: "கட்டு", mrp: "15", sellingPrice: "15", gstRate: "0")}
+            """);
+
+        Assert.True(result.IsClean, string.Join("; ", result.Problems));
+        Assert.Equal(UnitType.Seepu, _temp.Items.FindBySku("BAN001")!.UnitType);
+        Assert.Equal(UnitType.Muzham, _temp.Items.FindBySku("MAL001")!.UnitType);
+        Assert.Equal(UnitType.Marakkaal, _temp.Items.FindBySku("PAD001")!.UnitType);
+        Assert.Equal(UnitType.Kattu, _temp.Items.FindBySku("KEE001")!.UnitType);
+    }
+
+    /// <summary>
+    /// A muzham of jasmine is not "weighed", but it is sold in part, which is what the flag means.
+    /// The message has to say which way round, or the owner is left guessing.
+    /// </summary>
+    [Theory]
+    [InlineData("Muzham", "false", "should be yes")]
+    [InlineData("Seepu", "true", "should be no")]
+    public void ATraditionalUnitThatContradictsTheFlagSaysWhichWayItShouldBe(string unit, string weighed, string advice)
+    {
+        var result = Import($"{Header}\n{Row(barcode: "", unit: unit, isWeighed: weighed)}");
+
+        Assert.False(result.IsClean);
+        Assert.Contains(result.Problems, p => p.Problem.Contains("contradict") && p.Problem.Contains(advice));
+    }
+
+    [Fact]
+    public void AnUnknownUnitIsRefusedWithExamples()
+    {
+        var result = Import($"{Header}\n{Row(unit: "bunch")}");
+
+        Assert.False(result.IsClean);
+        Assert.Contains(result.Problems, p => p.Column == "unit" && p.Problem.Contains("Seepu") && p.Problem.Contains("Muzham"));
+    }
+
     [Theory]
     [InlineData("sku", "")]
     [InlineData("name", "")]

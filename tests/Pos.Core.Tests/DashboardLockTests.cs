@@ -255,6 +255,34 @@ public class DashboardLockTests : IDisposable
         Assert.True(DashboardLock.Verify("7412", PosSettings.LoadOrDefault(SettingsPath).Security.DashboardPin));
     }
 
+    /// <summary>The bill layout is written by name, and nothing else in the file moves.</summary>
+    [Fact]
+    public void SettingTheBillLayoutWritesItByNameAndDisturbsNothingElse()
+    {
+        File.WriteAllText(SettingsPath, """
+            {
+              "laneId": "L4",
+              "receiptLanguage": "Tamil",
+              "store": { "name": "ரவி மளிகை" }
+            }
+            """, new UTF8Encoding(true));
+
+        SettingsFile.SetReceiptLayout(SettingsPath, Pos.Core.Domain.Printing.ReceiptLayout.Compact);
+
+        var root = JsonNode.Parse(File.ReadAllText(SettingsPath))!.AsObject();
+        Assert.Equal("Compact", (string?)root["receiptLayout"]);
+        Assert.Equal("Tamil", (string?)root["receiptLanguage"]);
+        Assert.Equal("ரவி மளிகை", (string?)root["store"]!["name"]);
+
+        var reloaded = PosSettings.LoadOrDefault(SettingsPath);
+        Assert.Equal(Pos.Core.Domain.Printing.ReceiptLayout.Compact, reloaded.ReceiptLayout);
+        Assert.Equal("L4", reloaded.LaneId);
+    }
+
+    [Fact]
+    public void ALaneThatNeverChoseALayoutPrintsTheStandardBill() =>
+        Assert.Equal(Pos.Core.Domain.Printing.ReceiptLayout.Standard, new PosSettings().ReceiptLayout);
+
     [Fact]
     public void TheSettingsFileKeepsItsByteOrderMark()
     {

@@ -313,6 +313,38 @@ Add-Result -Kind Positive -Feature 'Receipt' -Name 'No Tamil label degraded to q
     -Expected "no runs of '?' in the rendered bill" -Actual $(if ($noQuestionMarks) { 'none found' } else { 'found ???' }) `
     -Passed $noQuestionMarks
 
+# The sample bill sells jasmine by the muzham and bananas by the seepu. On this Tamil lane the unit
+# has to print beside the quantity, in Tamil - a bare 2.5 says nothing about what was bought.
+$standardText = (Invoke-Pos @('receipt-preview')).Output
+$unitsOk = $standardText -match '2\.5 முழம்' -and $standardText -match '1 சீப்பு' -and $standardText -match '2\.75 Kg'
+Add-Result -Kind Positive -Feature 'Receipt' -Name 'Every quantity prints with its unit, in Tamil' `
+    -Expected '2.5 முழம், 1 சீப்பு and 2.75 Kg on the bill' `
+    -Actual $(if ($unitsOk) { 'all three present' } else { Short $standardText 8 }) -Passed $unitsOk
+
+# The compact counter bill, rendered without switching the lane to it.
+$compactPng = Join-Path $shots 'receipt-preview-compact.png'
+$r = Invoke-Pos @('receipt-preview', '--layout', 'compact', '--png', $compactPng)
+$compactOk = $r.ExitCode -eq 0 -and $r.Output -match 'Total Amount' -and $r.Output -match '\(HSN:0603\)' `
+    -and $r.Output -match '2\.5 முழம்' -and (Test-Path $compactPng)
+Add-Result -Kind Positive -Feature 'Receipt' -Name 'The compact counter bill renders' `
+    -Expected 'item, quantity with unit and amount; HSN and GST under each line; one large Total Amount' `
+    -Actual (Short $r.Output 3) -Passed $compactOk -Shot 'receipt-preview-compact.png' `
+    -Detail 'The second layout, modelled on the counter bills Tamil Nadu provision stores already hand out. Owner screen, Settings, picks it.'
+
+# Shorter must not mean less of an invoice: on a tax invoice the tax block is still there, and on the
+# no-tax build's bill of supply it is still absent.
+$hasTaxBlock = $r.Output -match 'வரி விவரம்'
+$wantTaxBlock = $variant -ne 'NoTax'
+Add-Result -Kind Negative -Feature 'Receipt' -Name 'The compact bill keeps what its document must carry' `
+    -Expected $(if ($wantTaxBlock) { 'the rate-wise tax summary is still printed' } else { 'no tax summary on a bill of supply' }) `
+    -Actual $(if ($hasTaxBlock) { 'tax summary present' } else { 'no tax summary' }) `
+    -Passed ($hasTaxBlock -eq $wantTaxBlock)
+
+$r = Invoke-Pos @('receipt-preview', '--layout', 'fancy')
+Add-Result -Kind Negative -Feature 'Receipt' -Name 'A layout that does not exist is refused' `
+    -Expected 'non-zero exit, naming the two layouts' -Actual (Short $r.Output 2) `
+    -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'standard or compact')
+
 $r = Invoke-Pos @('check-db')
 Add-Result -Kind Positive -Feature 'Database' -Name 'Integrity check reports a healthy database' `
     -Expected 'exit 0' -Actual (Short $r.Output) -Passed ($r.ExitCode -eq 0)

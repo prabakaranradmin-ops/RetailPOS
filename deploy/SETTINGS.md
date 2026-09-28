@@ -50,6 +50,35 @@ result without using a roll of paper.
 A lane set to Tamil with drawing switched off prints the labels as `?`. The preview says so rather
 than letting it reach a customer.
 
+## Bill layout
+
+`receiptLayout` is `Standard` or `Compact`. The owner changes it from the owner's screen —
+**Ctrl+D**, **Ctrl+5**, then **Alt+S** or **Alt+C** — which writes this setting, so there is no
+need to edit the file. The next bill uses the new layout.
+
+| | Standard | Compact |
+|---|---|---|
+| Columns | Rate, quantity, amount | Quantity, amount |
+| Under each line | HSN and GST rate | HSN, GST rate and the rate charged: `(HSN:0603) GST:0%  @30.00` |
+| Totals | Taxable value, CGST, SGST, round-off | Total, round-off, and a large **Total Amount** |
+| Tax summary by slab | yes | yes |
+| Tenders | All four, zeros included | Only those used |
+| Walk-in customer | Blank | `CASH` |
+| Foot | — | Cashier, till and time: `Murugan/T1/22-09-2026 08:30 PM` |
+
+Both are complete tax invoices (or bills of supply, on a composition lane). Both print the quantity
+with its unit — `3 Pcs`, `2.75 Kg`, `2 Seepu` — and a Tamil lane prints the traditional units in
+Tamil: `2 சீப்பு`, `1.5 முழம்`.
+
+A reprint of an old bill comes out in whichever layout is set when it is reprinted. The figures are
+the same either way.
+
+To look at the other layout without switching to it:
+
+```
+pos receipt-preview --layout compact --png compact.png
+```
+
 ## Rounding to the rupee
 
 `roundOffToRupee` is `true` unless you say otherwise. A bill of ₹94.50 is settled at ₹94, and the

@@ -233,6 +233,19 @@ pos receipt-preview --png receipt.png
 Renders the dots the printer would burn and saves them as an image. It is the only way to check a
 Tamil bill without a roll of paper, and it is what the hardware sign-off asks for.
 
+## Units and the two bill layouts
+
+Items are sold in Pcs, Kg, L or m, or in any of 35 traditional Tamil units — seepu, kattu, padi,
+muzham and the rest ([deploy/CATALOGUE_FORMAT.md](deploy/CATALOGUE_FORMAT.md) lists them). The
+price is per unit, a unit never converts to another, and the till takes a fraction only where a
+customer can buy part of one. Every quantity prints with its unit: `2.75 Kg`, `2 Seepu`, and on a
+Tamil bill `2 சீப்பு`.
+
+The owner picks one of two bill layouts under Settings: the **standard** bill with rate, quantity
+and amount columns and every tender, or the **compact counter bill** with item, quantity and
+amount, the HSN and GST under each line and one large Total Amount. Both are full tax invoices.
+`pos receipt-preview --layout compact` shows the other one without switching.
+
 ## Invoice numbers
 
 `{prefix}/{financial year}/{lane}-{sequence}` — `RM/26-27/L1-11358`, or `RM/26-27/11358` on a shop

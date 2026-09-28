@@ -53,7 +53,7 @@ public sealed class InvoiceLine
                 throw new ArgumentOutOfRangeException(nameof(value), value, "Quantity must be greater than zero.");
 
             if (!Unit.AllowsFractionalQuantity() && decimal.Truncate(value) != value)
-                throw new ArgumentOutOfRangeException(nameof(value), value, $"{NameSnapshot} is sold by the piece and cannot take a fractional quantity.");
+                throw new ArgumentOutOfRangeException(nameof(value), value, $"{NameSnapshot} is sold by the {(Unit == UnitType.Each ? "piece" : "whole " + Units.Of(Unit).Code.ToLowerInvariant())} and cannot take a fractional quantity.");
 
             _quantity = value;
             _cachedTax = null;

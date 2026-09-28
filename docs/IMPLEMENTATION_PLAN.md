@@ -349,6 +349,48 @@ to collect it from. On the owner's screen it was counted as money on its way to 
 - The Tamil report and slip keep these labels in English, like the tender names already were,
   rather than print Tamil composed here that no shopkeeper has checked.
 
+## Tamil units and the compact counter bill — **complete** *(added 2026-09-28, approved)*
+
+Customers in Tamil Nadu still buy by the seepu, kattu, padi and muzham, and the counter bills shops
+already hand out print the quantity with its unit (`1 Saram`, `3 Pcs`). The till knew four units and
+printed a bare number.
+
+- **35 traditional units** join Pcs, Kg, L and m (`UnitType` 4–38, appended so stored numbers never
+  move). `Units` holds each one's English spelling, Tamil name, other spellings the catalogue may
+  use, and whether it can be sold in part. It is the one table the catalogue parser, the till grid,
+  the owner's form and the bill all read.
+- **A unit of sale, not a conversion.** A padi is priced as a padi; nothing turns it into kilograms,
+  because what a padi holds differs by district and grain, and a bill printing a converted figure
+  would state something nobody measured. Price, tax and totals are untouched — a test holds that
+  the same line in seepu and in pieces comes to the same rupee and the same paisa of tax.
+- **Fractions only where a customer can buy part of one**: 1.5 muzham and half a padi yes, 1.5 combs
+  of bananas no — refused at the line, as a piece always was. `is_weighed` in the catalogue now means
+  *sold in part*, and a contradiction says which way round it should be.
+- **Every quantity prints with its unit** on both layouts, in Tamil on a Tamil bill. The quantity
+  column is as wide as the bill's longest quantity needs, so `12.5 மரக்கால்` is never cut.
+- **The compact counter bill** (`receiptLayout: Compact`, switched from Settings with `Alt+C`):
+  item, quantity and amount; `(HSN:0603) GST:0%  @30.00` under each line; one double-height
+  **Total Amount**; only the tenders used; the walk-in customer as `CASH`; cashier, till and time at
+  the foot. Still a full tax invoice — the slab-wise tax summary stays, and a composition lane's
+  compact bill is still a bill of supply with its declaration. The switch reaches the till's own
+  composer at once, so the next bill follows without a restart.
+- **The owner's one-item form** picks a unit from a list (`Alt+U`, type `muzha` to jump), and works
+  out `is_weighed` from it.
+
+Found on the way:
+- **The standard bill's total quantity added unlike things** — 3 pieces, 2.75 kg and a comb of
+  bananas printed as `Qty: 6.75`. It now prints only when every line is in the same unit.
+- **A stacked row on 58mm paper cut the amount** (`6,000.` for `6,000.00`) once its figures were
+  wider than the paper. The padding now gives way, never a figure.
+- **The compact bill's first draft cut the bill number** on 58mm paper, and printed the discount
+  under a total already net of it, which read as the discount coming off twice. Both fixed, both
+  tested.
+- **A second preview opened where the first was left** — at the foot of the bill, so the owner
+  who had just switched layout saw the tender block, not the heading. Found by the acceptance
+  run's screenshots; a preview now starts at the top.
+- `CATALOGUE_FORMAT.md` said Tamil item names print as question marks. They are drawn, like every
+  other Tamil text, whenever raster mode is on `Auto` (the default).
+
 ## Three more wrong figures on the owner's screen — **fixed** *(2026-09-27)*
 
 Found while planning customer credit, which meant reading every line of the dashboard that

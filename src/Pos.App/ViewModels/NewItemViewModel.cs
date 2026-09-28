@@ -35,7 +35,7 @@ public sealed class NewItemViewModel : ObservableObject
     private string _costPrice = string.Empty;
     private string _stockQty = string.Empty;
     private string _reorderLevel = string.Empty;
-    private bool _weighed;
+    private UnitInfo _unit = Units.Of(UnitType.Each);
     private string _status = string.Empty;
 
     public NewItemViewModel(IItemStore items, HsnSuggester hsn)
@@ -133,18 +133,41 @@ public sealed class NewItemViewModel : ObservableObject
         }
     }
 
-    /// <summary>Sold by weight. Drives the unit, because the two say the same thing.</summary>
-    public bool IsWeighed
+    /// <summary>Every unit the shop can sell in, metric first, then the traditional ones by kind.</summary>
+    public IReadOnlyList<UnitInfo> UnitChoices { get; } = Units.All;
+
+    /// <summary>
+    /// What the item is sold in. Decides whether the till takes a fraction of one, so the file's
+    /// is_weighed column is written from it rather than asked for separately — the two say the same
+    /// thing, and a form that asked twice could be answered two ways.
+    /// </summary>
+    public UnitInfo Unit
     {
-        get => _weighed;
+        get => _unit;
         set
         {
-            if (Set(ref _weighed, value))
+            if (Set(ref _unit, value ?? Units.Of(UnitType.Each)))
+            {
+                Raise(nameof(IsWeighed));
                 Raise(nameof(UnitLabel));
+                Raise(nameof(UnitHint));
+            }
         }
     }
 
-    public string UnitLabel => _weighed ? "Kg" : "Pcs";
+    /// <summary>Sold loose, so the till takes 1.5 of it. Setting it picks kilograms or pieces.</summary>
+    public bool IsWeighed
+    {
+        get => _unit.Fractional;
+        set => Unit = Units.Of(value ? UnitType.Kilogram : UnitType.Each);
+    }
+
+    public string UnitLabel => _unit.Code;
+
+    /// <summary>What the chosen unit means at the till, said once under the picker.</summary>
+    public string UnitHint => _unit.Fractional
+        ? $"The till takes part of one — 0.5 or 1.25 {_unit.Code}. Price it per {_unit.Code}."
+        : $"The till takes whole ones only — 1, 2, 3 {_unit.Code}. Price it per {_unit.Code}.";
 
     public string Category
     {
@@ -269,7 +292,7 @@ public sealed class NewItemViewModel : ObservableObject
         CostPrice = string.Empty;
         StockQty = string.Empty;
         ReorderLevel = string.Empty;
-        IsWeighed = false;
+        Unit = Units.Of(UnitType.Each);
 
         if (!keepCategory)
             Category = string.Empty;
@@ -309,7 +332,7 @@ public sealed class NewItemViewModel : ObservableObject
             Quote(_mrp),
             Quote(_sellingPrice),
             Quote(_gstRate),
-            _weighed ? "true" : "false",
+            _unit.Fractional ? "true" : "false",
             Quote(_category),
             Quote(_costPrice),
             Quote(_stockQty),

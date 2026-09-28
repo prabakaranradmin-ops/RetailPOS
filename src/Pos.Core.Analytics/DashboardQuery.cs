@@ -633,11 +633,5 @@ public sealed class DashboardQuery(PosDatabase database)
         _ => tender.ToString(),
     };
 
-    private static string UnitLabel(UnitType unit) => unit switch
-    {
-        UnitType.Kilogram => "kg",
-        UnitType.Litre => "L",
-        UnitType.Metre => "m",
-        _ => "pc",
-    };
+    private static string UnitLabel(UnitType unit) => Units.ScreenLabel(unit);
 }

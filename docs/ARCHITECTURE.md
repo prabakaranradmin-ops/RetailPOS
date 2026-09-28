@@ -28,6 +28,8 @@ Each layer only depends on the one below it. UI never talks to hardware or data 
 
 Snapshot fields (name, HSN) are stored on the line itself, not just referenced by FK — so historical invoices stay accurate even if the item master changes later.
 
+`unit_type` is stored as a number: 0–3 are pieces, kilogram, litre and metre; 4–38 are the traditional Tamil units of sale (seepu, kattu, padi, muzham and the rest). Numbers are only ever appended. `Units` in the domain layer names each one in English and Tamil and says whether it takes a fraction. A unit is what the price is *per* — it never converts to another unit and never enters the GST calculation.
+
 ## 3. GST engine — exact spec
 
 Given `qty`, `unit_price`, `discount`, `gst_rate`, `is_inter_state`, `is_tax_inclusive`:

@@ -168,10 +168,16 @@ public static class ItemCsvParser
         // there is no way to know which.
         if (unit is not null && weighed is not null && unit.Value.AllowsFractionalQuantity() != weighed.Value)
         {
+            // is_weighed means the quantity may be a fraction. For a traditional measure that is
+            // not obviously "weighed", so the message says which way round it should be.
+            var should = unit.Value.AllowsFractionalQuantity()
+                ? "yes, because it can be sold in part (1.5, 0.5)"
+                : "no, because it is sold whole";
+
             problems.Add(new ImportProblem(
                 line,
                 IsWeighed,
-                $"unit '{Field(row, header, Unit)}' and is_weighed '{Field(row, header, IsWeighed)}' contradict each other."));
+                $"unit '{Field(row, header, Unit)}' and is_weighed '{Field(row, header, IsWeighed)}' contradict each other. For {Units.Of(unit.Value).Code}, is_weighed should be {should}."));
         }
 
         // Selling above the printed maximum retail price is not allowed, and a till that does it
@@ -256,19 +262,11 @@ public static class ItemCsvParser
 
     private static UnitType? ParseUnit(string value, int line, List<ImportProblem> problems)
     {
-        var unit = value.ToLowerInvariant() switch
-        {
-            "pcs" or "pc" or "piece" or "each" or "nos" or "no" => UnitType.Each,
-            "kg" or "kgs" or "kilogram" => UnitType.Kilogram,
-            "l" or "ltr" or "litre" or "liter" => UnitType.Litre,
-            "m" or "mtr" or "metre" or "meter" => UnitType.Metre,
-            _ => (UnitType?)null,
-        };
+        if (Units.TryParse(value, out var unit))
+            return unit;
 
-        if (unit is null)
-            problems.Add(new ImportProblem(line, Unit, $"'{value}' is not a unit. Use Pcs or Kg."));
-
-        return unit;
+        problems.Add(new ImportProblem(line, Unit, $"'{value}' is not a unit. Use one of {Units.Examples} — CATALOGUE_FORMAT lists them all, in English or Tamil."));
+        return null;
     }
 
     private static bool? ParseBoolean(string value, string column, int line, List<ImportProblem> problems)

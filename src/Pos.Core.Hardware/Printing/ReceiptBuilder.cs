@@ -241,18 +241,36 @@ public sealed class ReceiptBuilder
 
         var figures = string.Join(' ', columns.Select(column => PadLeft(column.Text, column.Width)));
 
-        if (figures.Trim().Length > 0)
+        // Padded to their columns the figures line up down the bill, which is worth having while
+        // they fit. When they do not, the padding goes rather than the figures: truncating from the
+        // right would cut the amount, and "6,000." is a different price from "6,000.00".
+        if (figures.Length > PaperWidthChars)
+            figures = string.Join(' ', columns.Select(column => column.Text.Trim()).Where(text => text.Length > 0));
+
+        if (figures.Length > PaperWidthChars && columns.Length > 1)
         {
-            _directives.Add(new Directive.Line(
-                PadLeft(figures, PaperWidthChars),
-                [new Segment(figures, 0, PaperWidthChars, TextAlignment.Right)],
-                TextAlignment.Left,
-                false,
-                1,
-                1));
+            // Still too long: the last figure - the amount - gets a line of its own.
+            StackedFigures(string.Join(' ', columns[..^1].Select(column => column.Text.Trim()).Where(text => text.Length > 0)));
+            StackedFigures(columns[^1].Text.Trim());
+            return this;
         }
 
+        StackedFigures(figures);
         return this;
+    }
+
+    private void StackedFigures(string figures)
+    {
+        if (figures.Trim().Length == 0)
+            return;
+
+        _directives.Add(new Directive.Line(
+            PadLeft(figures, PaperWidthChars),
+            [new Segment(figures, 0, PaperWidthChars, TextAlignment.Right)],
+            TextAlignment.Left,
+            false,
+            1,
+            1));
     }
 
     /// <summary>A full-width run of the given character, as a separator.</summary>

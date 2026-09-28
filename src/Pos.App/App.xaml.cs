@@ -103,6 +103,9 @@ public partial class App : Application
         // attributes it to whoever finished it.
         BillingViewModel? viewModelRef = null;
 
+        // Kept, not built inline, so a layout changed on the owner's screen reaches the next bill.
+        var receipts = new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage, settings.ReceiptLayout);
+
         var checkout = new CheckoutService(
             invoices,
             customers,
@@ -110,7 +113,7 @@ public partial class App : Application
             settings.LoyaltyRules,
             TimeProvider.System,
             printer,
-            new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
+            receipts,
             _log,
             () => viewModelRef?.CashierName,
             new StockRepository(database));
@@ -164,7 +167,7 @@ public partial class App : Application
             var items = new ItemRepository(database);
 
             return new OwnerView(
-                BuildOwnerViewModel(settings, database, viewModel),
+                BuildOwnerViewModel(settings, database, viewModel, receipts),
                 new CatalogueImportViewModel(items),
                 BuildHardwareViewModel(settings),
 
@@ -195,7 +198,7 @@ public partial class App : Application
     /// only the file would leave the till issuing one kind of document and the settings claiming
     /// another until somebody restarted it.
     /// </remarks>
-    private OwnerViewModel BuildOwnerViewModel(PosSettings settings, PosDatabase database, BillingViewModel billing)
+    private OwnerViewModel BuildOwnerViewModel(PosSettings settings, PosDatabase database, BillingViewModel billing, ReceiptComposer receipts)
     {
         var settingsPath = Path.Combine(DataDirectory, "settings.json");
         var stock = new StockRepository(database);
@@ -273,6 +276,28 @@ public partial class App : Application
                 }
 
                 _log?.Info("settings", credential is null ? "dashboard PIN cleared" : "dashboard PIN set");
+                return null;
+            },
+
+            // The till's composer and the shared settings both change, so the next bill and the
+            // Hardware tab's preview agree with what was just picked.
+            receiptLayout: settings.ReceiptLayout,
+            applyReceiptLayout: layout =>
+            {
+                receipts.Layout = layout;
+                settings.ReceiptLayout = layout;
+
+                try
+                {
+                    SettingsFile.SetReceiptLayout(settingsPath, layout);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the receipt layout", ex);
+                    return $"Changed for this session, but it could not be saved: {ex.Message}";
+                }
+
+                _log?.Info("settings", $"receipt layout set to {layout}");
                 return null;
             });
     }
