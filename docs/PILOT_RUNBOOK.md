@@ -315,6 +315,7 @@ than falling through to closing the day, so reading a report back can never acci
 | **Settings** | `Ctrl+5` | The PIN in front of this screen; which bill layout the lane prints — `Alt+S` for the standard bill, `Alt+C` for the compact counter bill; and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 | **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
 | **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most, or tick **Only customers who owe** for the list of who owes what, most first, with the total the shop is owed. For the one you pick: what they owe and their **khata** (every credit purchase and payment, with the balance after each), visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask — not while they owe anything. |
+| **GST** | `Ctrl+8` | The month's figures for the GST return, opening on last month: sales by rate and place of supply, what was sold at 0%, the HSN summary in the unit each thing was sold in, and the bill numbers issued with the cancelled ones counted. `Alt+E` and `Alt+L` move a month back or forward; `Alt+S` saves a page and the CSV files for the accountant. |
 
 `F5` re-reads the figures. `Esc` goes back to billing.
 
@@ -343,6 +344,18 @@ GST and rate under each line, one large **Total Amount**, only the tenders used,
 till and time at the foot. Both are full tax invoices. Switch under Settings; the next bill follows,
 and **Ctrl+4**, **Alt+W** shows it before a customer does. On both, every quantity prints with its
 unit — `3 Pcs`, `2.75 Kg`, and on a Tamil lane `2 சீப்பு`, `1.5 முழம்`.
+
+**The GST return.** Once a month, **Ctrl+8** and **Alt+S** saves last month's figures for whoever
+files the return: a page to read, and CSV files for GSTR-1 (sales by rate, nil rated, the HSN
+summary and the documents issued) with the column headings of the GST offline tool. Every figure
+comes from the bills as issued, cancelled bills left out, so the return cannot disagree with the
+bills. Read the **Before filing** notes on the screen first. In particular:
+- Everything sold at 0% is put under *nil rated*. Goods exempt by notification (fresh vegetables,
+  fruit, flowers, milk, eggs) belong under *exempted*, and the accountant moves them.
+- A shop with two tills files one return, so add each lane's figures together.
+
+The files hold the shop's turnover, so keep them private. `pos gst-return --month 2026-09` does
+the same from a command line.
 
 **Traditional units.** An item can be sold by the seepu, kattu, padi, muzham and the other units
 customers still ask for by name — the full list is in `CATALOGUE_FORMAT.md`. The price is per unit,

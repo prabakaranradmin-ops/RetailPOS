@@ -246,6 +246,23 @@ and amount columns and every tender, or the **compact counter bill** with item, 
 amount, the HSN and GST under each line and one large Total Amount. Both are full tax invoices.
 `pos receipt-preview --layout compact` shows the other one without switching.
 
+## The monthly GST return
+
+The owner's screen (**Ctrl+D**, **Ctrl+8**) shows a month's figures the way GSTR-1 asks for them:
+- taxable sales by rate and place of supply (B2CS), and large inter-state bills one by one (B2CL);
+- what was sold at 0%;
+- the HSN summary, in the unit each thing was sold in;
+- the bill numbers issued.
+
+**Alt+S** saves a page to read and CSV files with the GST offline tool's column headings.
+`pos gst-return --month 2026-09` does the same from a command line.
+
+Every figure is read from the bills as issued, summed in exact paise, with cancelled bills left
+out. A test holds that the HSN summary and the rate-wise tables add up to the same thing.
+
+The catalogue accepts the 40% rate that aerated drinks have carried since 22 September 2025. The
+built-in HSN suggestions were updated to the September 2025 rates.
+
 ## Invoice numbers
 
 `{prefix}/{financial year}/{lane}-{sequence}` — `RM/26-27/L1-11358`, or `RM/26-27/11358` on a shop

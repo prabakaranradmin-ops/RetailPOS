@@ -46,7 +46,7 @@ public static class SampleInvoice
         [
             Line(1, "Toor Dal 1kg", "0713", "8901234567890", 189m, 5m * rate),
             Line(2, "Sugar Loose", "1701", null, 45m, 5m * rate, quantity: 2.75m, unit: UnitType.Kilogram),
-            Line(3, "Shampoo 340ml", "3305", "8901234567897", 299m, 18m * rate, discount: 49m),
+            Line(3, "Detergent Powder 1kg", "3402", "8901234567897", 299m, 18m * rate, discount: 49m),
             Line(4, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", "8901234567901", 1_299m, 5m * rate),
 
             // Sold in the traditional units, so the preview shows how a unit other than a piece or

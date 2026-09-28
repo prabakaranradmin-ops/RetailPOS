@@ -691,7 +691,8 @@ public static class DashboardPage
         ? string.Empty
         : text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 
-    private const string Styles = """
+    /// <summary>Shared with the GST return page, so the two documents an accountant receives look like one set.</summary>
+    internal const string Styles = """
         <style>
           :root {
             --paper:#F5F7F9; --card:#FFFFFF; --ink:#141A20; --soft:#556570; --faint:#7C8894;

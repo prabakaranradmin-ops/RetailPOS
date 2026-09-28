@@ -34,7 +34,12 @@ public sealed record ParsedItem(int Line, Item Item);
 public static class ItemCsvParser
 {
     /// <summary>The slabs GST actually has. Anything else is a typo, not a rate.</summary>
-    public static readonly decimal[] ValidGstRates = [0m, 5m, 12m, 18m, 28m];
+    /// <remarks>
+    /// From 22 September 2025 most goods sit at 5% or 18%, with 40% for aerated and sugared drinks
+    /// and similar. 12% and 28% stay accepted: a few goods are still taxed at them, and a catalogue
+    /// written before the change must still load rather than fail on every row.
+    /// </remarks>
+    public static readonly decimal[] ValidGstRates = [0m, 5m, 12m, 18m, 28m, 40m];
 
     private const string Sku = "sku";
     private const string Barcode = "barcode";

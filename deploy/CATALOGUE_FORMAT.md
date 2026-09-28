@@ -14,7 +14,7 @@ optional and may be left out altogether.
 | `unit` | yes | `Pcs`, `Kg`, `L` or `m` — or a traditional Tamil unit such as `Seepu`, `Kattu`, `Padi` or `Muzham`, in English letters or in Tamil. See **Units** below for the full list. |
 | `mrp` | yes | Printed maximum retail price. |
 | `selling_price` | yes | What you actually charge. May not exceed `mrp`. |
-| `gst_rate` | yes | One of `0`, `5`, `12`, `18`, `28`. A trailing `%` is fine. |
+| `gst_rate` | yes | One of `0`, `5`, `12`, `18`, `28`, `40`. A trailing `%` is fine. Since 22 September 2025 most goods are at `5` or `18`, and aerated and sugared drinks at `40`; `12` and `28` are still accepted for the few goods left at them. |
 | `is_weighed` | yes | `true`/`false`, `yes`/`no`, `1`/`0`. Means *the till may sell part of one* (1.5, 0.25), and must agree with `unit` — see the **Part of one?** column below. |
 | `category` | no | Which part of the shop it belongs to — `Staples`, `Dairy`, `Household`. Free text; whatever you type becomes a slice of the dashboard's department chart. |
 | `cost_price` | no | What you pay for one, tax inclusive like `selling_price`. Must be between `0` and `selling_price`. |
@@ -148,7 +148,7 @@ pos import-items --file catalogue.csv --update
 The import is **all or nothing**. If anything is wrong, nothing is written and you get the full
 list of problems with line numbers — fix the file and run it again.
 
-- A `gst_rate` that is not one of the five slabs. Almost always a typo, and a typo here misprices
+- A `gst_rate` that is not one of the slabs above. Almost always a typo, and a typo here misprices
   every sale of that item until somebody notices.
 - A `selling_price` above `mrp`. Selling above the printed price is not allowed.
 - A `barcode` whose check digit does not add up. This catches a mistyped or transposed digit —

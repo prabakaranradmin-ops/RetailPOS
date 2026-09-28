@@ -333,8 +333,12 @@ public class LayoutFitTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// Eight tabs, and their headers on one row. A ninth, or a longer header, would wrap the strip
+    /// onto a second row at 1366 wide and take the height from every tab under it.
+    /// </summary>
     [Fact]
-    public void TheOwnersScreenOpensOnSevenTabs()
+    public void TheOwnersScreenOpensOnEightTabsInOneRow()
     {
         Wpf.Run(() =>
         {
@@ -346,7 +350,60 @@ public class LayoutFitTests : IDisposable
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
 
-                Assert.Equal(7, tabs.Items.Count);
+                Assert.Equal(8, tabs.Items.Count);
+
+                var tops = tabs.Items.Cast<TabItem>()
+                    .Select(item => Math.Round(item.TranslatePoint(new Point(0, 0), window).Y))
+                    .Distinct()
+                    .ToList();
+
+                Assert.True(tops.Count == 1, $"the tab headers are on {tops.Count} rows");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>The GST tab with a month of sales on it, every table filled.</summary>
+    [Fact]
+    public void TheGstTabFitsWithAMonthOnIt()
+    {
+        var invoices = new InvoiceRepository(_temp.Database);
+        var month = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+        InvoiceLine[] lines =
+        [
+            InvoiceLine.Rehydrate(1, "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", "1512", null, null, UnitType.Each, 1299m, 1299m, true, 5m, 1m, 0m, false),
+            InvoiceLine.Rehydrate(2, "Malligai Poo", "0603", null, null, UnitType.Muzham, 30m, 30m, true, 0m, 2.5m, 0m, false),
+        ];
+
+        var totals = InvoiceTotals.From(lines);
+        invoices.Save(new SaleDraft("L1", DateTimeOffset.Now, null, lines, totals, [new Tender(TenderType.Cash, totals.AmountPayable)], 0m, 0, 0, null));
+
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOut(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 7;
+                window.UpdateLayout();
+
+                var gst = (GstReturnViewModel)((FrameworkElement)window.FindName("GstTab")).DataContext;
+                gst.LaterMonth();
+                window.UpdateLayout();
+
+                Assert.Equal(month, gst.Month);
+                Assert.Equal(2, gst.Hsn.Count);
+
+                AssertEveryButtonIsReachable(window, "the GST tab with a month on it");
+                AssertNoButtonLabelIsCutOff(window, "the GST tab with a month on it");
+                AssertNothingOverflowsSideways(window, "the GST tab with a month on it");
             }
             finally
             {
@@ -529,6 +586,9 @@ public class LayoutFitTests : IDisposable
             maintenance,
             customers ?? new CustomersViewModel(
                 new Pos.Core.Analytics.CustomerQuery(_temp.Database),
-                new CustomerRepository(_temp.Database)));
+                new CustomerRepository(_temp.Database)),
+            new GstReturnViewModel(
+                month => new Pos.Core.Analytics.GstReturnQuery(_temp.Database).Gather(settings.LaneId, month, "33"),
+                (_, _) => []));
     }
 }

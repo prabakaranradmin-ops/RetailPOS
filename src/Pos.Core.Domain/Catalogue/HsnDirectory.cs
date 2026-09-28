@@ -35,6 +35,11 @@ public sealed record HsnSuggestion(string HsnCode, decimal GstRate, string Reaso
 /// This is why anything the shop already sells outranks everything here: its own catalogue reflects
 /// decisions it actually took, and is current in a way a shipped table cannot be.
 /// </para>
+/// <para>
+/// The rates are as revised from 22 September 2025, when most grocery and personal-care goods moved
+/// to 5% and aerated drinks to 40%. A catalogue loaded before then carries the old rates until the
+/// shop changes them; this table cannot change them for it.
+/// </para>
 /// </remarks>
 public static class HsnDirectory
 {
@@ -51,17 +56,17 @@ public static class HsnDirectory
 
     public static IReadOnlyList<Entry> Entries { get; } =
     [
-        // ---- Household and personal care. Rates here are stable and the classification is easy. ----
-        new(["soap", "bathing", "hamam", "lux", "lifebuoy", "santoor"], "3401", 18m, "bathing soap"),
+        // ---- Household and personal care. The classification is easy; the rates moved in 2025. ----
+        new(["soap", "bathing", "hamam", "lux", "lifebuoy", "santoor"], "3401", 5m, "bathing soap"),
         new(["detergent", "washing", "powder", "surf", "ariel", "rin", "tide"], "3402", 18m, "detergent and washing powder"),
         new(["dishwash", "dish", "vim", "scrub"], "3402", 18m, "dishwashing liquid and bars"),
         new(["phenyl", "cleaner", "harpic", "lizol", "floor"], "3402", 18m, "floor and toilet cleaner"),
-        new(["shampoo", "clinic", "sunsilk", "dove"], "3305", 18m, "shampoo"),
-        new(["hair", "oil", "parachute", "navratna"], "3305", 18m, "hair oil", "coconut oil sold as edible oil is 1513, not 3305"),
-        new(["toothpaste", "colgate", "pepsodent", "closeup"], "3306", 18m, "toothpaste"),
-        new(["toothbrush", "brush"], "9603", 18m, "toothbrush"),
+        new(["shampoo", "clinic", "sunsilk", "dove"], "3305", 5m, "shampoo"),
+        new(["hair", "oil", "parachute", "navratna"], "3305", 5m, "hair oil", "coconut oil sold as edible oil is 1513, not 3305"),
+        new(["toothpaste", "colgate", "pepsodent", "closeup"], "3306", 5m, "toothpaste"),
+        new(["toothbrush", "brush"], "9603", 5m, "toothbrush"),
         new(["agarbatti", "incense", "dhoop"], "3307", 5m, "agarbatti and incense"),
-        new(["candle"], "3406", 12m, "candles"),
+        new(["candle"], "3406", 5m, "candles"),
         new(["matchbox", "matches", "match"], "3605", 5m, "matches"),
         new(["sanitary", "napkin", "pad", "whisper", "stayfree"], "9619", 0m, "sanitary napkins"),
 
@@ -75,22 +80,22 @@ public static class HsnDirectory
         new(["coffee"], "0901", 5m, "coffee"),
         new(["turmeric", "manjal", "chilli", "coriander", "cumin", "jeera", "masala", "spice"], "0910", 5m, "spices"),
         new(["oil", "sunflower", "groundnut", "gingelly", "sesame", "mustard", "refined"], "1512", 5m, "edible oil", "the exact code follows the seed: 1512 sunflower, 1508 groundnut, 1514 mustard"),
-        new(["ghee"], "0405", 12m, "ghee"),
-        new(["butter"], "0405", 12m, "butter"),
+        new(["ghee"], "0405", 5m, "ghee"),
+        new(["butter"], "0405", 5m, "butter"),
         new(["milk"], "0401", 0m, "fresh milk", "flavoured or condensed milk is taxed differently"),
         new(["curd", "yoghurt", "yogurt"], "0403", 0m, "curd", "5% pre-packaged and labelled"),
-        new(["paneer"], "0406", 5m, "paneer", "nil if not pre-packaged"),
+        new(["paneer"], "0406", 0m, "paneer", "nil, loose or pre-packaged, since September 2025"),
         new(["egg", "eggs"], "0407", 0m, "eggs"),
         new(["bread"], "1905", 0m, "bread", "rusk, buns and pizza bread are not nil-rated"),
 
         // ---- Packaged food. ----
-        new(["biscuit", "cookies", "britannia", "parle"], "1905", 18m, "biscuits"),
-        new(["namkeen", "mixture", "snack", "chips", "kurkure", "lays"], "2106", 12m, "namkeen and savoury snacks"),
-        new(["chocolate"], "1806", 18m, "chocolate"),
-        new(["noodles", "pasta", "maggi", "vermicelli", "semiya"], "1902", 18m, "noodles and pasta"),
-        new(["juice"], "2009", 12m, "fruit juice"),
-        new(["soft", "drink", "cola", "pepsi", "soda", "aerated"], "2202", 28m, "aerated drinks", "aerated drinks also carry compensation cess"),
-        new(["water", "mineral", "bisleri", "packaged"], "2201", 18m, "packaged drinking water", "20-litre cans are 12%"),
+        new(["biscuit", "cookies", "britannia", "parle"], "1905", 5m, "biscuits"),
+        new(["namkeen", "mixture", "snack", "chips", "kurkure", "lays"], "2106", 5m, "namkeen and savoury snacks"),
+        new(["chocolate"], "1806", 5m, "chocolate"),
+        new(["noodles", "pasta", "maggi", "vermicelli", "semiya"], "1902", 5m, "noodles and pasta"),
+        new(["juice"], "2009", 5m, "fruit juice", "a fruit drink with added sugar is 2202, not juice"),
+        new(["soft", "drink", "cola", "pepsi", "soda", "aerated"], "2202", 40m, "aerated and sugared drinks", "40% since September 2025, with no compensation cess"),
+        new(["water", "mineral", "bisleri", "packaged"], "2201", 5m, "packaged drinking water"),
     ];
 
     /// <summary>

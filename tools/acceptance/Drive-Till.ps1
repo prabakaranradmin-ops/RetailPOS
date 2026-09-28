@@ -553,6 +553,39 @@ function Invoke-TillWalkthrough {
             -Expected 'only customers who owe, most first, and the total owed to the shop' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
 
+        # --- GST return ------------------------------------------------------------------------
+        # Ctrl+8 opens on last month, which in this fresh lane sold nothing.
+        Send-Keys '^8' 1500
+        $shot = Save-Shot 'owner-13-gst' -Foreground
+        Add-Result -Kind Positive -Feature 'GST return' -Name 'The GST tab opens on last month' `
+            -Expected 'the month a return is filed for, saying no bills were issued in it' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # Alt+L moves on to this month, which has today's sales in it.
+        Send-Keys '%l' 1500
+        $shot = Save-Shot 'owner-13b-gst-this-month' -Foreground
+        Add-Result -Kind Positive -Feature 'GST return' -Name "This month's sales by rate, HSN and bill numbers" `
+            -Expected "today's sales at 5% and 18%, the HSN summary in the unit each was sold in, and the bill numbers issued" `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        [void] (Save-Pages -First 'owner-13b-gst-this-month.png' -Feature 'GST return' -What 'The GST tables, further down')
+
+        # Alt+S saves for the accountant through the ordinary save dialog. Proved on disk: a
+        # screenshot of a status line is not a file.
+        $gstScreenPage = Join-Path $Workspace 'gst-screen\gst-this-month.html'
+        New-Item -ItemType Directory -Force -Path (Split-Path $gstScreenPage -Parent) | Out-Null
+        Send-Keys '%s' 2000
+        Send-Keys $gstScreenPage 600
+        Send-Keys '{ENTER}' 2500
+        $shot = Save-Shot 'owner-13c-gst-saved' -Foreground
+
+        $gstSaved = (Test-Path $gstScreenPage) -and
+            (Test-Path (Join-Path (Split-Path $gstScreenPage -Parent) 'gst-this-month-hsn(b2c).csv')) -and
+            (Test-Path (Join-Path (Split-Path $gstScreenPage -Parent) 'gst-this-month-b2cs.csv'))
+        Add-Result -Kind Positive -Feature 'GST return' -Name 'The return is saved for the accountant from the screen' `
+            -Expected 'the page and its CSV files written where the save dialog was pointed' `
+            -Actual $(if ($gstSaved) { "written to $(Split-Path $gstScreenPage -Parent)" } else { 'not on disk' }) `
+            -Passed $gstSaved -Shot $shot
+
         Send-Keys '{ESC}' 1200
         $shot = Save-Shot 'owner-10-back-to-billing'
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Escape goes back to billing' `
@@ -568,7 +601,7 @@ function Invoke-TillWalkthrough {
         $tabs = @(
             'owner-02-figures.png', 'owner-03-stock.png', 'owner-04-catalogue.png',
             'owner-05-hardware.png', 'owner-06-settings.png', 'owner-07-maintenance.png',
-            'owner-11-customers.png')
+            'owner-11-customers.png', 'owner-13-gst.png')
 
         $seen = @{}
         $repeats = @()
@@ -588,8 +621,8 @@ function Invoke-TillWalkthrough {
         }
 
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Each tab shows a different screen' `
-            -Expected 'seven tabs, seven distinct screens' `
-            -Actual $(if ($repeats.Count -eq 0) { 'all seven differ' } else { $repeats -join '; ' }) `
+            -Expected 'eight tabs, eight distinct screens' `
+            -Actual $(if ($repeats.Count -eq 0) { 'all eight differ' } else { $repeats -join '; ' }) `
             -Passed ($repeats.Count -eq 0) `
             -Detail 'Two identical captures mean a Ctrl+N did not reach its tab, whatever the other checks say.'
 

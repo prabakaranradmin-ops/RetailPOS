@@ -179,7 +179,12 @@ public partial class App : Application
 
                 // The same store the till attaches customers through, so a name saved on the owner's
                 // screen is the name the next bill prints.
-                new CustomersViewModel(new CustomerQuery(database), customers, new CreditRepository(database)));
+                new CustomersViewModel(new CustomerQuery(database), customers, new CreditRepository(database)),
+
+                // The month's return, read from the same books and written where the owner says.
+                new GstReturnViewModel(
+                    month => new GstReturnQuery(database).Gather(settings.LaneId, month, settings.OutletStateCode),
+                    (data, path) => GstReturnFiles.Write(data, path, settings.Store.Name, settings.Store.Gstin)));
         };
 
         MainWindow = billingView;

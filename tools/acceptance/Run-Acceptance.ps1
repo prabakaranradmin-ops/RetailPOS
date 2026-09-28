@@ -701,6 +701,58 @@ if (-not $NoUi) {
         -Actual (Short $r.Output 6) -Passed ($countsIt -and $valuesIt) `
         -Detail 'Parking is ordinary at a counter. A sale that spent a minute parked is still a sale.'
 
+    # The month's GST return, from the same books. The two bills come to 495.25 and 189.00 before
+    # round-off; the HSN summary covers every line, so its total value has to be exactly 684.25.
+    $gstPage = Join-Path $workspace 'gst\return.html'
+    $thisMonth = Get-Date -Format 'yyyy-MM'
+    $r = Invoke-Pos @('gst-return', '--month', $thisMonth, '--out', $gstPage) -StdIn @('Maligai26')
+
+    $gstFolder = Split-Path $gstPage -Parent
+    $hsnCsv = Join-Path $gstFolder 'return-hsn(b2c).csv'
+    $docsCsv = Join-Path $gstFolder 'return-docs.csv'
+    $written = $r.ExitCode -eq 0 -and (Test-Path $gstPage) -and (Test-Path $hsnCsv) -and (Test-Path $docsCsv) `
+        -and (Test-Path (Join-Path $gstFolder 'return-b2cs.csv')) -and (Test-Path (Join-Path $gstFolder 'return-exemp.csv'))
+
+    Add-Result -Kind Positive -Feature 'GST return' -Name "The month's GST return is written for the accountant" `
+        -Expected 'a page to read, and the B2CS, nil-rated, HSN summary and documents CSVs' `
+        -Actual (Short $r.Output 8) -Passed $written
+
+    # Wrapped whole: an if-statement unrolls what it returns, and one row would come back as a bare
+    # object with no Count - which strict mode treats as an error rather than as 1.
+    $docs = @(if (Test-Path $docsCsv) { Import-Csv $docsCsv -Encoding UTF8 })
+    $docsRight = $docs.Count -eq 1 -and $docs[0].'Total Number' -eq '2' -and $docs[0].'Cancelled' -eq '0' `
+        -and $docs[0].'Sr. No. From' -eq $expected
+    Add-Result -Kind Positive -Feature 'GST return' -Name 'The bills issued are counted from the first number' `
+        -Expected "one run from $expected, 2 issued, none cancelled" `
+        -Actual $(if ($docs.Count) { "{0} to {1}, {2} issued, {3} cancelled" -f $docs[0].'Sr. No. From', $docs[0].'Sr. No. To', $docs[0].'Total Number', $docs[0].'Cancelled' } else { 'no documents file' }) `
+        -Passed $docsRight
+
+    $hsn = @(if (Test-Path $hsnCsv) { Import-Csv $hsnCsv -Encoding UTF8 })
+
+    if ($variant -eq 'NoTax') {
+        # Every bill on this build is a bill of supply, which is not part of GSTR-1 at all.
+        $keptOut = $hsn.Count -eq 0 -and $r.Output -match 'CMP-08'
+        Add-Result -Kind Negative -Feature 'GST return' -Name 'Bills of supply are kept out of GSTR-1' `
+            -Expected 'an empty HSN summary, and a note that composition turnover goes on CMP-08' `
+            -Actual (Short $r.Output 10) -Passed $keptOut
+    }
+    else {
+        $hsnTotal = [decimal]0
+        foreach ($row in $hsn) { $hsnTotal += [decimal]::Parse($row.'Total Value', [Globalization.CultureInfo]::InvariantCulture) }
+
+        $codes = @($hsn | ForEach-Object { $_.HSN })
+        $hsnRight = $hsnTotal -eq [decimal]684.25 -and ($codes -contains '0713') -and ($codes -contains '1701') -and ($codes -contains '3305')
+        Add-Result -Kind Positive -Feature 'GST return' -Name 'The HSN summary adds up to the bills, to the paisa' `
+            -Expected 'total value 684.25 across 0713, 1701 and 3305' `
+            -Actual ("total value {0} across {1}" -f $hsnTotal, ($codes -join ', ')) -Passed $hsnRight `
+            -Detail 'Every line of every bill, before round-off: 495.25 and 189.00. A return that did not add up to the bills would be a wrong return.'
+    }
+
+    $r = Invoke-Pos @('gst-return', '--month', '2026-13') -StdIn @('Maligai26')
+    Add-Result -Kind Negative -Feature 'GST return' -Name 'A month that does not exist is refused' `
+        -Expected 'non-zero exit, saying how to write a month' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match '2026-09')
+
     # The repayment on the stored Z-report, read back from the books rather than off a picture.
     $r = Invoke-Pos @('close-day', '--show')
     $collected = ($r.Output -match 'Credit collected \(1\)') -and ($r.Output -match 'Credit collected in cash')

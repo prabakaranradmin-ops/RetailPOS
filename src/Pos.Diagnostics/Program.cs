@@ -596,6 +596,71 @@ switch (command)
         return 0;
     }
 
+    case "gst-return":
+    {
+        // The shop's turnover, so behind the same lock as the dashboard.
+        if (!Unlock(settings.Security, log))
+            return 2;
+
+        // Last month by default: a return is filed for a month that has finished.
+        var monthText = ParseStringOption(args, "--month");
+        DateOnly month;
+
+        if (monthText is null)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            month = new DateOnly(today.Year, today.Month, 1).AddMonths(-1);
+        }
+        else if (!DateOnly.TryParseExact(monthText + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                     System.Globalization.DateTimeStyles.None, out month))
+        {
+            Console.Error.WriteLine($"'{monthText}' is not a month. Write it as 2026-09.");
+            return 2;
+        }
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var data = new GstReturnQuery(database).Gather(settings.LaneId, month, settings.OutletStateCode);
+
+        var outPath = Path.GetFullPath(ParseStringOption(args, "--out")
+            ?? Path.Combine(dataDirectory, "gst", GstReturnFiles.Stem(data) + ".html"));
+
+        var files = GstReturnFiles.Write(data, outPath, settings.Store.Name, settings.Store.Gstin);
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        Console.WriteLine();
+        Console.WriteLine($"  Month          : {month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}, lane {settings.LaneId}");
+        Console.WriteLine($"  Tax invoices   : {data.TaxInvoices.ToString("N0", indian)}");
+        Console.WriteLine($"  Taxable value  : {data.TaxableValue.ToString("N2", indian)}");
+        Console.WriteLine($"  CGST           : {data.Cgst.ToString("N2", indian)}");
+        Console.WriteLine($"  SGST           : {data.Sgst.ToString("N2", indian)}");
+
+        if (data.Igst != 0m)
+            Console.WriteLine($"  IGST           : {data.Igst.ToString("N2", indian)}");
+
+        Console.WriteLine($"  Nil rated      : {data.NilRated.ToString("N2", indian)}");
+        Console.WriteLine($"  HSN codes      : {data.Hsn.Count}");
+
+        foreach (var run in data.Documents)
+            Console.WriteLine($"  Bills          : {run.From} to {run.To}, {run.Total} issued, {run.Cancelled} cancelled");
+
+        foreach (var warning in data.Warnings)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  NOTE: {warning}");
+        }
+
+        Console.WriteLine();
+
+        foreach (var file in files)
+            Console.WriteLine($"Saved {file}");
+
+        log.Info("tool", $"GST return for {month:yyyy-MM}: {data.TaxInvoices} invoices, taxable {data.TaxableValue:0.00}, {files.Count} files");
+
+        return 0;
+    }
+
     case "stock":
     {
         var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
@@ -1073,6 +1138,13 @@ static void WriteHelp()
               read the shop's turnover and margins. Asks for the current PIN
               before changing or clearing one. Keeps somebody out of the
               command; it does not encrypt the database — see SETTINGS.html.
+
+          pos gst-return [--month 2026-09] [--out <file.html>]
+              The month's figures for the GST return: sales by rate and place
+              of supply, nil-rated sales, the HSN summary and the bill numbers
+              issued. Writes a page to read and CSV files in the layout of the
+              GST offline tool. Defaults to last month. Behind the dashboard
+              PIN when one is set.
 
           pos receipt-preview [--width N] [--png <path>] [--layout standard|compact]
               Renders a sample receipt as text. Touches no hardware, so it works

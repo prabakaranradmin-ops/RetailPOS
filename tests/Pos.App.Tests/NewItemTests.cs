@@ -244,7 +244,26 @@ public class NewItemTests : IDisposable
         form.Accept(form.HsnSuggestions[0]);
 
         Assert.Equal("3401", form.HsnCode);
-        Assert.Equal("18", form.GstRate);
+
+        // 5% since 22 September 2025; it was 18% before.
+        Assert.Equal("5", form.GstRate);
+    }
+
+    /// <summary>
+    /// Aerated drinks moved to 40% in September 2025. The catalogue has to accept the rate the law
+    /// now charges, or the shop cannot sell a bottle of cola correctly.
+    /// </summary>
+    [Fact]
+    public void AnAeratedDrinkIsSuggestedAndSavedAtFortyPercent()
+    {
+        var form = Filled(Form(), sku: "COLA01", name: "Cola 600ml", barcode: "", hsn: "", gst: "", mrp: "40");
+
+        var suggestion = Assert.Single(form.HsnSuggestions, s => s.HsnCode == "2202");
+        form.Accept(suggestion);
+
+        Assert.Equal("40", form.GstRate);
+        Assert.True(form.Save(), string.Join("; ", form.Problems.Select(p => p.Problem)));
+        Assert.Equal(40m, Items.FindBySku("COLA01")!.GstRate);
     }
 
     /// <summary>

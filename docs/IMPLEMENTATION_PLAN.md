@@ -349,6 +349,57 @@ to collect it from. On the owner's screen it was counted as money on its way to 
 - The Tamil report and slip keep these labels in English, like the tender names already were,
   rather than print Tamil composed here that no shopkeeper has checked.
 
+## The monthly GST return — **complete** *(added 2026-09-28, approved)*
+
+The owner's screen had GST by rate over 7, 30 or 90 days. What an accountant files is a calendar
+month, in GSTR-1's tables, with an HSN summary nothing produced, so every return started with
+adding bills up by hand.
+
+- **`GstReturnQuery`** reads one lane's month from the bills as issued, cancelled bills excluded.
+  Money is summed in exact paise (`PaiseSql`) and quantities in exact thousandths, because the HSN
+  summary files a quantity. It produces:
+  - **B2CS**: taxable sales by place of supply and rate, with CGST, SGST and IGST.
+  - **B2CL**: inter-state bills over ₹1,00,000, one by one. The threshold is a named constant
+    with its date.
+  - **Nil rated**: sales at 0%, within the state and into other states.
+  - **The HSN summary**: by code, rate and UQC.
+  - **Documents issued**: each run of bill numbers, cancelled bills counted.
+- **Units are reported, not converted.** Each unit has a UQC (`Uqc`): a seepu is BUN, a kattu BDL,
+  a moottai BAG, and a padi OTH, as the number of padis sold. Nothing is turned into kilograms
+  nobody weighed.
+- **Bills of supply are kept out.** A composition bill is not a GSTR-1 supply. A month that changed
+  scheme reports how many there were and their value, for CMP-08, and files nothing from them.
+- **Before filing** notes cover what needs a person:
+  - an inter-state sale to a forgotten customer, whose place of supply is no longer known;
+  - an HSN code shorter than four digits;
+  - a gap in the bill numbers;
+  - the nil-versus-exempt split, which is the accountant's call.
+- **The files** (`GstReturnFiles`) are a page to read and CSVs with the offline tool's column
+  headings. They are UTF-8 with a byte-order mark, so Excel keeps Tamil names, and a comma in a
+  name stays inside its field.
+- **Where to find it:** Owner screen, **Ctrl+8**, opening on last month. **Alt+E** and **Alt+L**
+  move between months, never past the current one, and **Alt+S** saves. Also available as
+  `pos gst-return`.
+- **Tested** against hand-built months with every figure worked on paper. This covers the first
+  and last minute of the month, another lane's bills, inter-state and large inter-state bills,
+  the ₹1,00,000 boundary, and 300 weighed lines summing exactly. A test also holds that the HSN
+  summary equals the rate-wise tables plus nil rated. The acceptance run checks the command-line
+  export against the day's two bills to the paisa, and saves from the screen through the real
+  save dialog.
+
+Found on the way:
+- **The catalogue refused 40%**, the rate aerated and sugared drinks have carried since
+  22 September 2025, so a shop could not sell a bottle of cola at the rate the law charges. The
+  built-in HSN suggestions still carried the rates from before that date:
+  - soap, shampoo, hair oil, toothpaste, biscuits, chocolate, noodles, namkeen, juice, ghee,
+    butter, candles and packaged water: now 5%;
+  - paneer: now nil;
+  - aerated drinks: now 40%.
+
+  Suggestions were changed only where the new rate is certain. 12% and 28% stay accepted for the
+  goods still at them, and for catalogues written before the change. The sample bill's shampoo
+  line, shown to owners at the old 18%, is now detergent, which is still 18%.
+
 ## Tamil units and the compact counter bill — **complete** *(added 2026-09-28, approved)*
 
 Customers in Tamil Nadu still buy by the seepu, kattu, padi and muzham, and the counter bills shops

@@ -1364,6 +1364,188 @@
         </Grid>
       </TabItem>
 
+      <!-- ==== GST return ==== -->
+      <TabItem x:Name="GstTabItem" Header="GST  (Ctrl+8)">
+        <Grid x:Name="GstTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="360" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Which month, what it came to, and saving it. -->
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="THE MONTH TO FILE" Style="{StaticResource Heading}" />
+                  <TextBlock Text="{Binding MonthLabel}" FontSize="24" Margin="0,0,0,4" />
+                  <TextBlock Text="{Binding MonthNote}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="GstEarlier" Grid.Column="0" Content="◀ _Earlier month" Padding="10,7" Margin="0,0,5,0"
+                            Click="GstEarlier_Click" />
+                    <Button Grid.Column="1" Content="_Later month ▶" Padding="10,7" Margin="5,0,0,0"
+                            Click="GstLater_Click" IsEnabled="{Binding CanGoLater, Mode=OneWay}" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="WHAT IT CAME TO" Style="{StaticResource Heading}" />
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Taxable value" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TaxableValue}" FontSize="16" />
+                    <TextBlock Grid.Row="1" Text="CGST" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Cgst}" FontSize="16" />
+                    <TextBlock Grid.Row="2" Text="SGST" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Sgst}" FontSize="16" />
+                    <TextBlock Grid.Row="3" Text="IGST" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6"
+                               Visibility="{Binding HasIgst, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Igst}" FontSize="16"
+                               Visibility="{Binding HasIgst, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Grid.Row="4" Text="Tax in all" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Tax}" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="5" Text="Nil rated (sold at 0%)" Style="{StaticResource Label}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding NilRated}" FontSize="16" />
+                    <TextBlock Grid.Row="6" Text="Tax invoices" Style="{StaticResource Label}" FontSize="14" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding TaxInvoices}" FontSize="16" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="FOR THE ACCOUNTANT" Style="{StaticResource Heading}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Saves a page to read and the CSV files for GSTR-1 — sales by rate, nil rated, the HSN summary and the bills issued — in the layout of the GST offline tool. Send them to whoever files the return." />
+                  <Button Content="_Save for the accountant…" Padding="14,8" HorizontalAlignment="Stretch"
+                          Click="GstSave_Click" IsEnabled="{Binding CanSave, Mode=OneWay}" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}"
+                      Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                  <TextBlock Text="BEFORE FILING" Style="{StaticResource Heading}" Foreground="{StaticResource Warn}" />
+                  <ItemsControl ItemsSource="{Binding Warnings}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,8" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- The tables the return is filed from. -->
+          <ScrollViewer Tag="Page" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+              <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" FontSize="14" Margin="2,0,2,10" />
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                      Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="No bills were issued in this month." FontSize="15" />
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="SALES BY RATE — TO CUSTOMERS WITHOUT A GSTIN (B2CS)" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding RateWise}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Place of supply" Binding="{Binding PlaceOfSupply}" Width="110" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="70" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="*" />
+                      <DataGridTextColumn Header="CGST" Binding="{Binding Cgst, StringFormat={}{0:N2}}" Width="*" />
+                      <DataGridTextColumn Header="SGST" Binding="{Binding Sgst, StringFormat={}{0:N2}}" Width="*" />
+                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="*" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                      Visibility="{Binding HasLargeInterState, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                  <TextBlock Text="LARGE BILLS INTO ANOTHER STATE (B2CL)" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding LargeInterState}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" />
+                      <DataGridTextColumn Header="Value" Binding="{Binding InvoiceValue, StringFormat={}{0:N2}}" Width="110" />
+                      <DataGridTextColumn Header="State" Binding="{Binding PlaceOfSupply}" Width="60" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="60" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="110" />
+                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="100" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="HSN SUMMARY — EVERY CODE, IN THE UNIT IT WAS SOLD IN" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding Hsn}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="60" />
+                      <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" />
+                      <DataGridTextColumn Header="UQC" Binding="{Binding Uqc}" Width="150" />
+                      <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="60" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="50" />
+                      <DataGridTextColumn Header="Value" Binding="{Binding TotalValue, StringFormat={}{0:N2}}" Width="90" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="90" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="BILLS ISSUED — CANCELLED ONES INCLUDED" Style="{StaticResource Heading}" />
+                  <DataGrid ItemsSource="{Binding Documents}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="From" Binding="{Binding From}" Width="*" />
+                      <DataGridTextColumn Header="To" Binding="{Binding To}" Width="*" />
+                      <DataGridTextColumn Header="Issued" Binding="{Binding Total}" Width="80" />
+                      <DataGridTextColumn Header="Cancelled" Binding="{Binding Cancelled}" Width="90" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
     </TabControl>
 
     <!-- Footer ================================================================================ -->

@@ -25,6 +25,7 @@ public partial class OwnerView : Window
     private readonly NewItemViewModel _newItem;
     private readonly MaintenanceViewModel _maintenance;
     private readonly CustomersViewModel _customers;
+    private readonly GstReturnViewModel _gst;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -38,9 +39,11 @@ public partial class OwnerView : Window
         HardwareViewModel hardware,
         NewItemViewModel newItem,
         MaintenanceViewModel maintenance,
-        CustomersViewModel customers)
+        CustomersViewModel customers,
+        GstReturnViewModel gst)
     {
         ArgumentNullException.ThrowIfNull(customers);
+        ArgumentNullException.ThrowIfNull(gst);
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(hardware);
@@ -55,11 +58,13 @@ public partial class OwnerView : Window
         _newItem = newItem;
         _maintenance = maintenance;
         _customers = customers;
+        _gst = gst;
         DataContext = viewModel;
 
         HardwareTab.DataContext = hardware;
         MaintenanceTab.DataContext = maintenance;
         CustomersTab.DataContext = customers;
+        GstTab.DataContext = gst;
 
         // The list is read when the tab is first opened rather than with the window, so opening
         // the owner's screen to glance at today's takings does not also read every customer.
@@ -72,6 +77,17 @@ public partial class OwnerView : Window
             if (Tabs.SelectedItem == CatalogueTabItem)
             {
                 Dispatcher.BeginInvoke(() => NewItemName.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+                return;
+            }
+
+            // Read when first opened, like the customers: a month of lines is not worth reading for
+            // an owner who only came to look at today's takings.
+            if (Tabs.SelectedItem == GstTabItem)
+            {
+                if (!_gst.IsLoaded)
+                    _gst.Load();
+
+                Dispatcher.BeginInvoke(() => GstEarlier.Focus(), System.Windows.Threading.DispatcherPriority.Input);
                 return;
             }
 
@@ -171,7 +187,7 @@ public partial class OwnerView : Window
         // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
         if (e.KeyboardDevice.Modifiers == ModifierKeys.Control &&
-            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6 or Key.D7)
+            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6 or Key.D7 or Key.D8)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
@@ -368,6 +384,30 @@ public partial class OwnerView : Window
 
         PreviewImage.Source = image;
         PreviewImageScroll.ScrollToTop();
+    }
+
+    // ---- The GST return ---------------------------------------------------------------------------
+
+    private void GstEarlier_Click(object sender, RoutedEventArgs e) => _gst.EarlierMonth();
+
+    private void GstLater_Click(object sender, RoutedEventArgs e) => _gst.LaterMonth();
+
+    private void GstSave_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the GST return for the accountant",
+            Filter = "Web page (*.html)|*.html",
+            FileName = _gst.SuggestedFileName,
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_gst.Save(dialog.FileName) is { } problem)
+            Say(problem);
     }
 
     // ---- Loading a catalogue ---------------------------------------------------------------------

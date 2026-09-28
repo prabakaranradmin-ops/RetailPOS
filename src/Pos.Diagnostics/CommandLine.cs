@@ -35,6 +35,7 @@ public static class CommandLine
         "check-db" => (["--quick", "--vacuum"], []),
         "dashboard" => ([], ["--days", "--top", "--out"]),
         "dashboard-pin" => (["--clear"], []),
+        "gst-return" => ([], ["--month", "--out"]),
         "stock" => (["--low", "--set"], ["--sku", "--qty", "--reason", "--limit"]),
         "receipt-preview" => ([], ["--width", "--png", "--layout"]),
         "test-hardware" => (["--printer", "--drawer", "--scanner", "--scale"], ["--seconds"]),
