@@ -942,21 +942,29 @@ if (-not $NoUi) {
 
     # The last bill as the customer gets it on WhatsApp, and as a full A4 invoice. The last is
     # Kumar Traders': a bill to a business in Karnataka, which both have to say.
+    #
+    # Each headed as this build heads its bills. A bill of supply carries no tax at all - no IGST,
+    # no table of tax by HSN - and carries the composition declaration instead; these checks were
+    # written against the GST build only, and failed the no-tax build for being right.
+    $declaration = 'Composition taxable person, not eligible to collect tax on supplies'
     $r = Invoke-Pos @('bill')
     Add-Result -Kind Positive -Feature 'Digital bills' -Name 'The last bill reads as the customer gets it on WhatsApp' `
-        -Expected '*TAX INVOICE*, the GSTIN, the lines with HSN and GST, and the total' -Actual (Short $r.Output 6) `
-        -Passed ($r.ExitCode -eq 0 -and $r.Output -match '\*TAX INVOICE\*' -and $r.Output -match 'GSTIN 33AEIPH7795F1Z9' -and $r.Output -match '\*Total: Rs ')
+        -Expected "*$heading*, the GSTIN, the lines with $(if ($wantTaxBlock) { 'HSN and GST' } else { 'HSN' }), and the total" -Actual (Short $r.Output 6) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match "\*$heading\*" -and $r.Output -match 'GSTIN 33AEIPH7795F1Z9' -and $r.Output -match '\*Total: Rs ')
 
+    $businessTax = if ($wantTaxBlock) { $r.Output -match 'IGST 9\.00' } else { $r.Output -match $declaration -and $r.Output -notmatch 'IGST' }
     Add-Result -Kind Positive -Feature 'Business bills' -Name 'The bill to a business says who it was to and where' `
-        -Expected 'Bill to: Kumar Traders, Buyer GSTIN 29AABCK1234M1ZG, Place of supply: 29-Karnataka, IGST' -Actual (Short $r.Output 12) `
-        -Passed ($r.Output -match 'Bill to: Kumar Traders' -and $r.Output -match 'Buyer GSTIN 29AABCK1234M1ZG' -and $r.Output -match 'Place of supply: 29-Karnataka' -and $r.Output -match 'IGST 9\.00')
+        -Expected ('Bill to: Kumar Traders, Buyer GSTIN 29AABCK1234M1ZG, Place of supply: 29-Karnataka, ' + $(if ($wantTaxBlock) { 'IGST' } else { 'and the composition declaration in place of any tax' })) `
+        -Actual (Short $r.Output 12) `
+        -Passed ($r.Output -match 'Bill to: Kumar Traders' -and $r.Output -match 'Buyer GSTIN 29AABCK1234M1ZG' -and $r.Output -match 'Place of supply: 29-Karnataka' -and $businessTax)
 
     $billPage = Join-Path $workspace 'bill.html'
     $r = Invoke-Pos @('bill', '--out', $billPage)
     $billText = if (Test-Path $billPage) { Get-Content $billPage -Raw -Encoding UTF8 } else { '' }
-    Add-Result -Kind Positive -Feature 'Digital bills' -Name 'A bill is saved as a full A4 tax invoice' `
-        -Expected 'TAX INVOICE, the buyer''s GSTIN, the HSN table, the place of supply and the total in words' -Actual (Short $r.Output 2) `
-        -Passed ($billText -match 'TAX INVOICE' -and $billText -match 'Tax by HSN and rate' -and $billText -match '29-Karnataka' -and $billText -match '29AABCK1234M1ZG' -and $billText -match 'Rupees .+ Only')
+    $billTax = if ($wantTaxBlock) { $billText -match 'Tax by HSN and rate' } else { $billText -notmatch 'Tax by HSN and rate' -and $billText -match $declaration }
+    Add-Result -Kind Positive -Feature 'Digital bills' -Name "A bill is saved as a full A4 $(if ($wantTaxBlock) { 'tax invoice' } else { 'bill of supply' })" `
+        -Expected ("$heading, the buyer's GSTIN, " + $(if ($wantTaxBlock) { 'the HSN table' } else { 'the composition declaration' }) + ', the place of supply and the total in words') -Actual (Short $r.Output 2) `
+        -Passed ($billText -match $heading -and $billTax -and $billText -match '29-Karnataka' -and $billText -match '29AABCK1234M1ZG' -and $billText -match 'Rupees .+ Only')
 
     $r = Invoke-Pos @('bill', '--no', 'RM/99-00/1')
     Add-Result -Kind Negative -Feature 'Digital bills' -Name 'A bill number the lane never issued is refused' `

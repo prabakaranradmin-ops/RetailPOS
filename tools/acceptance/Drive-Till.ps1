@@ -366,10 +366,11 @@ function Invoke-TillWalkthrough {
         Set-Clipboard -Value 'nothing copied yet'
         Send-Keys '^w' 1200
         $digital = (Get-Clipboard -Raw)
-        $digitalRight = $digital -match '\*TAX INVOICE\*' -and $digital -match 'Toor Dal 1kg' -and $digital -match 'Customer: Lakshmi'
+        # Headed as this build heads its bills: a tax invoice, or on the no-tax build a bill of supply.
+        $digitalRight = $digital -match "\*$heading\*" -and $digital -match 'Toor Dal 1kg' -and $digital -match 'Customer: Lakshmi'
         $shot = Save-Shot 'till-11b-digital-bill'
         Add-Result -Kind Positive -Feature 'Digital bills' -Name 'Ctrl+W puts the bill just settled on the clipboard to send' `
-            -Expected '*TAX INVOICE*, the lines, and Lakshmi on it' `
+            -Expected "*$heading*, the lines, and Lakshmi on it" `
             -Actual $(if ($digital) { ($digital -split "`r?`n" | Select-Object -First 4) -join ' | ' } else { 'clipboard empty' }) `
             -Passed $digitalRight -Shot $shot
 
@@ -409,7 +410,7 @@ function Invoke-TillWalkthrough {
         Add-Result -Kind Positive -Feature 'Digital bills' -Name 'The bill taken on the phone went to the clipboard, not the printer' `
             -Expected 'the khata sale''s bill, Khata 189.00, ready to paste' `
             -Actual $(if ($paperless) { ($paperless -split "`r?`n" | Select-Object -First 4) -join ' | ' } else { 'clipboard empty' }) `
-            -Passed ($paperless -match '\*TAX INVOICE\*' -and $paperless -match 'Khata 189\.00')
+            -Passed ($paperless -match "\*$heading\*" -and $paperless -match 'Khata 189\.00')
 
         # F8: find her by name, see what she owes, take 100 in cash.
         Send-Keys '{F8}' 900
