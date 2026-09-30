@@ -263,7 +263,7 @@ public class TillLookTests
         Assert.False(vm.ShowsStandingNote);
 
         harness.Press(Key.F6);
-        Assert.Equal("No parked bills.", vm.StatusMessage);
+        Assert.Equal("No held bills.", vm.StatusMessage);
         Assert.True(vm.ShowsStandingNote);
 
         harness.Scan(DalBarcode);

@@ -70,8 +70,10 @@ public sealed partial class BillingViewModel
         if (day.CollectedCredit)
             rows.Add(new("Khata collected", Show.Money(day.CreditCollected)));
 
+        // The count goes with the words, not the figure: the figures are set in the figure font,
+        // and "₹189.00 on 1 return" there read as typewriting.
         if (day.HadReturns)
-            rows.Add(new("Refunded on returns", $"{Show.Money(day.ReturnsValue)} on {Plural.Of(day.ReturnsCount, "return")}"));
+            rows.Add(new($"Refunded on {Plural.Of(day.ReturnsCount, "return")}", Show.Money(day.ReturnsValue)));
 
         if (day.CashPaidOut != 0m)
             rows.Add(new("Paid out of the drawer", Show.Money(day.CashPaidOut)));

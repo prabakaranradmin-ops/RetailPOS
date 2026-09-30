@@ -223,7 +223,7 @@ public class KhataTillTests
         till.Press(Key.F8);
 
         Assert.False(till.ViewModel.IsCollecting);
-        Assert.Contains("Finish, park or clear the bill first", till.ViewModel.StatusMessage);
+        Assert.Contains("Finish, hold or clear the bill first", till.ViewModel.StatusMessage);
     }
 
     [Fact]

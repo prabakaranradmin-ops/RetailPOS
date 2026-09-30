@@ -784,15 +784,15 @@ const actions = {
     state.held = JSON.parse(JSON.stringify(state.lines));
     state.lines = []; state.sel = -1;
     renderBill();
-    say('Bill parked. F6 brings it back — discounts and all.');
+    say('Bill held. F6 brings it back — discounts and all.');
   },
 
   recall() {
-    if (!state.held) { say('No parked bill to recall.', 'warn'); return; }
+    if (!state.held) { say('No held bill to recall.', 'warn'); return; }
     if (state.lines.length) { say('Clear or settle this bill first.', 'warn'); return; }
     state.lines = state.held; state.held = null; state.sel = -1;
     reprice(); renderBill();
-    say('Parked bill recalled.');
+    say('Held bill recalled.');
   },
 
   new() {

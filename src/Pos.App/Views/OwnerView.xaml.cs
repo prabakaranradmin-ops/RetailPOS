@@ -521,7 +521,11 @@ public partial class OwnerView : Window
         if (!ConfirmDialog.Ask(this, "Change the prices?", PricesViewModel.Question(plan), "Change the prices", "Leave them"))
             return;
 
-        _prices.ApplySheet(plan);
+        // Printing the labels it made due is the next thing to do, and their card is below the
+        // fold: the owner was told "print them below" and left looking at the unit list. Brought
+        // into view once the list has been laid out with them in it.
+        if (_prices.ApplySheet(plan) is null)
+            Dispatcher.BeginInvoke(() => LabelsCard.BringIntoView(), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void PrintLabels_Click(object sender, RoutedEventArgs e) => _prices.Print();

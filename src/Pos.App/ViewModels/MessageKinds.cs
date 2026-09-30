@@ -22,7 +22,7 @@ public enum MessageKind
 /// <remarks>
 /// <para>
 /// The till used to say everything in one blue: "No item matches '999'" looked exactly like
-/// "Toor Dal added", and "the receipt did not print" exactly like "bill parked as H001". The
+/// "Toor Dal added", and "the receipt did not print" exactly like "bill held as H001". The
 /// messages already say plainly what happened, in a handful of set phrasings, so the kind is read
 /// from those rather than threaded through a hundred and seventy places that set a message.
 /// </para>
@@ -49,15 +49,15 @@ public static class MessageKinds
         // RECEIPT DID NOT PRINT" - and matching only the lower case turned exactly those green.
         "did not print", "DID NOT PRINT", "did not open", "DID NOT OPEN", "not available on this lane", "no printer", "Finish ",
         "first", "needs ", "Only ", "already", "again to add", "again to confirm", "again to discard",
-        "Press again", "again to close the day", "Not found:", "Nothing to ", "No parked bills", "No payment to remove", "No UPI ID",
-        "has not billed", "cannot be voided", "was voided", "is no longer parked", "Park or discard",
+        "Press again", "again to close the day", "Not found:", "Nothing to ", "No held bills", "No payment to remove", "No UPI ID",
+        "has not billed", "cannot be voided", "was voided", "is no longer held", "Hold or discard",
         "Select a line", "owes nothing", "no khata to print", "Void ", "near its date", "past its date",
     ];
 
     /// <summary>What went through.</summary>
     private static readonly string[] Succeeded =
     [
-        " settled for", " added.", " removed.", "parked as", "parked again", " saved", "recorded",
+        " settled for", " added.", " removed.", "held as", "held again", " saved", "recorded",
         "printed", "reprinted", " attached", " paid ", "Day closed", "hand back", "taken off",
         "redeemed", "is on the clipboard", "Float of", "discarded", "off the scale label",
         "put on the bill", " sent", "is a business", "Paid in full", "again to finish",

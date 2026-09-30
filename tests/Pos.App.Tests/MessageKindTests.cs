@@ -80,7 +80,7 @@ public class MessageKindTests
 
         till.Press(Key.F5);
 
-        Assert.Contains("parked as", till.ViewModel.StatusMessage);
+        Assert.Contains("held as", till.ViewModel.StatusMessage);
         Assert.Equal(MessageKind.Done, till.ViewModel.StatusKind);
     }
 
@@ -92,7 +92,7 @@ public class MessageKindTests
 
         till.Press(Key.F6);
 
-        Assert.Equal("No parked bills.", till.ViewModel.StatusMessage);
+        Assert.Equal("No held bills.", till.ViewModel.StatusMessage);
         Assert.Equal(MessageKind.Warning, till.ViewModel.StatusKind);
     }
 

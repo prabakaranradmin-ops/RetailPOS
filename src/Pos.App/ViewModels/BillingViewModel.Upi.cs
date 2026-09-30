@@ -107,6 +107,31 @@ public sealed partial class BillingViewModel
 
     public bool HasUpiHint => UpiHint.Length > 0;
 
+    /// <summary>
+    /// The UPI side of F8 while there is no code on it: why not, with UPI picked; how to get one,
+    /// with cash or card.
+    /// </summary>
+    /// <remarks>
+    /// The side was there only while the code was, so the khata pane widened by the code's width
+    /// when UPI was picked and narrowed again when it was not - the card jumped sideways on an arrow
+    /// key. It now keeps the space, and says something useful in it.
+    /// </remarks>
+    public string CollectUpiNote
+    {
+        get
+        {
+            if (!IsCollectingAmount || ShowsUpiQr)
+                return string.Empty;
+
+            if (UpiPicked)
+                return UpiHint;
+
+            return _upi is null
+                ? "With the shop's UPI ID set, a code with the amount shows here. The owner sets it in Settings (Ctrl+D)."
+                : "Pick UPI with the arrows, and a code with the amount shows here for their phone to scan.";
+        }
+    }
+
     /// <summary>Ctrl+Q: prints the code with the amount on a slip, for the customer to scan.</summary>
     public void PrintUpiCode()
     {
@@ -173,5 +198,6 @@ public sealed partial class BillingViewModel
         Raise(nameof(UpiPayeeLine));
         Raise(nameof(UpiHint));
         Raise(nameof(HasUpiHint));
+        Raise(nameof(CollectUpiNote));
     }
 }

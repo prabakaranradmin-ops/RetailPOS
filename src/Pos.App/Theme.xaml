@@ -87,7 +87,7 @@
       What a message is, by colour as well as by word.
 
       The till used to say everything in one blue - "the receipt did not print" in the same colour as
-      "bill parked as H001". Each kind now has an ink that clears 4.5:1 on the dark panels, and a
+      "bill held as H001". Each kind now has an ink that clears 4.5:1 on the dark panels, and a
       tinted ground to sit on. Red is kept for things that went wrong, amber for things to check.
     -->
     <SolidColorBrush x:Key="Danger" Color="#FFF87171" />
@@ -402,7 +402,7 @@
       A list row: tinted and barred in the accent when it is the one chosen, lit a little under the
       mouse.
 
-      The system's own template drew the chosen row in its own grey - the parked bills and the
+      The system's own template drew the chosen row in its own grey - the held bills and the
       tenders looked as if they belonged to another program - and a colour set on the row could not
       reach through it. This one is drawn here, so a chosen row looks the same in every list.
     -->

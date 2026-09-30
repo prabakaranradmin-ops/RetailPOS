@@ -184,7 +184,7 @@ public sealed partial class BillingViewModel
 
         if (Mode == BillingMode.Tender || !_bill.IsEmpty)
         {
-            StatusMessage = "Finish, park or clear the bill first - a return is its own document, not part of a sale.";
+            StatusMessage = "Finish, hold or clear the bill first - a return is its own document, not part of a sale.";
             return;
         }
 

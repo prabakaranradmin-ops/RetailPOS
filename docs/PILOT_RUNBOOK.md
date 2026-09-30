@@ -151,8 +151,8 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `Ctrl+K` | **Khata statement** — for the customer picked in `F8` or on the bill: printed, and copied to send |
 | `Ctrl+W` | **The bill on WhatsApp** — instead of paper while paying, or the last bill afterwards |
 | `Ctrl+G` | **A bill to a business** — the customer's GSTIN and address |
-| `F5` | Park the bill |
-| `F6` | Bring a parked bill back |
+| `F5` | Hold the bill |
+| `F6` | Bring a held bill back |
 | `F12` | **Take payment** |
 | `Ctrl+P` | Reprint a bill |
 | `Ctrl+U` | Say who is on the till |
@@ -321,7 +321,7 @@ tell them it is taken.
 
 **When they collect, or the delivery goes** — `F6`, pick the order, `Enter`. It comes back saying
 what it was. Add or change anything, then `F12` as usual. That is when it becomes a sale: an order
-waiting is not a bill, has no number, and takes no stock. `F5` parks it again as an order.
+waiting is not a bill, has no number, and takes no stock. `F5` holds it again as an order.
 
 ### Cash in and out, and expenses
 
@@ -373,7 +373,7 @@ time; nothing is refunded until the last `Enter`.
 
 - **"No item matches …"** — the item is not in the catalogue, or the barcode is wrong. Search by
   name to check. Add it to the catalogue file and re-import with `--update` after hours.
-- **A bill that has to wait** — `F5` parks it and gives you a token. `F6` brings it back. Parked
+- **A bill that has to wait** — `F5` holds it and gives you a token. `F6` brings it back. Held
   bills survive a restart and do **not** take an invoice number while they wait.
 - **The drawer will not open** — the till says so. Open it with the key and carry on; the sale is
   already saved.
@@ -416,12 +416,12 @@ scripted rollout. Nobody running a shop needs them.)*
 
 ### 1. Clear the screen
 
-Finish, park, or discard whatever bill is on the till. The close is refused while a bill is on
+Finish, hold, or discard whatever bill is on the till. The close is refused while a bill is on
 screen, because that bill has not been paid for.
 
-### 2. Deal with parked bills
+### 2. Deal with held bills
 
-`F6` shows anything still parked. Settle them or discard them. The Z-report will tell you if any
+`F6` shows anything still held. Settle them or discard them. The Z-report will tell you if any
 are left, but sorting it out now is easier than explaining it tomorrow.
 
 **Orders are the exception.** A phone or WhatsApp order waiting to be collected or delivered stays
@@ -784,7 +784,7 @@ Print this and tick it.
 - [ ] Back up: **Ctrl+D**, **Ctrl+6**, **Back up now**
 
 **Each night**
-- [ ] Screen clear, parked bills dealt with
+- [ ] Screen clear, held bills dealt with
 - [ ] `Shift+F12` twice
 - [ ] Drawer counted against the report, difference written down
 - [ ] Report says it reconciles

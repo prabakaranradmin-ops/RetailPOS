@@ -298,7 +298,7 @@ public class DayCloseTests(ITestOutputHelper output) : IDisposable
         Assert.Equal(1, day.InvoiceCount);
 
         var report = new ZReportComposer(Store).Compose(day).ToPlainText();
-        Assert.Contains("1 bill still parked", report);
+        Assert.Contains("1 bill still held", report);
     }
 
     /// <summary>
@@ -321,7 +321,7 @@ public class DayCloseTests(ITestOutputHelper output) : IDisposable
         Assert.Equal(1, day.OrdersWaiting);
 
         var report = new ZReportComposer(Store).Compose(day).ToPlainText();
-        Assert.DoesNotContain("still parked", report);
+        Assert.DoesNotContain("still held", report);
         Assert.Contains("1 order waiting", report);
         Assert.Contains("To collect or deliver.", report);
 

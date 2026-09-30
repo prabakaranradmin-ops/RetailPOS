@@ -1022,10 +1022,10 @@ if (-not $NoUi) {
         -Detail 'A sale belongs to exactly one Z-report, so closing twice is harmless and takes nothing.'
 
     # Lakshmi's WhatsApp order, saved on the till before the close, is still waiting - and is listed
-    # as an order, not as a parked bill to recall or discard.
-    $waiting = ($r.Output -match '1 order waiting|1 ஆர்டர் காத்திருக்கிறது') -and ($r.Output -notmatch 'still parked|நிறுத்தி வைக்கப்பட்டுள்ளது')
-    Add-Result -Kind Positive -Feature 'Customer orders' -Name 'An order waiting outlives the close, listed apart from parked bills' `
-        -Expected '1 order waiting, and no bills still parked' -Actual (Short $r.Output 4) `
+    # as an order, not as a held bill to recall or discard.
+    $waiting = ($r.Output -match '1 order waiting|1 ஆர்டர் காத்திருக்கிறது') -and ($r.Output -notmatch 'still held|நிறுத்தி வைக்கப்பட்டுள்ளது')
+    Add-Result -Kind Positive -Feature 'Customer orders' -Name 'An order waiting outlives the close, listed apart from held bills' `
+        -Expected '1 order waiting, and no bills still held' -Actual (Short $r.Output 4) `
         -Passed $waiting `
         -Detail 'An order is meant to wait for the customer or the delivery; closing the day leaves it in F6.'
 }

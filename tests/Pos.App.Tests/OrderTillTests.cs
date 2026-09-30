@@ -148,7 +148,7 @@ public class OrderTillTests
         till.Press(Key.Enter);
         till.Press(Key.F5);
 
-        Assert.Contains("Order parked again", till.ViewModel.StatusMessage);
+        Assert.Contains("Order held again", till.ViewModel.StatusMessage);
         Assert.Equal(OrderKind.WhatsApp, Assert.Single(till.HeldBills.List(BillingHarness.LaneId)).Order!.Kind);
     }
 

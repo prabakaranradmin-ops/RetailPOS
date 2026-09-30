@@ -28,7 +28,7 @@ public sealed class HeldBillRepository : IHeldBillStore
         ArgumentNullException.ThrowIfNull(lines);
 
         if (lines.Count == 0)
-            throw new InvalidOperationException("There is nothing to park — the bill has no lines.");
+            throw new InvalidOperationException("There is nothing to hold — the bill has no lines.");
 
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction(deferred: false);
@@ -271,7 +271,7 @@ public sealed class HeldBillRepository : IHeldBillStore
                 return candidate;
         }
 
-        throw new InvalidOperationException("This lane already has 999 bills parked; recall or discard some before parking another.");
+        throw new InvalidOperationException("This lane already has 999 bills held; recall or discard some before holding another.");
     }
 
     private static List<InvoiceLine> ReadLines(SqliteConnection connection, long heldBillId, SqliteTransaction? transaction = null)

@@ -120,7 +120,7 @@ public sealed partial class BillingViewModel
 
         if (Mode == BillingMode.Tender || !_bill.IsEmpty)
         {
-            StatusMessage = "Finish, park or clear the bill first - cash in or out is not part of a sale.";
+            StatusMessage = "Finish, hold or clear the bill first - cash in or out is not part of a sale.";
             return;
         }
 

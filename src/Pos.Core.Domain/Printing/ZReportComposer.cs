@@ -393,8 +393,8 @@ public sealed class ZReportComposer
         if (day.HeldBillsOutstanding > 0)
         {
             report.Blank();
-            report.Text($"{day.HeldBillsOutstanding} {(day.HeldBillsOutstanding == 1 ? Labels.BillStillParked : Labels.BillsStillParked)}", TextAlignment.Center, bold: true);
-            report.Text(Labels.ParkedBillsNote, TextAlignment.Center);
+            report.Text($"{day.HeldBillsOutstanding} {(day.HeldBillsOutstanding == 1 ? Labels.BillStillHeld : Labels.BillsStillHeld)}", TextAlignment.Center, bold: true);
+            report.Text(Labels.HeldBillsNote, TextAlignment.Center);
         }
 
         // Orders are meant to wait, so they are listed without the advice to recall or discard.

@@ -435,8 +435,8 @@ public sealed class ReceiptComposer
             if (sale.Customer is { Name: not null } named)
                 receipt.Columns(Labels.Mobile, named.MobileNo);
 
-            if (sale.RecalledFromToken is { } parked)
-                receipt.Columns(Labels.ParkedAs, parked);
+            if (sale.RecalledFromToken is { } held)
+                receipt.Columns(Labels.HeldAs, held);
 
             return;
         }
@@ -465,7 +465,7 @@ public sealed class ReceiptComposer
             receipt.Columns(Labels.Mobile, withMobile.MobileNo);
 
         if (sale.RecalledFromToken is { } token)
-            receipt.Columns(Labels.ParkedAs, token);
+            receipt.Columns(Labels.HeldAs, token);
     }
 
     private void WriteLines(ReceiptBuilder receipt, SaleDraft sale)
@@ -838,7 +838,7 @@ public sealed class ReceiptComposer
         Pair(receipt, $"{Labels.Customer}: {customer}", mobile);
 
         if (sale.RecalledFromToken is { } token)
-            receipt.Columns(Labels.ParkedAs, token);
+            receipt.Columns(Labels.HeldAs, token);
 
         WriteBuyer(receipt, sale);
     }

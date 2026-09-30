@@ -1268,33 +1268,52 @@
                 </ListBox.ItemTemplate>
               </ListBox>
 
-              <TextBlock Margin="0,10,0,0" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}"
-                         Text="{Binding UpiHint, Mode=OneWay}"
-                         Visibility="{Binding HasUpiHint, Converter={StaticResource BoolToVisibility}}" />
               <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}"
                          Visibility="{Binding IsCollectingAmount, Converter={StaticResource BoolToVisibility}}"
                          Text="Ctrl+K prints their khata statement. Ctrl+Q prints the UPI code." />
             </StackPanel>
 
-            <!-- Paying back by UPI: the code for what they owe, or what they are paying. -->
-            <Border x:Name="CollectUpiPanel" Grid.Column="1" Width="360" Margin="20,0,0,0" Padding="12"
-                    CornerRadius="10" Background="White" VerticalAlignment="Center"
-                    Visibility="{Binding ShowsUpiQr, Converter={StaticResource BoolToVisibility}}">
+            <!-- Paying back by UPI: the code for what they owe, or what they are paying. The side is
+                 kept, at the code's size, for as long as the amount is being taken - with a word on
+                 UPI in it when there is no code - so the card is one size whichever way they pay. -->
+            <Border x:Name="CollectUpiPanel" Grid.Column="1" Width="360" MinHeight="184" Margin="20,0,0,0" Padding="12"
+                    CornerRadius="10" VerticalAlignment="Center"
+                    Visibility="{Binding IsCollectingAmount, Converter={StaticResource BoolToVisibility}}">
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Setter Property="Background" Value="{StaticResource FieldFill}" />
+                  <Setter Property="BorderBrush" Value="{StaticResource CardEdge}" />
+                  <Setter Property="BorderThickness" Value="1" />
+                  <Style.Triggers>
+                    <!-- Black on white whatever the theme: a phone camera reads that best. -->
+                    <DataTrigger Binding="{Binding ShowsUpiQr}" Value="True">
+                      <Setter Property="Background" Value="White" />
+                      <Setter Property="BorderThickness" Value="0" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
               <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <v:QrCodeView x:Name="CollectUpiCode" Text="{Binding UpiQr, Mode=OneWay}" Width="160" Height="160" />
-                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                  <TextBlock Text="Scan to pay with any UPI app" Foreground="#FF333333" FontSize="13" TextWrapping="Wrap" />
-                  <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left" Height="36" Margin="0,4,0,2">
-                    <TextBlock Text="{Binding UpiCaption, Mode=OneWay}" Foreground="Black" FontSize="28" FontWeight="Bold"
-                               FontFamily="{StaticResource FigureFont}" />
-                  </Viewbox>
-                  <TextBlock Text="{Binding UpiPayeeLine, Mode=OneWay}" Foreground="#FF333333" FontSize="12"
-                             TextWrapping="Wrap" />
-                </StackPanel>
+                <!-- Empty while the code shows. -->
+                <TextBlock x:Name="CollectUpiNote" Text="{Binding CollectUpiNote, Mode=OneWay}" FontSize="13"
+                           TextWrapping="Wrap" Foreground="{StaticResource InkMuted}" VerticalAlignment="Center" />
+
+                <Grid Visibility="{Binding ShowsUpiQr, Converter={StaticResource BoolToVisibility}}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <v:QrCodeView x:Name="CollectUpiCode" Text="{Binding UpiQr, Mode=OneWay}" Width="160" Height="160" />
+                  <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Scan to pay with any UPI app" Foreground="#FF333333" FontSize="13" TextWrapping="Wrap" />
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left" Height="36" Margin="0,4,0,2">
+                      <TextBlock Text="{Binding UpiCaption, Mode=OneWay}" Foreground="Black" FontSize="28" FontWeight="Bold"
+                                 FontFamily="{StaticResource FigureFont}" />
+                    </Viewbox>
+                    <TextBlock Text="{Binding UpiPayeeLine, Mode=OneWay}" Foreground="#FF333333" FontSize="12"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+                </Grid>
               </Grid>
             </Border>
           </Grid>
@@ -1590,7 +1609,7 @@
       </Border>
     </v:PaneScrim>
 
-    <!-- Recall list, over the whole screen while choosing a parked bill (SRS 2.5). -->
+    <!-- Recall list, over the whole screen while choosing a held bill (SRS 2.5). -->
     <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
             Visibility="{Binding IsRecalling, Converter={StaticResource BoolToVisibility}}">
       <Border Width="660" MaxHeight="480" VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -1633,7 +1652,7 @@
                   <StackPanel Grid.Column="2" Margin="0,0,8,0">
                     <TextBlock Text="{Binding CustomerLabel}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
                     <!-- An order says so, with where it is going or when, so it is not mistaken for a
-                         bill somebody parked to fetch their wallet. -->
+                         bill somebody held to fetch their wallet. -->
                     <TextBlock Text="{Binding OrderLine}" FontSize="12" Foreground="{StaticResource Accent}"
                                TextWrapping="Wrap" Margin="0,2,0,0"
                                Visibility="{Binding IsOrder, Converter={StaticResource BoolToVisibility}}" />

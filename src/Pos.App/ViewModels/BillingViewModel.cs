@@ -473,7 +473,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (Mode == BillingMode.Tender || !_bill.IsEmpty)
         {
-            StatusMessage = "Finish, park or clear the bill first - a khata payment is not part of a sale.";
+            StatusMessage = "Finish, hold or clear the bill first - a khata payment is not part of a sale.";
             return;
         }
 
@@ -1066,7 +1066,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (Mode == BillingMode.Tender)
         {
-            StatusMessage = "Finish or abandon the payment before parking this bill.";
+            StatusMessage = "Finish or abandon the payment before holding this bill.";
             return;
         }
 
@@ -1084,7 +1084,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         ClearBill();
         RefreshHeldBills();
 
-        StatusMessage = order is null ? $"Bill parked as {token}." : $"Order parked again as {token}.";
+        StatusMessage = order is null ? $"Bill held as {token}." : $"Order held again as {token}.";
     }
 
     public void RecallBill()
@@ -1102,13 +1102,13 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (HeldBills.Count == 0)
         {
-            StatusMessage = "No parked bills.";
+            StatusMessage = "No held bills.";
             return;
         }
 
         Mode = BillingMode.Recall;
         SelectedHeldBillIndex = 0;
-        StatusMessage = $"Choose a parked bill with the arrows, then press {CommitKey}.";
+        StatusMessage = $"Choose a held bill with the arrows, then press {CommitKey}.";
     }
 
     /// <summary>
@@ -1234,7 +1234,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (!_bill.IsEmpty)
         {
-            StatusMessage = "Finish, park or discard the bill on screen before closing the day.";
+            StatusMessage = "Finish, hold or discard the bill on screen before closing the day.";
             return;
         }
 
@@ -2263,7 +2263,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (!_bill.IsEmpty)
         {
-            StatusMessage = "Park or discard the current bill before recalling another.";
+            StatusMessage = "Hold or discard the current bill before recalling another.";
             return;
         }
 
@@ -2273,7 +2273,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         {
             // Someone else took it, or it was discarded since the list was drawn.
             RefreshHeldBills();
-            StatusMessage = $"{summary.Token} is no longer parked.";
+            StatusMessage = $"{summary.Token} is no longer held.";
             return;
         }
 

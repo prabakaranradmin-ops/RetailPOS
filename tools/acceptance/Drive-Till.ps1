@@ -292,17 +292,17 @@ function Invoke-TillWalkthrough {
             -Expected 'the discount on the line and in the totals' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
-        # --- Park and recall ---------------------------------------------------------------
+        # --- Hold and recall ---------------------------------------------------------------
         Send-Keys '{F5}' 900
-        $shot = Save-Shot 'till-06-parked'
-        Add-Result -Kind Positive -Feature 'Hold' -Name 'A bill can be parked' `
+        $shot = Save-Shot 'till-06-held'
+        Add-Result -Kind Positive -Feature 'Hold' -Name 'A bill can be held' `
             -Expected 'the bill leaves the screen and a token is given' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
         Send-Keys '{F6}' 900
         Send-Keys '{ENTER}' 900
         $shot = Save-Shot 'till-07-recalled'
-        Add-Result -Kind Positive -Feature 'Hold' -Name 'A parked bill comes back with its discount intact' `
+        Add-Result -Kind Positive -Feature 'Hold' -Name 'A held bill comes back with its discount intact' `
             -Expected 'the same three lines and the same discount' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 

@@ -436,6 +436,26 @@ The 25 findings left open or partly fixed, all done.
 The acceptance run passed all 194 of its checks. Its screenshots found the khata pane running
 under the bar, which the layout test had not checked; that test now checks the whole card.
 
+### Loose ends from the review — **complete** *(2026-09-30, approved: "fix it")*
+
+Four things left after the review, all small:
+
+- **One word for a bill put aside: held.** `F5` is Hold and `F6` lists "Held bills", but the
+  messages ("Bill parked as H001", "No parked bills"), the bill ("Parked as"), the day-end report
+  ("1 bill still parked") and the runbook said "park". All now say "hold"; the code keeps its own
+  names. `WordingTests` fails the build on "park" in any string in `src`.
+- **The khata pane keeps one size.** The UPI side stays for as long as the amount is being taken,
+  at the code's size, and says how to get a code when there is none. The card had widened and
+  narrowed as the cashier arrowed through the tenders.
+- **The close-day pane counts returns in words.** "Refunded on 1 return: ₹189.00", with the count
+  in the label instead of in the figure font.
+- **The labels due come into view** once a price sheet is loaded, since printing them is the next
+  thing to do.
+
+**Gate:** 736 app tests and 1,506 core tests pass. New tests cover the khata pane's size from cash
+to UPI, the close-day returns row, and "park" anywhere in the source. The acceptance run passed all
+194 of its checks.
+
 ## The shop-owner programme *(added 2026-09-29, approved: "I want to do all one by one")*
 
 Sixteen improvements, taken in dependency order so each builds on the last. Purchases comes first

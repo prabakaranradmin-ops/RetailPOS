@@ -71,7 +71,7 @@ public sealed record ReceiptLabels
     public required string Customer { get; init; }
     public required string Mobile { get; init; }
     public required string Lane { get; init; }
-    public required string ParkedAs { get; init; }
+    public required string HeldAs { get; init; }
 
     public required string ItemName { get; init; }
 
@@ -226,12 +226,12 @@ public sealed record ReceiptLabels
     public required string GrossLessDiscount { get; init; }
     public required string TaxablePlusTax { get; init; }
     public required string TendersLessChange { get; init; }
-    /// <summary>After a count of more than one: "2 bills still parked".</summary>
-    public required string BillsStillParked { get; init; }
+    /// <summary>After a count of more than one: "2 bills still held".</summary>
+    public required string BillsStillHeld { get; init; }
 
-    /// <summary>After a count of one: "1 bill still parked". The same words in a language that does not inflect.</summary>
-    public required string BillStillParked { get; init; }
-    public required string ParkedBillsNote { get; init; }
+    /// <summary>After a count of one: "1 bill still held". The same words in a language that does not inflect.</summary>
+    public required string BillStillHeld { get; init; }
+    public required string HeldBillsNote { get; init; }
 
     /// <summary>After a count of more than one: "2 orders waiting".</summary>
     public required string OrdersWaiting { get; init; }
@@ -285,7 +285,7 @@ public sealed record ReceiptLabels
         Customer = "Customer",
         Mobile = "Mobile",
         Lane = "Lane",
-        ParkedAs = "Parked as",
+        HeldAs = "Held as",
 
         ItemName = "Item",
         ItemShort = "Item",
@@ -383,9 +383,9 @@ public sealed record ReceiptLabels
         GrossLessDiscount = "gross less discount",
         TaxablePlusTax = "taxable plus tax",
         TendersLessChange = "tenders less change",
-        BillsStillParked = "bills still parked",
-        BillStillParked = "bill still parked",
-        ParkedBillsNote = "These are not sales. Recall or discard them.",
+        BillsStillHeld = "bills still held",
+        BillStillHeld = "bill still held",
+        HeldBillsNote = "These are not sales. Recall or discard them.",
         OrdersWaiting = "orders waiting",
         OrderWaiting = "order waiting",
         ScanToPay = "SCAN TO PAY BY UPI",
@@ -445,7 +445,7 @@ public sealed record ReceiptLabels
         Customer = "கஸ்டமர்",
         Mobile = "மொபைல்",
         Lane = "லேன்",
-        ParkedAs = "நிறுத்தியது",
+        HeldAs = "நிறுத்தியது",
 
         ItemName = "பொருளின் பெயர்",
 
@@ -561,9 +561,9 @@ public sealed record ReceiptLabels
         GrossLessDiscount = "மொத்த விற்பனை - தள்ளுபடி",
         TaxablePlusTax = "வரிக்குரிய தொகை + வரி",
         TendersLessChange = "வந்த பணம் - கொடுத்த மீதம்",
-        BillsStillParked = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
-        BillStillParked = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
-        ParkedBillsNote = "இவை விற்பனை அல்ல. மீண்டும் எடுக்கவும் அல்லது நீக்கவும்.",
+        BillsStillHeld = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
+        BillStillHeld = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
+        HeldBillsNote = "இவை விற்பனை அல்ல. மீண்டும் எடுக்கவும் அல்லது நீக்கவும்.",
         OrdersWaiting = "ஆர்டர் காத்திருக்கிறது",
         OrderWaiting = "ஆர்டர் காத்திருக்கிறது",
         ScanToPay = "ஸ்கேன் செய்து UPI மூலம் செலுத்தவும்",

@@ -242,7 +242,8 @@ it gives out of date. A pane with a UPI code puts the code beside its other cont
 under them, so that the card fits above the note and the bar on a 768-high till.
 
 **Words, figures and dates, one way.** Counts go through `Plural.Of` ("1 bill", "3 bills"), and
-`PluralTests` fails the build on "(s)" in any string in `src`. On screen, money in a sentence is
+`PluralTests` fails the build on "(s)" in any string in `src`. A bill put aside with `F5` is
+"held" wherever a person reads about it, and `WordingTests` fails the build on "park". On screen, money in a sentence is
 `Show.Money` (₹1,23,456.50), a bare figure is `Show.Figure`, dates are "30 Sep 2026" and times are
 24-hour; the till and owner windows run in `en-IN` so bound figures group the Indian way, and dates
 in bindings go through `ShowConverter`, because Indian English spells the month "Sept". Paper keeps

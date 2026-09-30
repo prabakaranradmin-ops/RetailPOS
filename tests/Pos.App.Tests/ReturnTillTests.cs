@@ -142,6 +142,28 @@ public class ReturnTillTests
         Assert.Contains(sale.InvoiceNo, paper);
     }
 
+    /// <summary>
+    /// The close-the-day pane counts the returns in the words and keeps the figure a figure: it read
+    /// "₹100.00 on 1 return" in the figure font.
+    /// </summary>
+    [Fact]
+    public void TheCloseDayPaneCountsReturnsInItsWords()
+    {
+        using var till = Till();
+        SellAndPay(till);
+
+        till.Press(Key.F9);
+        till.Press(Key.Enter);
+        Type(till, "1");
+        till.Press(Key.Enter);
+        Type(till, "wrong brand");
+
+        till.Press(Key.F12, ModifierKeys.Shift);
+
+        Assert.True(till.ViewModel.IsConfirmingDayClose);
+        Assert.Contains(new DayCloseRow("Refunded on 1 return", "₹100.00"), till.ViewModel.DayCloseRows);
+    }
+
     [Fact]
     public void AStarBringsBackTheWholeBill()
     {

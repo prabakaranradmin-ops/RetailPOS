@@ -500,7 +500,7 @@ public class KeyboardOnlyFlowTests
         till.Press(Key.Enter);
 
         Assert.Single(till.ViewModel.Lines);
-        Assert.Contains("Park or discard", till.ViewModel.StatusMessage);
+        Assert.Contains("Hold or discard", till.ViewModel.StatusMessage);
         Assert.Single(till.ViewModel.HeldBills);
     }
 
@@ -523,7 +523,7 @@ public class KeyboardOnlyFlowTests
         till.Press(Key.F6);
 
         Assert.False(till.ViewModel.IsRecalling);
-        Assert.Contains("No parked bills", till.ViewModel.StatusMessage);
+        Assert.Contains("No held bills", till.ViewModel.StatusMessage);
     }
 
     // ---- New bill ----------------------------------------------------------------------------

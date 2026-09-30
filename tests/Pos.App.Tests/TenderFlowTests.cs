@@ -233,7 +233,7 @@ public class TenderFlowTests
 
         till.Press(Key.F5);
         Assert.True(till.ViewModel.IsTendering);
-        Assert.Contains("before parking", till.ViewModel.StatusMessage);
+        Assert.Contains("before holding", till.ViewModel.StatusMessage);
 
         till.Press(Key.N, ModifierKeys.Control);
         Assert.True(till.ViewModel.IsTendering);

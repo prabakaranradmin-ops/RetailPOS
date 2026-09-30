@@ -560,6 +560,71 @@ public class LayoutFitTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// The khata pane is one size whichever way they pay. The code's side came and went with UPI, so
+    /// the card widened by 380 and narrowed again on each arrow key.
+    /// </summary>
+    [Fact]
+    public void TheKhataPaymentPaneKeepsItsSizeFromCashToUpi()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        harness.ViewModel.Upi = new UpiPayee("sri.lakshmi.stores.main.road@okhdfcbank", "Sri Lakshmi Stores, Main Road, Tirunelveli");
+        harness.AddCustomer("9500012345", name: "Lakshmi Narayanan Subramaniam");
+        harness.Press(Key.F7);
+        harness.ViewModel.EditBuffer = "9500012345";
+        harness.Press(Key.Enter);
+        harness.Scan("8901234567890");
+        harness.Press(Key.F12);
+        harness.Press(Key.Down);
+        harness.Press(Key.Down);
+        harness.Press(Key.Down);
+        harness.Press(Key.Enter);
+        harness.Press(Key.Enter);
+
+        harness.Press(Key.F8);
+        harness.ViewModel.EditBuffer = "9500012345";
+        harness.Press(Key.Enter);
+
+        Assert.False(harness.ViewModel.ShowsUpiQr);
+        Assert.Contains("Pick UPI with the arrows", harness.ViewModel.CollectUpiNote);
+        var cash = CollectPaneSize(harness);
+
+        harness.Press(Key.Down);
+
+        Assert.True(harness.ViewModel.ShowsUpiQr);
+        Assert.Equal(string.Empty, harness.ViewModel.CollectUpiNote);
+        var upi = CollectPaneSize(harness);
+
+        Assert.Equal(cash, upi);
+    }
+
+    private static Size CollectPaneSize(BillingHarness harness)
+    {
+        var size = Size.Empty;
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+                Wpf.Settle(window);
+
+                var pane = (FrameworkElement)window.FindName("CollectPane");
+                size = new Size(Math.Round(pane.ActualWidth), Math.Round(pane.ActualHeight));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        return size;
+    }
+
     /// <summary>The payment pane at its tallest: two payments taken, and the UPI code for the rest.</summary>
     [Fact]
     public void ThePaymentPaneFitsWithTheUpiCode()
