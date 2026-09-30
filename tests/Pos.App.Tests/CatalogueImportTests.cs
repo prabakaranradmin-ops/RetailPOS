@@ -84,7 +84,7 @@ public class CatalogueImportTests : IDisposable
 
         Assert.Equal(2, Items.Count());
         Assert.Equal("Toor Dal 1kg", Items.FindBySku("DAL001")!.Name);
-        Assert.Contains("2 item(s) added", screen.Verdict);
+        Assert.Contains("2 items added", screen.Verdict);
     }
 
     /// <summary>

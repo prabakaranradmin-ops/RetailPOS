@@ -361,7 +361,7 @@ public class CustomerTests : IDisposable
         till.Press(Key.Enter);
 
         Assert.False(till.ViewModel.IsNamingCustomer);
-        Assert.Contains("Commit again to add", till.ViewModel.StatusMessage);
+        Assert.Contains("Enter again to add", till.ViewModel.StatusMessage);
     }
 
     [Fact]
@@ -497,7 +497,7 @@ public class CustomerTests : IDisposable
 
         Assert.Empty(screen.Results);
         Assert.False(screen.HasSelection);
-        Assert.Contains("1 bill(s) kept", screen.Status);
+        Assert.Contains("1 bill kept", screen.Status);
     }
 
     [Fact]

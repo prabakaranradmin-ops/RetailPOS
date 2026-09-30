@@ -63,7 +63,7 @@ public class VoidAndCashierFlowTests
         Assert.True(till.ViewModel.IsVoiding);
         Assert.Contains(invoiceNo, till.ViewModel.StatusMessage);
         Assert.Contains("189.00", till.ViewModel.StatusMessage);
-        Assert.Contains("Commit again", till.ViewModel.StatusMessage);
+        Assert.Contains("Enter again", till.ViewModel.StatusMessage);
         Assert.False(till.Invoices.FindByInvoiceNo(invoiceNo)!.IsVoided);
 
         till.Press(Key.Enter);

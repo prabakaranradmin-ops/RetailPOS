@@ -258,4 +258,139 @@ public class ThemeContrastTests
             "These pairings are below 4.5:1 and would be hard to read at a counter:\n  "
             + string.Join("\n  ", failures));
     }
+
+    // ---- The richer look: cards, fields, messages, charts ----------------------------------------
+
+    /// <summary>The colours a gradient brush in the theme runs through, stop by stop.</summary>
+    /// <remarks>
+    /// A card's fill is a gradient, so text on a card is checked against each end of it: whatever
+    /// is readable on both ends is readable everywhere between.
+    /// </remarks>
+    private static IReadOnlyList<string> Stops(string key)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Theme.xaml");
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        var brush = XDocument.Load(path)
+            .Descendants()
+            .FirstOrDefault(e => e.Name.LocalName.EndsWith("GradientBrush", StringComparison.Ordinal)
+                                 && (string?)e.Attribute(xaml + "Key") == key);
+
+        Assert.True(brush is not null, $"Theme.xaml has no gradient called '{key}'.");
+
+        return brush!.Descendants(presentation + "GradientStop").Select(s => s.Attribute("Color")!.Value).ToList();
+    }
+
+    private static void AssertReadableOnGradient(string foreground, string gradient, double bar = Wcag.NormalText)
+    {
+        foreach (var stop in Stops(gradient))
+        {
+            var ratio = Wcag.Ratio(Colour(foreground), stop);
+
+            Assert.True(ratio >= bar,
+                $"{foreground} on {gradient} is {ratio:N2}:1 where the gradient is {stop}, below {bar:N1}:1.");
+        }
+    }
+
+    /// <summary>
+    /// The edge of a box you type in, against everything a box sits on.
+    /// </summary>
+    /// <remarks>
+    /// 3:1 is WCAG's bar for the parts of a control you need to see to use it (1.4.11). The edge
+    /// used to be Line, #FF232B38, which is 1.3:1 on the page - an empty amount box in the payment
+    /// pane was a dark patch on a dark card, and a cashier had to know where to type.
+    /// </remarks>
+    [Theory]
+    [InlineData("FieldFill")]
+    [InlineData("Surface")]
+    [InlineData("SurfaceRaised")]
+    public void ABoxToTypeInCanBeSeen(string background) =>
+        AssertReadable("FieldBorder", background, bar: 3.0);
+
+    [Fact]
+    public void ABoxToTypeInCanBeSeenOnACard() =>
+        AssertReadableOnGradient("FieldBorder", "CardFill", bar: 3.0);
+
+    /// <summary>Each kind of message, in its own colour on its own tint.</summary>
+    [Theory]
+    [InlineData("Accent", "InfoSoft")]
+    [InlineData("Done", "DoneSoft")]
+    [InlineData("Warning", "WarningSoft")]
+    [InlineData("Danger", "DangerSoft")]
+    public void EveryKindOfMessageIsReadableOnItsBar(string ink, string bar) =>
+        AssertReadable(ink, bar);
+
+    /// <summary>
+    /// The kinds are told apart by more than hue: "refused" and "done" differ in lightness as well,
+    /// for the one cashier in twelve who sees red and green alike. The icon carries the rest.
+    /// </summary>
+    [Fact]
+    public void RefusedAndDoneAreNotTheSameLightness() =>
+        Assert.True(Wcag.Ratio(Colour("Done"), Colour("Danger")) >= 1.2,
+            $"Done and Danger are {Wcag.Ratio(Colour("Done"), Colour("Danger")):N2}:1 apart in lightness.");
+
+    /// <summary>Money saved, beside the total and down the discount column.</summary>
+    [Theory]
+    [MemberData(nameof(GridBackgrounds))]
+    public void MoneySavedIsLegibleOnEveryRow(string background) =>
+        AssertReadable("Saving", background);
+
+    /// <summary>The three inks on a card, which is where most text now sits.</summary>
+    [Theory]
+    [InlineData("Ink")]
+    [InlineData("InkMuted")]
+    [InlineData("InkDim")]
+    [InlineData("Accent")]
+    [InlineData("Positive")]
+    [InlineData("Saving")]
+    public void TextIsReadableOnACard(string ink) =>
+        AssertReadableOnGradient(ink, "CardFill");
+
+    /// <summary>The grand total, in its glowing card.</summary>
+    [Fact]
+    public void TheTotalIsReadableOnItsCard() =>
+        AssertReadableOnGradient("Positive", "TotalFill");
+
+    /// <summary>"Pay &amp; Print": dark ink on the green, the way round that clears the bar.</summary>
+    [Fact]
+    public void ThePayButtonIsReadable() =>
+        AssertReadableOnGradient("OnAccent", "PayFill");
+
+    /// <summary>
+    /// Every series colour on a chart, against the card the chart is drawn on.
+    /// </summary>
+    /// <remarks>
+    /// 3:1, the bar for a graphic: a bar, a line or a slice has to be seen against its background
+    /// to be read at all, and the same colours colour the legend's text.
+    /// </remarks>
+    [Theory]
+    [InlineData("ChartColour0")]
+    [InlineData("ChartColour1")]
+    [InlineData("ChartColour2")]
+    [InlineData("ChartColour3")]
+    [InlineData("ChartColour4")]
+    [InlineData("ChartColour5")]
+    [InlineData("ChartColour6")]
+    public void EverySeriesStandsOutOnItsCard(string series) =>
+        AssertReadableOnGradient(series, "CardFill", bar: 3.0);
+
+    /// <summary>The tooltip's figures, on the tooltip.</summary>
+    [Theory]
+    [InlineData("Ink")]
+    [InlineData("InkMuted")]
+    public void TheTooltipIsReadable(string ink) =>
+        AssertReadable(ink, "ChartTooltip");
+
+    /// <summary>Gridlines are there to be glanced along, not read: seen, but well short of the data.</summary>
+    [Fact]
+    public void GridlinesStayBehindTheData()
+    {
+        var grid = Wcag.Ratio(Colour("ChartGrid"), Stops("CardFill")[0]);
+        var faintest = new[] { "ChartColour0", "ChartColour1", "ChartColour2", "ChartColour3", "ChartColour4", "ChartColour5", "ChartColour6" }
+            .Min(k => Wcag.Ratio(Colour(k), Stops("CardFill")[0]));
+
+        Assert.True(grid < 1.5, $"Gridlines are {grid:N2}:1 on the card - loud enough to compete with the data.");
+        Assert.True(faintest > 2 * grid, $"The faintest series is only {faintest:N2}:1 against gridlines at {grid:N2}:1.");
+    }
 }

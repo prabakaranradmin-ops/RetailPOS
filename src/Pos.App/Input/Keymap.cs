@@ -25,6 +25,8 @@ public sealed class Keymap
     /// </summary>
     public static Keymap Default => new(new Dictionary<KeyStroke, PosAction>
     {
+        // F1 is help everywhere else on a Windows machine.
+        [new(Key.F1)] = PosAction.ShowKeys,
         [new(Key.F2)] = PosAction.FocusSearch,
         [new(Key.F3)] = PosAction.EditQuantity,
         [new(Key.F4)] = PosAction.EditDiscount,
@@ -48,6 +50,15 @@ public sealed class Keymap
 
         // Beside F7 on purpose: the customer first, then what they owe.
         [new(Key.F8)] = PosAction.ReceivePayment,
+
+        // Goods coming back. A key of its own rather than a chord: a return is a customer standing at
+        // the counter, and it is refunded only after the bill, the goods and the refund have each
+        // been confirmed on screen.
+        [new(Key.F9)] = PosAction.ReturnGoods,
+
+        // Loose produce, beside the payment key: onions, coriander, flowers by the muzham - nothing
+        // to scan, so a key each instead of a search.
+        [new(Key.F11)] = PosAction.QuickKeys,
         [new(Key.F12)] = PosAction.Tender,
 
         [new(Key.P, ModifierKeys.Control)] = PosAction.ReprintInvoice,
@@ -62,6 +73,27 @@ public sealed class Keymap
         [new(Key.F12, ModifierKeys.Shift)] = PosAction.CloseDay,
 
         [new(Key.N, ModifierKeys.Control)] = PosAction.NewBill,
+
+        // M for money: the float in the morning, an expense, cash to the bank. Not a function key -
+        // it is a few times a day, not a few times a minute.
+        [new(Key.M, ModifierKeys.Control)] = PosAction.CashDrawer,
+
+        // O for order: a phone call or a WhatsApp message turned into a bill that waits.
+        [new(Key.O, ModifierKeys.Control)] = PosAction.TakeOrder,
+
+        // Q for the QR code: while taking UPI, the code with the amount printed for the customer, on
+        // a counter with no screen facing them.
+        [new(Key.Q, ModifierKeys.Control)] = PosAction.PrintUpiCode,
+
+        // K for khata: the statement of what a customer owes, for the one picked in F8 or attached
+        // to the bill.
+        [new(Key.K, ModifierKeys.Control)] = PosAction.KhataStatement,
+
+        // W for WhatsApp: the bill on the customer's phone - instead of paper while paying, or after.
+        [new(Key.W, ModifierKeys.Control)] = PosAction.DigitalBill,
+
+        // G for GSTIN: the customer on the bill is a business, and the bill is a tax invoice to them.
+        [new(Key.G, ModifierKeys.Control)] = PosAction.BusinessCustomer,
 
         // The owner's screen. Not awkward on purpose — it changes nothing by opening, and an owner
         // who has to remember a hard chord will go back to asking somebody else for the figures.

@@ -124,7 +124,8 @@ public partial class App : Application
             printer,
             new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log),
             clock: null,
-            stock: new StockRepository(database, () => settings.LowStockPercent));
+            stock: new StockRepository(database, () => settings.LowStockPercent),
+            expiry: new ExpiryRepository(database));
 
         var viewModel = new BillingViewModel(
             new InvoiceEngine(settings.OutletStateCode, settings.TaxMode, settings.RoundOffToRupee),
@@ -150,12 +151,78 @@ public partial class App : Application
                 printer,
                 new ReceiptComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage),
                 _log,
+                () => viewModelRef?.CashierName),
+
+            // A return settles to the rupee exactly as the lane's sales do, so a cash refund is in
+            // coins the drawer has.
+            returns: new ReturnService(
+                new CreditNoteRepository(database),
+                drawer,
+                TimeProvider.System,
+                printer,
+                receipts,
+                _log,
+                () => viewModelRef?.CashierName,
+                () => settings.RoundOffToRupee),
+
+            // The float, expenses and cash in or out, on whoever is on the till when it happens.
+            cashDrawer: new CashDrawerService(
+                new CashDrawerRepository(database),
+                drawer,
+                TimeProvider.System,
+                _log,
                 () => viewModelRef?.CashierName));
 
         viewModelRef = viewModel;
         viewModel.LowStockPercent = settings.LowStockPercent;
 
+        // An order confirmed to the customer is a message the cashier pastes into their own reply.
+        viewModel.ShopName = settings.Store.Name;
+        viewModel.CopyText = text => System.Windows.Clipboard.SetText(text);
+
+        // Labels from the shop's own weighing scale, read as the item and its weight or price.
+        viewModel.ScaleLabels = settings.ScaleBarcode.ToFormat();
+
+        // A UPI code with the exact amount, once the shop has set its UPI ID - on the payment pane,
+        // the customer's screen, and on a slip from the till's own printer for Ctrl+Q.
+        viewModel.Upi = settings.Upi.ToPayee(settings.Store.Name);
+
+        // Digital bills: WhatsApp on this computer opens at the customer's chat with the bill typed
+        // in, for the cashier to send. The till itself sends nothing.
+        viewModel.Store = settings.Store.ToProfile();
+        viewModel.OpenLink = settings.OpenWhatsApp ? ShellLinks.Open : null;
+        viewModel.PrintUpiSlip = (payee, amount, link) =>
+        {
+            var outcome = printer.Print(receipts.ComposeUpiSlip(payee, amount, link).ToEscPos(raster: printer.Raster));
+
+            return outcome.Status switch
+            {
+                PrintStatus.Printed => null,
+                PrintStatus.NoPrinterConfigured => "no printer is set up on this lane.",
+                _ => outcome.Detail,
+            };
+        };
+
+        // The shop's offers and schemes, worked out on every bill as it is rung up.
+        try
+        {
+            viewModel.Offers = new OfferRepository(database).All();
+        }
+        catch (Exception ex)
+        {
+            // A lane that cannot read its offers bills at full price rather than not at all.
+            _log.Error("offers", "the offers could not be read; billing without them", ex);
+        }
+
+        // A delivery past its use-by date and probably still on the shelf: said on scanning it.
+        var expiry = new ExpiryRepository(database);
+        viewModel.ExpiryNote = itemId => Expiry.CheckNote(expiry.ExpiringFor(itemId, DateOnly.FromDateTime(DateTime.Today)));
+
         var billingView = new MainBillingView(viewModel, keymap, settings);
+
+        // The customer's side of the counter: a second monitor and a pole display, when the lane
+        // has either. Following the till, never driving it.
+        StartCustomerDisplay(viewModel, settings, billingView);
 
         // The owner's screen, built fresh each time it is opened so its figures are current. The
         // PIN is checked here rather than inside the window, so a refused attempt never gets far
@@ -180,18 +247,116 @@ public partial class App : Application
 
                 // The same store the till attaches customers through, so a name saved on the owner's
                 // screen is the name the next bill prints.
-                new CustomersViewModel(new CustomerQuery(database), customers, new CreditRepository(database)),
+                // Statements carry the UPI ID as it is now, so one changed on Settings is on the next.
+                new CustomersViewModel(new CustomerQuery(database), customers, new CreditRepository(database))
+                {
+                    ShopName = settings.Store.Name,
+                    Upi = settings.Upi.ToPayee(settings.Store.Name),
+                    CopyText = text => System.Windows.Clipboard.SetText(text),
+                    RenderStatements = statements => KhataStatementPage.Render(statements, settings.Store.ToProfile(), settings.Upi.ToPayee(settings.Store.Name)),
+                    RenderBill = invoiceNo => new InvoiceRepository(database, settings.InvoiceNumber.ToFormat()).FindByInvoiceNo(invoiceNo) is { } found
+                        ? InvoicePage.Render(found, settings.Store.ToProfile(), settings.OutletStateCode, isCopy: true)
+                        : null,
+                },
 
                 // The month's return, read from the same books and written where the owner says.
                 new GstReturnViewModel(
                     month => new GstReturnQuery(database).Gather(settings.LaneId, month, settings.OutletStateCode),
-                    (data, path) => GstReturnFiles.Write(data, path, settings.Store.Name, settings.Store.Gstin)));
+                    (data, path) => GstReturnFiles.Write(data, path, settings.Store.Name, settings.Store.Gstin)),
+
+                // Deliveries come in against the same catalogue the till sells from, and a supplier
+                // paid from the drawer is on whoever is on the till at the time.
+                new PurchasesViewModel(
+                    new PurchaseRepository(database),
+                    query => items.Search(query),
+                    code => items.FindByBarcode(code) ?? items.FindBySku(code),
+                    settings.LaneId,
+                    settings.OutletStateCode,
+                    () => viewModel.CashierName),
+
+                // Prices in bulk, and the shelf labels they put out of date, printed on the till's
+                // own printer in the lane's language.
+                new PricesViewModel(
+                    new PriceRepository(database),
+                    labels => printer.IsConfigured
+                        ? printer.Print(new ShelfLabelComposer(printer.PaperWidthChars, settings.ReceiptLanguage, settings.Store.ToProfile().CurrencyPrefix)
+                            .Compose(labels).ToEscPos(raster: printer.Raster))
+                        : PrintOutcome.NotConfigured(),
+                    settings.Store.Name),
+
+                // What to order, from the same shelf counts and purchase bills. Copied to the
+                // clipboard for the owner to send from their own phone; the till sends nothing.
+                new OrdersViewModel(
+                    cover => new OrderListQuery(database, settings.LowStockPercent).Gather(cover),
+                    text => System.Windows.Clipboard.SetText(text),
+                    settings.Store.Name,
+                    settings.OrderCoverDays,
+                    days =>
+                    {
+                        try
+                        {
+                            settings.OrderCoverDays = days;
+                            SettingsFile.SetOrderCoverDays(Path.Combine(DataDirectory, "settings.json"), days);
+                            _log?.Info("settings", $"orders now cover {days} days");
+                            return null;
+                        }
+                        catch (Exception ex)
+                        {
+                            _log?.Error("settings", "could not write the order cover", ex);
+                            return ex.Message;
+                        }
+                    }),
+
+                // Offers and schemes, from the sheet the owner loads. The till is handed the new
+                // list at once, so the next change to a bill is priced by it.
+                new OffersViewModel(
+                    new OfferRepository(database),
+                    items.Skus,
+                    items.Categories,
+                    offers =>
+                    {
+                        viewModel.Offers = offers;
+                        _log?.Info("offers", $"{Plural.Of(offers.Count, "offer")} loaded");
+                    }));
         };
 
         MainWindow = billingView;
         MainWindow.Show();
 
         _log.Info("startup", $"till ready, cashier {viewModel.CashierLabel}");
+    }
+
+    /// <summary>
+    /// Puts the bill in front of the customer, on the second monitor and the pole display the lane
+    /// has. Neither is allowed to stop the till: a failure here is logged and billing goes on.
+    /// </summary>
+    private void StartCustomerDisplay(BillingViewModel billing, PosSettings settings, Window till)
+    {
+        try
+        {
+            var pole = PeripheralFactory.CreatePoleDisplay(settings.Hardware);
+
+            if (!settings.Hardware.CustomerScreen && !pole.IsConfigured)
+                return;
+
+            var display = new CustomerDisplayViewModel(billing, settings.Store.Name, pole, settings.ReceiptLanguage);
+
+            if (settings.Hardware.CustomerScreen)
+            {
+                var window = new CustomerDisplayWindow(display);
+
+                if (window.ShowOnSecondScreen())
+                    till.Closed += (_, _) => window.Close();
+                else
+                    _log?.Warn("display", "customerScreen is on but there is no second monitor; the bill is not shown to the customer");
+            }
+
+            _log?.Info("display", $"customer display: screen {(settings.Hardware.CustomerScreen ? "on" : "off")}, pole {pole.Name}");
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("display", "the customer display could not start", ex);
+        }
     }
 
     /// <summary>
@@ -327,6 +492,33 @@ public partial class App : Application
 
                 _log?.Info("settings", $"low stock at {percent}% of full");
                 return null;
+            },
+
+            // Deliveries near their use-by date, from the purchase bills and the shelf count.
+            expiring: () => new ExpiryRepository(database).Expiring(DateOnly.FromDateTime(DateTime.Today)),
+
+            // What has stopped selling, and the money on the shelf in it.
+            deadStock: () => new DeadStockRepository(database).NotSelling(DateOnly.FromDateTime(DateTime.Today)),
+
+            // The till's codes follow the new ID from the next payment; the file keeps it.
+            upiId: settings.Upi.Id,
+            applyUpiId: id =>
+            {
+                settings.Upi.Id = id;
+                billing.Upi = settings.Upi.ToPayee(settings.Store.Name);
+
+                try
+                {
+                    SettingsFile.SetUpiId(settingsPath, id);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the UPI ID", ex);
+                    return $"Changed for this session, but it could not be saved: {ex.Message}";
+                }
+
+                _log?.Info("settings", id is null ? "UPI code turned off" : $"UPI ID set to {id}");
+                return null;
             });
     }
 
@@ -373,12 +565,12 @@ public partial class App : Application
             // Called from the thread running the check, so it has to come back to the dispatcher
             // before it can put a window up — and it has to block there until the operator answers,
             // because the answer is the check's result.
-            confirm: question => Dispatcher.Invoke(() => MessageBox.Show(
-                MainWindow!,
-                question,
+            confirm: question => Dispatcher.Invoke(() => Views.ConfirmDialog.Ask(
+                Current.Windows.OfType<Window>().LastOrDefault(w => w.IsActive) ?? MainWindow,
                 "Checking the hardware",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question) == MessageBoxResult.Yes),
+                question,
+                "Yes",
+                "No")),
 
             post: action => Dispatcher.Invoke(action));
 

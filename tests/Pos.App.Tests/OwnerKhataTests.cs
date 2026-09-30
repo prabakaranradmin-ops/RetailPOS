@@ -53,7 +53,7 @@ public class OwnerKhataTests : IDisposable
         var screen = Screen();
         screen.Search();
 
-        Assert.Equal("500.00 owed to the shop by 2 customer(s).", screen.TotalOwedLine);
+        Assert.Equal("₹500.00 owed to the shop by 2 customers.", screen.TotalOwedLine);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class OwnerKhataTests : IDisposable
         var screen = Screen();
         screen.Search();
 
-        Assert.Equal("Nobody owes the shop anything on credit.", screen.TotalOwedLine);
+        Assert.Equal("Nobody owes the shop anything on the khata.", screen.TotalOwedLine);
     }
 
     /// <summary>The end-of-month list: only those who owe, most first.</summary>
@@ -95,7 +95,7 @@ public class OwnerKhataTests : IDisposable
         screen.Selected = screen.Results[0];
 
         Assert.True(screen.OwesAnything);
-        Assert.Equal("Owes 200.00 on credit", screen.Owes);
+        Assert.Equal("Owes ₹200.00 on the khata", screen.Owes);
         Assert.True(screen.HasKhata);
         Assert.Equal(2, screen.Khata.Count);
         Assert.Equal(200m, screen.Khata[0].BalanceAfter);
@@ -116,5 +116,97 @@ public class OwnerKhataTests : IDisposable
         Assert.NotNull(problem);
         Assert.Contains("owe 300.00", problem);
         Assert.Single(screen.Results);
+    }
+
+    // ---- Statements --------------------------------------------------------------------------------
+
+    private CustomersViewModel StatementScreen(List<string> copied)
+    {
+        var screen = Screen();
+        screen.ShopName = "Sri Murugan Stores";
+        screen.Upi = new UpiPayee("murugan.stores@okaxis", "Sri Murugan Stores");
+        screen.CopyText = copied.Add;
+        screen.RenderStatements = statements => KhataStatementPage.Render(statements, new() { Name = "Sri Murugan Stores" }, screen.Upi);
+        return screen;
+    }
+
+    [Fact]
+    public void AStatementIsCopiedToSendOnWhatsApp()
+    {
+        var lakshmi = Known("9000000001", "Lakshmi");
+        OnCredit(lakshmi, 300m);
+        Credit.Collect(lakshmi.Id, 100m, TenderType.Cash, Lane, DateTimeOffset.Now.AddSeconds(1), null);
+        var copied = new List<string>();
+
+        var screen = StatementScreen(copied);
+        screen.Search();
+        screen.Selected = screen.Results[0];
+
+        Assert.Null(screen.CopyStatement());
+
+        var message = Assert.Single(copied);
+        Assert.StartsWith("Sri Murugan Stores: khata for Lakshmi", message);
+        Assert.Contains("Owed now: Rs 200.00", message);
+        Assert.Contains("Pay by UPI to murugan.stores@okaxis", message);
+        Assert.Contains("200.00 owed. Paste it into WhatsApp", screen.Status);
+    }
+
+    [Fact]
+    public void AStatementIsLaidOutAsAPage()
+    {
+        OnCredit(Known("9000000001", "Lakshmi"), 300m);
+        var screen = StatementScreen([]);
+        screen.Search();
+        screen.Selected = screen.Results[0];
+
+        var page = screen.StatementPage();
+
+        Assert.NotNull(page);
+        Assert.Contains("KHATA STATEMENT", page);
+        Assert.Contains("Lakshmi", page);
+        Assert.Contains("Rs 300.00", page);
+    }
+
+    /// <summary>The month-end round: everybody who owes, a page each, nobody who does not.</summary>
+    [Fact]
+    public void EveryoneWhoOwesGetsAPage()
+    {
+        OnCredit(Known("9000000001", "Lakshmi"), 300m);
+        OnCredit(Known("9000000002", "Ravi"), 200m);
+        Known("9000000003", "Owes nothing");
+        var screen = StatementScreen([]);
+
+        var page = screen.EveryoneOwingPage();
+
+        Assert.NotNull(page);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(page, "<section class=\"statement\">").Count);
+        Assert.DoesNotContain("Owes nothing", page);
+    }
+
+    [Fact]
+    public void SomebodyWhoOwesNothingHasNoStatement()
+    {
+        var lakshmi = Known("9000000001", "Lakshmi");
+        OnCredit(lakshmi, 300m);
+        Credit.Collect(lakshmi.Id, 300m, TenderType.Cash, Lane, DateTimeOffset.Now.AddSeconds(1), null);
+        var copied = new List<string>();
+        var screen = StatementScreen(copied);
+        screen.Search();
+        screen.Selected = screen.Results[0];
+
+        Assert.NotNull(screen.CopyStatement());
+
+        Assert.Empty(copied);
+        Assert.Contains("owes nothing on the khata", screen.Status);
+    }
+
+    [Fact]
+    public void WithNobodyOwingThereAreNoStatementsToSave()
+    {
+        Known("9000000001", "Lakshmi");
+        var screen = StatementScreen([]);
+
+        Assert.Null(screen.EveryoneOwingPage());
+        Assert.Equal("Nobody owes anything on the khata.", screen.Status);
     }
 }

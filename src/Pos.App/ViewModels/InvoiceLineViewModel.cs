@@ -31,13 +31,22 @@ public sealed class InvoiceLineViewModel(InvoiceLine line) : ObservableObject
     public decimal UnitRateExclTax => Line.UnitRateExclTax;
     public decimal Discount => Line.Discount;
 
+    /// <summary>The offer the discount came from, under the item's name; empty for a hand discount or none.</summary>
+    public string OfferName => Line.OfferName ?? string.Empty;
+
+    public bool HasOffer => Line.OfferName is not null;
+
     /// <summary>
-    /// Money off, or a dash. A column of 0.00 reads as a figure worth checking; a dash reads as
-    /// nothing to check, which is what it is on most lines of most bills.
+    /// Money off, as a minus - "−49.00" - or nothing at all.
     /// </summary>
+    /// <remarks>
+    /// A column of 0.00 reads as a figure worth checking, so a line with no discount used to show a
+    /// dash; drawn in the discount's red, that put a red mark on every line of every bill. The cell
+    /// is simply empty now, and the lines that do have money off stand out for having anything there.
+    /// </remarks>
     public string DiscountLabel => Line.Discount > 0m
-        ? Line.Discount.ToString("N2", CultureInfo.InvariantCulture)
-        : "—";
+        ? "−" + Line.Discount.ToString("N2", CultureInfo.InvariantCulture)
+        : string.Empty;
 
     /// <summary>
     /// Where this line sits on the bill, so a cashier and a customer can point at the same row.

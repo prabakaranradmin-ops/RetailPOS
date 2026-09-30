@@ -118,7 +118,7 @@ public class TenderFlowTests
         till.Press(Key.Enter);
 
         Assert.Equal(311.00m, till.ViewModel.ChangeDue);
-        Assert.Contains("Change 311.00", till.ViewModel.StatusMessage);
+        Assert.Contains("Change ₹311.00", till.ViewModel.StatusMessage);
 
         till.Press(Key.Enter);
 
@@ -355,7 +355,7 @@ public class TenderFlowTests
 
         Assert.True(till.ViewModel.IsFindingCustomer);
         Assert.False(till.ViewModel.HasCustomer);
-        Assert.Contains("Commit again to add", till.ViewModel.StatusMessage);
+        Assert.Contains("Enter again to add", till.ViewModel.StatusMessage);
 
         till.Press(Key.Enter);
 

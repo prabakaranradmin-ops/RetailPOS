@@ -31,6 +31,26 @@ public class NewItemTests : IDisposable
         return new NewItemViewModel(items, new HsnSuggester(query => items.Search(query)));
     }
 
+    /// <summary>"Add it" is greyed until the form is complete, and says what it is waiting for.</summary>
+    [Fact]
+    public void AGreyedAddSaysWhatIsStillToFillIn()
+    {
+        var form = Form();
+
+        Assert.False(form.CanSave);
+        Assert.Equal("Still to fill in: the code, the name, the HSN code, the GST rate, the MRP, the selling price.", form.SaveBlocker);
+
+        form.Sku = "SOAP01";
+        form.Name = "Hamam Soap 100g";
+
+        Assert.Equal("Still to fill in: the HSN code, the GST rate, the MRP, the selling price.", form.SaveBlocker);
+
+        Filled(form);
+
+        Assert.True(form.CanSave);
+        Assert.Equal(string.Empty, form.SaveBlocker);
+    }
+
     private static NewItemViewModel Filled(
         NewItemViewModel form,
         string sku = "SOAP01",

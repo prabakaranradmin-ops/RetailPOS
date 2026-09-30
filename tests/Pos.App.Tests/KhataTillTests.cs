@@ -73,7 +73,7 @@ public class KhataTillTests
         SellOnCredit(till, "9876543210");
 
         Assert.False(till.ViewModel.IsTendering);
-        Assert.Contains("Lakshmi now owes 189.00", till.ViewModel.StatusMessage);
+        Assert.Contains("Lakshmi now owes ₹189.00", till.ViewModel.StatusMessage);
         Assert.Equal(189m, till.Credit.Balance(till.Customers.FindByMobile("9876543210")!.Id));
     }
 
@@ -130,7 +130,7 @@ public class KhataTillTests
         FindForPayment(till);
 
         Assert.True(till.ViewModel.IsCollectingAmount);
-        Assert.Contains("owes 189.00", till.ViewModel.CollectPrompt);
+        Assert.Contains("owes ₹189.00", till.ViewModel.CollectPrompt);
     }
 
     [Fact]
@@ -144,8 +144,8 @@ public class KhataTillTests
         till.Press(Key.Enter);
 
         Assert.False(till.ViewModel.IsCollecting);
-        Assert.Contains("Lakshmi paid 100.00 by cash", till.ViewModel.StatusMessage);
-        Assert.Contains("89.00 still owed", till.ViewModel.StatusMessage);
+        Assert.Contains("Lakshmi paid ₹100.00 by cash", till.ViewModel.StatusMessage);
+        Assert.Contains("₹89.00 still owed", till.ViewModel.StatusMessage);
         Assert.Equal(kicksBefore + 1, till.Drawer.KickCount);
 
         var slip = Encoding.Latin1.GetString(till.Printer.LastJob);

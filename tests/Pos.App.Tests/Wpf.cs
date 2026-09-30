@@ -80,6 +80,51 @@ internal static class Wpf
         window.UpdateLayout();
     }
 
+    /// <summary>
+    /// Lays a window's content out at exactly <paramref name="width"/> × <paramref name="height"/>,
+    /// whatever the size of the screen the tests happen to run on.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="LayOut"/> alone could not do this. The billing window is maximised in its XAML, so
+    /// it laid out at the size of the test PC's own screen - 1280 × 649 on a 1080p screen at 150% -
+    /// whatever size the test asked for, and Windows caps a window at the screen anyway. A test
+    /// "at 1366 × 768" was a test at whatever the build machine had. Here the window's content is
+    /// given the size itself: larger than the window it is clipped, but every position inside it is
+    /// where it would be on a screen that size.
+    /// </remarks>
+    /// <param name="width">The client area: what a maximised window gets, after the taskbar and title bar.</param>
+    public static void LayOutAt(Window window, double width, double height)
+    {
+        window.WindowState = WindowState.Normal;
+        LayOut(window, width, height);
+
+        if (window.Content is FrameworkElement root)
+        {
+            root.Width = Math.Max(0, width - root.Margin.Left - root.Margin.Right);
+            root.Height = Math.Max(0, height - root.Margin.Top - root.Margin.Bottom);
+        }
+
+        window.UpdateLayout();
+        Settle(window);
+    }
+
+    /// <summary>
+    /// Lets the dispatcher finish what layout left for later, as it would between two frames on a
+    /// real screen.
+    /// </summary>
+    /// <remarks>
+    /// Some of WPF's own work is queued rather than done inside a layout pass - a grid sharing its
+    /// star widths out again after a column is hidden is one - so a window checked straight after
+    /// <see cref="LayOut"/> can be a frame behind what anybody would ever see.
+    /// </remarks>
+    public static void Settle(Window window)
+    {
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        window.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () => frame.Continue = false);
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+        window.UpdateLayout();
+    }
+
     /// <summary>Every visual descendant of a given type, in tree order.</summary>
     public static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
     {

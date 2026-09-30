@@ -60,6 +60,8 @@ public sealed class BillingHarness : IDisposable
             Backups);
 
         Credit = new CreditRepository(_temp.Database);
+        Returns = new CreditNoteRepository(_temp.Database);
+        CashDrawer = new CashDrawerRepository(_temp.Database);
 
         ViewModel = new BillingViewModel(
             new InvoiceEngine(OutletStateCode),
@@ -75,7 +77,11 @@ public sealed class BillingHarness : IDisposable
             invoices: Invoices,
             dayClose: DayClose,
             credit: new CreditService(
-                Credit, Drawer, TimeProvider.System, Printer, Receipts, cashier: () => ViewModel?.CashierName));
+                Credit, Drawer, TimeProvider.System, Printer, Receipts, cashier: () => ViewModel?.CashierName),
+            returns: new ReturnService(
+                Returns, Drawer, TimeProvider.System, Printer, Receipts, cashier: () => ViewModel?.CashierName),
+            cashDrawer: new CashDrawerService(
+                CashDrawer, Drawer, TimeProvider.System, cashier: () => ViewModel?.CashierName));
 
         Router = new KeyboardRouter(Keymap.Default, ViewModel);
     }
@@ -98,6 +104,18 @@ public sealed class BillingHarness : IDisposable
 
     /// <summary>Customer credit, read straight from the books this till writes to.</summary>
     public CreditRepository Credit { get; }
+
+    /// <summary>The credit notes this till issues.</summary>
+    public CreditNoteRepository Returns { get; }
+
+    /// <summary>The float, expenses and cash in and out this till records.</summary>
+    public CashDrawerRepository CashDrawer { get; }
+
+    /// <summary>The shelf count, for tests that sell counted goods.</summary>
+    public StockRepository Stock => new(_temp.Database);
+
+    /// <summary>The catalogue this till sells from.</summary>
+    public ItemRepository Items => _temp.Items;
 
     public ReceiptComposer Receipts { get; }
 

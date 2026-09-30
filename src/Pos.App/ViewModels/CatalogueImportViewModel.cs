@@ -56,8 +56,19 @@ public sealed class CatalogueImportViewModel : ObservableObject
         // on disk. Production always reads a real one, byte for byte as the `pos` tool would.
         _open = open ?? ItemCsvParser.OpenText;
 
+        Follow(nameof(CanImport), nameof(ImportBlocker));
         RefreshHeld();
     }
+
+    /// <summary>
+    /// Why "Import" is greyed out, beside it; empty once it can be pressed. It waits on a clean check
+    /// on purpose, and says so rather than looking broken.
+    /// </summary>
+    public string ImportBlocker => CanImport || IsBusy
+        ? string.Empty
+        : HasFile
+            ? "Check the file first: Import opens once the check finds nothing wrong."
+            : "Pick a file, then check it.";
 
     /// <summary>Raised once a catalogue has actually landed, so the screen around this can re-read.</summary>
     public event EventHandler? Imported;
@@ -162,7 +173,7 @@ public sealed class CatalogueImportViewModel : ObservableObject
         {
             _checkPassed = true;
 
-            Verdict = $"{Count(result.RowsRead)} row(s) read and nothing wrong. "
+            Verdict = $"{Plural.Of(result.RowsRead, "row")} read and nothing wrong. "
                       + $"Importing would add {Count(result.Inserted)} and change {Count(result.Updated)}. "
                       + "Nothing has been written yet.";
         }
@@ -170,7 +181,7 @@ public sealed class CatalogueImportViewModel : ObservableObject
         {
             _checkPassed = false;
 
-            Verdict = $"{Count(ProblemCount)} problem(s). Nothing has been imported — "
+            Verdict = $"{Plural.Of(ProblemCount, "problem")}. Nothing has been imported — "
                       + "fix these in the spreadsheet, save it as CSV again, and check it once more.";
         }
 
@@ -199,7 +210,7 @@ public sealed class CatalogueImportViewModel : ObservableObject
             _checkPassed = false;
             Show(result.Problems);
 
-            Verdict = $"The file changed since it was checked, and now has {Count(ProblemCount)} problem(s). "
+            Verdict = $"The file changed since it was checked, and now has {Plural.Of(ProblemCount, "problem")}. "
                       + "Nothing was imported. Check it again.";
 
             Raise(nameof(CanImport));
@@ -218,7 +229,7 @@ public sealed class CatalogueImportViewModel : ObservableObject
 
         RefreshHeld();
 
-        Verdict = $"Done. {Count(result.Inserted)} item(s) added, {Count(result.Updated)} changed. "
+        Verdict = $"Done. {Plural.Of(result.Inserted, "item")} added, {Count(result.Updated)} changed. "
                   + $"The catalogue held {before} and now holds {Held}. The till can sell them straight away.";
 
         Imported?.Invoke(this, EventArgs.Empty);
@@ -299,7 +310,7 @@ public sealed class CatalogueImportViewModel : ObservableObject
     {
         try
         {
-            Held = $"{Count(_items.Count())} item(s)";
+            Held = Plural.Of(_items.Count(), "item");
         }
         catch (Exception ex)
         {

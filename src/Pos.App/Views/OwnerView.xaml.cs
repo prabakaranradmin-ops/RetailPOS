@@ -26,6 +26,10 @@ public partial class OwnerView : Window
     private readonly MaintenanceViewModel _maintenance;
     private readonly CustomersViewModel _customers;
     private readonly GstReturnViewModel _gst;
+    private readonly PurchasesViewModel _purchases;
+    private readonly OrdersViewModel _orders;
+    private readonly OffersViewModel? _offers;
+    private readonly PricesViewModel _prices;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -40,10 +44,19 @@ public partial class OwnerView : Window
         NewItemViewModel newItem,
         MaintenanceViewModel maintenance,
         CustomersViewModel customers,
-        GstReturnViewModel gst)
+        GstReturnViewModel gst,
+        PurchasesViewModel purchases,
+        PricesViewModel prices,
+        OrdersViewModel orders,
+
+        // The offers card. Optional: a screen built without it shows no card.
+        OffersViewModel? offers = null)
     {
+        ArgumentNullException.ThrowIfNull(orders);
+        ArgumentNullException.ThrowIfNull(prices);
         ArgumentNullException.ThrowIfNull(customers);
         ArgumentNullException.ThrowIfNull(gst);
+        ArgumentNullException.ThrowIfNull(purchases);
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(hardware);
@@ -51,6 +64,7 @@ public partial class OwnerView : Window
         ArgumentNullException.ThrowIfNull(maintenance);
 
         InitializeComponent();
+        DarkChrome.Apply(this);
 
         _viewModel = viewModel;
         _catalogue = catalogue;
@@ -59,12 +73,21 @@ public partial class OwnerView : Window
         _maintenance = maintenance;
         _customers = customers;
         _gst = gst;
+        _purchases = purchases;
+        _orders = orders;
+        _prices = prices;
         DataContext = viewModel;
 
         HardwareTab.DataContext = hardware;
         MaintenanceTab.DataContext = maintenance;
         CustomersTab.DataContext = customers;
         GstTab.DataContext = gst;
+        PurchasesTab.DataContext = purchases;
+        OrdersTab.DataContext = orders;
+        PricesPanel.DataContext = prices;
+        _offers = offers;
+        OffersPanel.DataContext = offers;
+        OffersPanel.Visibility = offers is null ? Visibility.Collapsed : Visibility.Visible;
 
         // The list is read when the tab is first opened rather than with the window, so opening
         // the owner's screen to glance at today's takings does not also read every customer.
@@ -73,15 +96,45 @@ public partial class OwnerView : Window
             if (e.OriginalSource != Tabs)
                 return;
 
+            _viewModel.ClearStatus();
+
             // Ctrl+3 lands in the item name box, so adding one product is Ctrl+3 then typing.
             if (Tabs.SelectedItem == CatalogueTabItem)
             {
+                _prices.LoadLabels();
+                _offers?.Load();
                 Dispatcher.BeginInvoke(() => NewItemName.Focus(), System.Windows.Threading.DispatcherPriority.Input);
                 return;
             }
 
             // Read when first opened, like the customers: a month of lines is not worth reading for
             // an owner who only came to look at today's takings.
+            // Ctrl+9 lands in the supplier search, so finding who the delivery is from is the next keystroke.
+            if (Tabs.SelectedItem == PurchasesTabItem)
+            {
+                if (!_purchases.IsLoaded)
+                    _purchases.Load();
+
+                Dispatcher.BeginInvoke(() => SupplierSearchBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+                return;
+            }
+
+            // Worked out afresh each time it is opened: a delivery entered on the tab before changes it.
+            // Ctrl+0 lands on the supplier list, so the arrows walk the suppliers straight away.
+            if (Tabs.SelectedItem == OrdersTabItem)
+            {
+                _orders.Load();
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (OrderSupplierList.SelectedIndex >= 0
+                        && OrderSupplierList.ItemContainerGenerator.ContainerFromIndex(OrderSupplierList.SelectedIndex) is ListBoxItem item)
+                        item.Focus();
+                    else
+                        CoverDaysBox.Focus();
+                }, System.Windows.Threading.DispatcherPriority.Input);
+                return;
+            }
+
             if (Tabs.SelectedItem == GstTabItem)
             {
                 if (!_gst.IsLoaded)
@@ -103,11 +156,12 @@ public partial class OwnerView : Window
         };
         SingleItemPanel.DataContext = newItem;
 
-        // An item added by hand changes the reorder list the same way a file does.
+        // An item added by hand changes the reorder list the same way a file does, and needs a label.
         newItem.Added += (_, _) =>
         {
             _catalogue.RefreshHeld();
             _viewModel.Refresh();
+            _prices.LoadLabels();
         };
 
         // The catalogue tab answers to its own view model. Scoped to that one branch of the tree so
@@ -117,7 +171,11 @@ public partial class OwnerView : Window
         // A catalogue that has just landed changes the reorder list and, where the file carried cost
         // prices, the margins beside the figures. Re-reading here means the owner does not have to
         // know that, or close the screen and open it again to see it.
-        catalogue.Imported += (_, _) => _viewModel.Refresh();
+        catalogue.Imported += (_, _) =>
+        {
+            _viewModel.Refresh();
+            _prices.LoadLabels();
+        };
 
         viewModel.PropertyChanged += (_, e) =>
         {
@@ -144,6 +202,7 @@ public partial class OwnerView : Window
 
             LayoutCard.Visibility = _viewModel.CanChooseLayout ? Visibility.Visible : Visibility.Collapsed;
             LowStockCard.Visibility = _viewModel.CanChangeLowStockPercent ? Visibility.Visible : Visibility.Collapsed;
+            UpiCard.Visibility = _viewModel.CanChangeUpiId ? Visibility.Visible : Visibility.Collapsed;
             LayoutStandard.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Standard;
             LayoutCompact.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Compact;
 
@@ -188,9 +247,16 @@ public partial class OwnerView : Window
         // the four sections is a mouse or Ctrl+Tab, and neither is discoverable — which is how a
         // screen ends up with two sections nobody knows are there.
         if (e.KeyboardDevice.Modifiers == ModifierKeys.Control &&
-            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6 or Key.D7 or Key.D8)
+            e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.D6 or Key.D7 or Key.D8 or Key.D9)
         {
             Tabs.SelectedIndex = e.Key - Key.D1;
+            e.Handled = true;
+        }
+
+        // The tenth section is Ctrl+0, the key after 9 on the row.
+        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control && e.Key == Key.D0)
+        {
+            Tabs.SelectedItem = OrdersTabItem;
             e.Handled = true;
         }
 
@@ -278,6 +344,12 @@ public partial class OwnerView : Window
         e.Handled = true;
     }
 
+    private void SaveBusiness_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.SaveBusiness() is { } problem)
+            Say(problem);
+    }
+
     private void SaveCustomerName_Click(object sender, RoutedEventArgs e)
     {
         if (_customers.SaveName() is { } problem)
@@ -294,15 +366,16 @@ public partial class OwnerView : Window
 
         // Said in full, because it cannot be taken back: there is no copy of a forgotten customer
         // anywhere in the lane, which is the point of it.
-        if (MessageBox.Show(
+        if (!ConfirmDialog.Ask(
                 this,
+                "Forget this customer?",
                 $"Forget {_customers.Title} ({_customers.Mobile})?\n\n"
                 + "Their name, mobile number and loyalty points are deleted. Their bills stay in the "
                 + "shop's books but no longer say who they were for.\n\n"
                 + "This cannot be undone. Snapshots taken before now still hold them until they age out.",
-                "Forget this customer?",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning) != MessageBoxResult.OK)
+                "Forget them",
+                "Keep them",
+                DialogKind.Danger))
         {
             return;
         }
@@ -316,15 +389,16 @@ public partial class OwnerView : Window
         // The typed date already armed the button. This says out loud what is about to be lost,
         // because the number of sales involved is the part somebody has not worked out for
         // themselves — and it is the last point at which they can stop.
-        if (MessageBox.Show(
+        if (!ConfirmDialog.Ask(
                 this,
+                "Put this snapshot back?",
                 "This replaces the lane's database with the snapshot you picked.\n\n"
                 + "Every sale rung up since it was taken will be gone, including any day already "
                 + "closed on them. The database being replaced is moved aside rather than deleted.\n\n"
                 + "Close the till before doing this.",
-                "Put this snapshot back?",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning) != MessageBoxResult.OK)
+                "Put it back",
+                "Leave it",
+                DialogKind.Danger))
         {
             return;
         }
@@ -411,6 +485,139 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
+    // ---- Prices and labels -----------------------------------------------------------------------
+
+    private void SavePriceSheet_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save a price sheet to fill in",
+            Filter = "Spreadsheet (*.csv)|*.csv",
+            FileName = _prices.SuggestedSheetName,
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) == true)
+            _prices.SaveSheet(dialog.FileName);
+    }
+
+    private void LoadPriceSheet_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Load the filled-in price sheet",
+            Filter = "Spreadsheet (*.csv)|*.csv|Every file (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_prices.CheckSheet(dialog.FileName) is not { } plan)
+            return;
+
+        // Said before anything is written, with the prices below cost and the likely typos named.
+        if (!ConfirmDialog.Ask(this, "Change the prices?", PricesViewModel.Question(plan), "Change the prices", "Leave them"))
+            return;
+
+        _prices.ApplySheet(plan);
+    }
+
+    private void PrintLabels_Click(object sender, RoutedEventArgs e) => _prices.Print();
+
+    // ---- Offers and schemes ----------------------------------------------------------------------
+
+    private void SaveOfferSheet_Click(object sender, RoutedEventArgs e)
+    {
+        if (_offers is null)
+            return;
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the offers sheet to fill in",
+            Filter = "Spreadsheet (*.csv)|*.csv",
+            FileName = _offers.SuggestedSheetName,
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) == true)
+            _offers.SaveSheet(dialog.FileName);
+    }
+
+    private void LoadOfferSheet_Click(object sender, RoutedEventArgs e)
+    {
+        if (_offers is null)
+            return;
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Load the filled-in offers sheet",
+            Filter = "Spreadsheet (*.csv)|*.csv|Every file (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_offers.CheckSheet(dialog.FileName) is not { } plan)
+            return;
+
+        // Said before anything changes: what starts, what ends.
+        if (!ConfirmDialog.Ask(this, "Run these offers?", _offers.Question(plan), "Run them", "Not now"))
+            return;
+
+        _offers.ApplySheet(plan);
+    }
+
+    private void SaveLabelsPage_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the shelf labels as a page to print",
+            Filter = "Web page (*.html)|*.html",
+            FileName = _prices.SuggestedLabelsName,
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+
+        if (dialog.ShowDialog(this) == true)
+            _prices.SavePage(dialog.FileName);
+    }
+
+    // ---- Orders ----------------------------------------------------------------------------------
+
+    private void CoverDaysBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        _orders.ApplyCoverDays();
+        e.Handled = true;
+    }
+
+    private void ApplyCoverDays_Click(object sender, RoutedEventArgs e) => _orders.ApplyCoverDays();
+
+    private void CopyOrder_Click(object sender, RoutedEventArgs e) => _orders.Copy();
+
+    private void SaveOrderList_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the order list",
+            Filter = "Spreadsheet (*.csv)|*.csv",
+            FileName = _orders.SuggestedFileName,
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        _orders.Save(dialog.FileName);
+    }
+
     // ---- Loading a catalogue ---------------------------------------------------------------------
 
     private void BrowseCatalogue_Click(object sender, RoutedEventArgs e)
@@ -472,14 +679,15 @@ public partial class OwnerView : Window
         // Only when existing items are in play. A first load adds what was not there and is undone
         // by correcting the file and loading it again; an update writes over prices the shop is
         // already trading on, and those are gone once they are replaced.
-        if (_catalogue.UpdateExisting && MessageBox.Show(
+        if (_catalogue.UpdateExisting && !ConfirmDialog.Ask(
                 this,
+                "Change items already in the catalogue?",
                 "Prices, names and barcodes in this file will replace what the catalogue holds for "
                 + "items already in it.\n\nBills already issued do not change — each one records what "
                 + "it was sold at. Shelf counts are left alone unless the file gives new ones.",
-                "Change items already in the catalogue?",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning) != MessageBoxResult.OK)
+                "Change them",
+                "Leave them",
+                DialogKind.Warning))
         {
             return;
         }
@@ -531,6 +739,118 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
+    // ---- Purchases ---------------------------------------------------------------------------
+
+    private void AddSupplier_Click(object sender, RoutedEventArgs e) => _purchases.AddSupplier();
+
+    private void PaySupplier_Click(object sender, RoutedEventArgs e)
+    {
+        if (_purchases.Pay() is { } problem)
+            Say(problem);
+    }
+
+    /// <summary>Down goes into the matches; Enter takes the only one there is.</summary>
+    private void PurchaseItemBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Down && _purchases.ItemMatches.Count > 0)
+        {
+            PurchaseMatches.SelectedIndex = 0;
+            PurchaseMatches.UpdateLayout();
+            (PurchaseMatches.ItemContainerGenerator.ContainerFromIndex(0) as UIElement)?.Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            if (_purchases.LineItem is null && _purchases.ItemMatches.Count == 1)
+                _purchases.LineItem = _purchases.ItemMatches[0];
+
+            if (_purchases.LineItem is not null)
+                LineQuantityBox.Focus();
+
+            e.Handled = true;
+        }
+    }
+
+    private void PurchaseMatches_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        TakeMatch();
+        e.Handled = true;
+    }
+
+    private void PurchaseMatches_MouseDoubleClick(object sender, MouseButtonEventArgs e) => TakeMatch();
+
+    private void TakeMatch()
+    {
+        if (PurchaseMatches.SelectedItem is not Item item)
+            return;
+
+        _purchases.LineItem = item;
+        LineQuantityBox.Focus();
+    }
+
+    /// <summary>Enter in any of the line's boxes puts the line on the bill and goes back for the next item.</summary>
+    private void PurchaseLineField_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        AddPurchaseLine();
+        e.Handled = true;
+    }
+
+    private void AddPurchaseLine_Click(object sender, RoutedEventArgs e) => AddPurchaseLine();
+
+    private void AddPurchaseLine()
+    {
+        if (_purchases.AddLine() is null)
+            PurchaseItemBox.Focus();
+    }
+
+    private void PurchaseLinesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || _purchases.SelectedLine is not { } line)
+            return;
+
+        _purchases.RemoveLine(line);
+        e.Handled = true;
+    }
+
+    private void SavePurchase_Click(object sender, RoutedEventArgs e)
+    {
+        // Said before it happens: a bill puts stock on the shelf and money on an account, and the
+        // number typed in the wrong box is easiest to catch now.
+        if (!ConfirmDialog.Ask(this, "Save the bill?", _purchases.SaveQuestion, "Save the bill", "Not yet"))
+            return;
+
+        if (_purchases.SaveBill() is { } problem)
+            Say(problem);
+        else
+            SupplierSearchBox.Focus();
+    }
+
+    private void ClearPurchase_Click(object sender, RoutedEventArgs e) => _purchases.ClearBill();
+
+    private void VoidPurchase_Click(object sender, RoutedEventArgs e)
+    {
+        if (_purchases.SelectedBill is not { } bill)
+            return;
+
+        // "Keep it" rather than "Cancel": a Cancel button on a question about cancelling a bill
+        // could be read as the answer yes.
+        if (!ConfirmDialog.Ask(this, "Cancel the bill?",
+                $"Cancel bill {bill.BillNo} from {bill.SupplierName}, for {bill.Total:N2}?\n\nWhat it put on the shelf comes back off, and it is no longer owed. The entry stays in the book, marked cancelled.",
+                "Cancel the bill", "Keep it", DialogKind.Danger))
+        {
+            return;
+        }
+
+        if (_purchases.VoidBill() is { } problem)
+            Say(problem);
+    }
+
     // ---- The stock sheet ---------------------------------------------------------------------
 
     private void SaveStockSheet_Click(object sender, RoutedEventArgs e)
@@ -568,12 +888,13 @@ public partial class OwnerView : Window
 
         // Said before anything is written: a stocktake loaded against the wrong day's sheet is a
         // hundred wrong counts, and this is the moment it can still be stopped.
-        var ask = $"Change {plan.Counts} count(s)"
-                + (plan.FullLevels > 0 ? $" and {plan.FullLevels} full level(s)" : string.Empty)
-                + $"?\n\n{plan.Blank} row(s) are blank and {plan.Unchanged} match what the count already says; those are left alone. "
+        var ask = $"Change {Plural.Of(plan.Counts, "count")}"
+                + (plan.FullLevels > 0 ? $" and {Plural.Of(plan.FullLevels, "full level")}" : string.Empty)
+                + "?\n\n"
+                + (SheetWords.LeftAlone(plan.Blank, plan.Unchanged, "count") is { Length: > 0 } leftAlone ? leftAlone + " " : string.Empty)
                 + "Prices and everything else about the items stay as they are.";
 
-        if (MessageBox.Show(this, ask, "Load the stock sheet?", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+        if (!ConfirmDialog.Ask(this, "Load the stock sheet?", ask, "Change the counts", "Leave them"))
             return;
 
         if (_viewModel.ApplyStockSheet(plan) is { } problem)
@@ -594,6 +915,111 @@ public partial class OwnerView : Window
     private void SaveLowStockPercent()
     {
         if (_viewModel.SetLowStockPercent() is { } problem)
+            Say(problem);
+    }
+
+    private void SaveUpiId_Click(object sender, RoutedEventArgs e) => SaveUpiId();
+
+    private void UpiId_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        SaveUpiId();
+        e.Handled = true;
+    }
+
+    private void SaveUpiId()
+    {
+        if (_viewModel.SetUpiId() is { } problem)
+            Say(problem);
+    }
+
+    private void SaveStatement_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.StatementPage() is not { } page)
+        {
+            Say(_customers.Status);
+            return;
+        }
+
+        SaveStatementPage(page, $"khata-{_customers.Mobile}-{DateTime.Today:yyyy-MM-dd}.html", 1);
+    }
+
+    private void SaveEveryoneOwing_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.EveryoneOwingPage() is not { } page)
+        {
+            Say(_customers.Status);
+            return;
+        }
+
+        SaveStatementPage(page, $"khata-everyone-{DateTime.Today:yyyy-MM-dd}.html", -1);
+    }
+
+    private void SaveStatementPage(string page, string fileName, int statements)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the khata statement",
+            Filter = "Web page (*.html)|*.html",
+            FileName = fileName,
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, page, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Say($"It could not be saved: {ex.Message}");
+            return;
+        }
+
+        // One page per statement, each a <section>: counted rather than carried separately.
+        var count = statements > 0 ? statements : System.Text.RegularExpressions.Regex.Matches(page, "<section class=\"statement\">").Count;
+        _customers.Saved(dialog.FileName, count);
+    }
+
+    private void SaveBillPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.BillPage() is not { } page || _customers.SelectedBill is not { } bill)
+        {
+            Say(_customers.Status);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the bill",
+            Filter = "Web page (*.html)|*.html",
+            FileName = $"{bill.InvoiceNo.Replace('/', '-')}.html",
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, page, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Say($"{bill.InvoiceNo} saved to {dialog.FileName}.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Say($"It could not be saved: {ex.Message}");
+        }
+    }
+
+    private void CopyStatement_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.CopyStatement() is { } problem)
             Say(problem);
     }
 
@@ -645,8 +1071,7 @@ public partial class OwnerView : Window
             : "This lane will start issuing a TAX INVOICE and will charge GST.\n\n"
               + "Only do this if the shop is registered to collect it. Bills already issued do not change.";
 
-        if (MessageBox.Show(this, going, "Change what this lane issues?",
-                MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (!ConfirmDialog.Ask(this, "Change what this lane issues?", going, "Change it", "Leave it", DialogKind.Warning))
         {
             Restore();
             return;
@@ -719,10 +1144,10 @@ public partial class OwnerView : Window
             return;
         }
 
-        if (MessageBox.Show(this,
-                "Remove the PIN? Anyone at this till will then be able to open this screen and read "
-                + "the shop's turnover, margins and cost prices.",
-                "Remove the PIN?", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (!ConfirmDialog.Ask(this, "Remove the PIN?",
+                "Anyone at this till will then be able to open this screen and read the shop's turnover, "
+                + "margins and cost prices.",
+                "Remove the PIN", "Keep it", DialogKind.Danger))
         {
             return;
         }
@@ -731,6 +1156,5 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
-    private void Say(string message) =>
-        MessageBox.Show(this, message, "RetailPOS", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void Say(string message) => ConfirmDialog.Tell(this, "RetailPOS", message);
 }

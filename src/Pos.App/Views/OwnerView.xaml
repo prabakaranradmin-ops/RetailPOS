@@ -2,14 +2,23 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Pos.App.Views"
+        xmlns:app="clr-namespace:Pos.App"
+        xmlns:charts="clr-namespace:Pos.App.Charts"
         Title="RetailPOS — Owner" Height="900" Width="1440"
+        Language="en-IN"
         WindowStartupLocation="CenterOwner" WindowState="Maximized"
-        Background="{StaticResource Surface}">
+        Background="{StaticResource AppBackdrop}">
 
   <Window.Resources>
-    <SolidColorBrush x:Key="Warn" Color="#FFFF7A66" />
+    <!--
+      No colour of its own for warnings: red (Danger) is for a problem, amber (Warning) for
+      something to check, and the quiet ink for "nothing here". One red for all three put "nothing
+      is owed to any supplier" and "before filing" in the colour of a fault.
+    -->
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
+    <v:PluralConverter x:Key="Plural" />
+    <v:ShowConverter x:Key="Show" />
     <v:StarShareConverter x:Key="Share" />
     <v:StarShareConverter x:Key="Rest" Remainder="True" />
 
@@ -18,28 +27,57 @@
       pale tab with pale text on it — the header was unreadable, selected or not. Templated rather
       than tinted because the default template layers a border and a highlight of its own that no
       amount of property setting reaches.
+
+      Each section carries its icon and its key (v:Nav) beside its name. The accent bar marks the
+      section on show, and the section with the keyboard is marked too - it used to be told apart by
+      a background 1.08:1 from the page, which is to say not at all.
     -->
     <Style TargetType="TabItem">
       <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
       <Setter Property="FontSize" Value="14" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
       <Setter Property="Template">
         <Setter.Value>
+          <!--
+            A list down the left rather than a strip across the top. Nine sections and counting do
+            not fit across a 1366-wide till screen on one row, and a strip that wraps onto two takes
+            the height from every page under it.
+          -->
           <ControlTemplate TargetType="TabItem">
-            <Border x:Name="Chrome" Background="Transparent" Padding="18,10" Margin="0,0,4,0"
-                    BorderBrush="Transparent" BorderThickness="0,0,0,2">
-              <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+            <Border x:Name="Chrome" Background="Transparent" Padding="12,8,12,8" Margin="0,0,0,3"
+                    CornerRadius="0,8,8,0" BorderBrush="Transparent" BorderThickness="3,0,0,0">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Icon" Text="{Binding (v:Nav.Glyph), RelativeSource={RelativeSource TemplatedParent}}"
+                           Style="{StaticResource Glyph}" FontSize="16" Width="22" Margin="0,0,10,0"
+                           Foreground="{StaticResource InkDim}" />
+                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" />
+                <Border x:Name="KeyChip" Grid.Column="2" Margin="12,0,0,0" CornerRadius="4" Padding="5,1"
+                        Background="#14FFFFFF" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding (v:Nav.Shortcut), RelativeSource={RelativeSource TemplatedParent}}"
+                             FontFamily="{StaticResource FigureFont}" FontSize="10.5" Foreground="{StaticResource InkDim}" />
+                </Border>
+              </Grid>
             </Border>
             <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource RowHover}" />
+                <Setter Property="Foreground" Value="{StaticResource Ink}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource FieldBorder}" />
+                <Setter Property="Foreground" Value="{StaticResource Ink}" />
+              </Trigger>
               <Trigger Property="IsSelected" Value="True">
                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource RowActive}" />
+                <Setter TargetName="Icon" Property="Foreground" Value="{StaticResource Accent}" />
                 <Setter Property="Foreground" Value="{StaticResource Ink}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-              </Trigger>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource Ink}" />
-              </Trigger>
-              <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SurfaceRaised}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -48,78 +86,12 @@
     </Style>
 
     <!--
-      Buttons and text boxes are styled here rather than in App.xaml. They keep their system chrome
-      everywhere else, and on this dark background that chrome puts a white label on a white face —
-      the Apply button read as an empty rectangle. Scoped to this window so the billing screen,
-      which the shop already knows, is not touched by any of it.
+      Buttons, boxes and choices are styled in Theme.xaml now, for every window. They used to be
+      styled here alone, which is how the PIN prompt in front of this screen was left with the
+      system's pale buttons and white labels on them.
     -->
-    <Style TargetType="Button">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="FontSize" Value="14" />
-      <Setter Property="Cursor" Value="Hand" />
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="Face" CornerRadius="6" Background="#FF243040"
-                    BorderBrush="{StaticResource Line}" BorderThickness="1"
-                    Padding="{TemplateBinding Padding}">
-              <!--
-                RecognizesAccessKey, or a button labelled "_Import" renders with the underscore
-                showing and Alt+I reaches nothing. The default template does this; this one replaces
-                it, so it has to say so itself.
-              -->
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                RecognizesAccessKey="True" />
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="#FF2E3D50" />
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}" />
-              </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}" />
-              </Trigger>
-              <Trigger Property="IsEnabled" Value="False">
-                <Setter TargetName="Face" Property="Opacity" Value="0.4" />
-                <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
-                <Setter Property="Cursor" Value="Arrow" />
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
 
-    <Style TargetType="TextBox">
-      <Setter Property="Background" Value="#FF0B0F13" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="FontSize" Value="14" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-
-    <Style TargetType="PasswordBox">
-      <Setter Property="Background" Value="#FF0B0F13" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="FontSize" Value="14" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-
-    <Style TargetType="RadioButton">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="FontSize" Value="14" />
-    </Style>
-
-    <Style x:Key="Card" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource SurfaceRaised}" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="18,16" />
-    </Style>
+    <Style x:Key="Card" TargetType="Border" BasedOn="{StaticResource CardPanel}" />
 
     <Style x:Key="Label" TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
@@ -134,30 +106,45 @@
     </Style>
 
     <Style x:Key="Figure" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="28" />
-      <Setter Property="Margin" Value="0,4,0,0" />
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,6,0,0" />
     </Style>
+
+    <!-- The head of a headline card: its icon in a tinted square, and what it counts. -->
+    <Style x:Key="KpiBadge" TargetType="Border" BasedOn="{StaticResource IconBadge}">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Margin" Value="0,0,10,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <LinearGradientBrush x:Key="RankFill" StartPoint="0,0" EndPoint="1,0">
+      <GradientStop Color="#FF0EA5E9" Offset="0" />
+      <GradientStop Color="#FF38BDF8" Offset="1" />
+    </LinearGradientBrush>
 
     <!-- A ranked row: name, detail, amount, and a bar as wide as its share of the biggest. -->
     <DataTemplate x:Key="RankedRowTemplate">
-      <Grid Margin="0,0,0,11">
+      <Grid Margin="0,0,0,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0" Margin="0,0,16,0">
-          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-          <TextBlock Text="{Binding Detail}" Style="{StaticResource Label}" Margin="0,1,0,4" />
-          <Grid Height="6">
+          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Detail}" Style="{StaticResource Label}" Margin="0,1,0,5" />
+          <Grid Height="7">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="{Binding Fraction, Converter={StaticResource Share}}" />
               <ColumnDefinition Width="{Binding Fraction, Converter={StaticResource Rest}}" />
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" CornerRadius="3" Background="{StaticResource Accent}" Opacity="0.85" />
-            <Border Grid.Column="1" CornerRadius="3" Background="{StaticResource Line}" Margin="2,0,0,0" />
+            <Border Grid.Column="0" CornerRadius="3.5" Background="{StaticResource RankFill}" />
+            <Border Grid.Column="1" CornerRadius="3.5" Background="{StaticResource ChartGrid}" Margin="2,0,0,0" />
           </Grid>
         </StackPanel>
-        <TextBlock Grid.Column="1" Text="{Binding Amount}" FontSize="16" VerticalAlignment="Top" />
+        <TextBlock Grid.Column="1" Text="{Binding Amount}" FontSize="15" VerticalAlignment="Top"
+                   FontFamily="{StaticResource FigureFont}" FontWeight="SemiBold" />
       </Grid>
     </DataTemplate>
   </Window.Resources>
@@ -176,63 +163,115 @@
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
 
-      <StackPanel Grid.Column="0">
-        <TextBlock Text="Owner" FontSize="26" />
-        <TextBlock Style="{StaticResource Label}" Margin="0,2,0,0">
-          <Run Text="Lane" /><Run Text=" " /><Run Text="{Binding LaneId, Mode=OneWay}" />
-          <Run Text=" · " /><Run Text="{Binding ReadIn, Mode=OneWay}" />
-        </TextBlock>
+      <StackPanel Grid.Column="0" Orientation="Horizontal">
+        <Border Width="42" Height="42" CornerRadius="12" Margin="0,0,14,0" VerticalAlignment="Center">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#FF38BDF8" Offset="0" />
+              <GradientStop Color="#FF10B981" Offset="1" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <TextBlock Text="{x:Static app:Glyphs.Dashboard}" Style="{StaticResource Glyph}" FontSize="20"
+                     Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center" />
+        </Border>
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Owner" FontSize="24" FontWeight="SemiBold" />
+          <TextBlock Style="{StaticResource Label}" Margin="0,1,0,0">
+            <Run Text="Lane" /><Run Text=" " /><Run Text="{Binding LaneId, Mode=OneWay}" />
+            <Run Text=" · " /><Run Text="{Binding PeriodText, Mode=OneWay}" />
+          </TextBlock>
+        </StackPanel>
       </StackPanel>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
         <TextBlock Text="Period" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0" />
-        <RadioButton x:Name="Days7" Content="7 days" GroupName="Days" Margin="0,0,12,0"
-                     Foreground="{StaticResource Ink}" VerticalAlignment="Center" Checked="Days_Checked" Tag="7" />
-        <RadioButton x:Name="Days30" Content="30 days" GroupName="Days" Margin="0,0,12,0" IsChecked="True"
-                     Foreground="{StaticResource Ink}" VerticalAlignment="Center" Checked="Days_Checked" Tag="30" />
-        <RadioButton x:Name="Days90" Content="90 days" GroupName="Days" Margin="0,0,20,0"
-                     Foreground="{StaticResource Ink}" VerticalAlignment="Center" Checked="Days_Checked" Tag="90" />
-        <Button Content="Refresh" Padding="14,6" Margin="0,0,10,0" Click="Refresh_Click" />
-        <Button Content="Save as a web _page…" Padding="14,6" Click="SaveWebPage_Click"
-                IsEnabled="{Binding CanSaveWebPage, Mode=OneWay}" />
+        <Border Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}" BorderThickness="1"
+                CornerRadius="9" Padding="3" Margin="0,0,16,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="Days7" Content="7 days" GroupName="Days" Style="{StaticResource SegmentChoice}"
+                         Checked="Days_Checked" Tag="7" />
+            <RadioButton x:Name="Days30" Content="30 days" GroupName="Days" Style="{StaticResource SegmentChoice}"
+                         IsChecked="True" Checked="Days_Checked" Tag="30" />
+            <RadioButton x:Name="Days90" Content="90 days" GroupName="Days" Style="{StaticResource SegmentChoice}"
+                         Checked="Days_Checked" Tag="90" />
+          </StackPanel>
+        </Border>
+        <Button Padding="12,6" Margin="0,0,10,0" Click="Refresh_Click" ToolTip="Read the figures again (F5)">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{x:Static app:Glyphs.Refresh}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Text="Refresh" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Padding="12,6" Click="SaveWebPage_Click" IsEnabled="{Binding CanSaveWebPage, Mode=OneWay}"
+                ToolTip="The figures as one page, to open on a phone or send to an accountant">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{x:Static app:Glyphs.Download}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+            <AccessText Text="Sa_ve as a web page…" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
       </StackPanel>
     </Grid>
 
     <!-- Body ================================================================================== -->
-    <TabControl x:Name="Tabs" Grid.Row="1" Margin="16,0,16,0" Background="Transparent" BorderThickness="0">
+    <TabControl x:Name="Tabs" Grid.Row="1" Margin="12,0,16,0" Background="Transparent" BorderThickness="0"
+                TabStripPlacement="Left">
 
       <!-- ==== The figures ==== -->
-      <TabItem Header="The figures  (Ctrl+1)">
+      <TabItem Header="The figures" v:Nav.Glyph="{x:Static app:Glyphs.Dashboard}" v:Nav.Shortcut="Ctrl+1">
         <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
-          <StackPanel>
+          <StackPanel Margin="0,0,10,0">
 
+            <!--
+              The four figures a shopkeeper checks first. Each has its icon and a line of what it
+              means; the period's takings also carry their shape, day by day, in a small line under
+              the total - rising or falling at a glance, with the full chart further down.
+            -->
             <UniformGrid Rows="1" Margin="0,0,0,16">
-              <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+              <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                 <StackPanel>
-                  <TextBlock Text="NET SALES, THE PERIOD" Style="{StaticResource Heading}" Margin="0" />
+                  <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource KpiBadge}">
+                      <TextBlock Text="{x:Static app:Glyphs.Trend}" Style="{StaticResource Glyph}" Foreground="{StaticResource Positive}" HorizontalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="NET SALES, THE PERIOD" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                  </StackPanel>
                   <TextBlock Text="{Binding PeriodNetSales, Mode=OneWay}" Style="{StaticResource Figure}"
                              Foreground="{StaticResource Positive}" />
                   <TextBlock Style="{StaticResource Label}" Margin="0,4,0,0">
-                    <Run Text="{Binding PeriodBills, Mode=OneWay}" /><Run Text=" bills · " />
-                    <Run Text="{Binding PeriodDiscount, Mode=OneWay}" /><Run Text=" given away" />
+                    <Run Text="{Binding PeriodBills, Mode=OneWay}" /><Run Text=" bills · " /><Run Text="{Binding PeriodDiscount, Mode=OneWay}" /><Run Text=" given away" />
                   </TextBlock>
                   <TextBlock Style="{StaticResource Label}" Margin="0,2,0,0">
                     <Run Text="{Binding PeriodAverageBasket, Mode=OneWay}" /><Run Text=" a basket" />
                   </TextBlock>
+                  <charts:Sparkline Values="{Binding SalesSpark, Mode=OneWay}" Colour="1" Height="34" Margin="0,10,0,0" />
+                  <TextBlock Text="{Binding BestDayLine, Mode=OneWay}" Style="{StaticResource Label}" Margin="0,4,0,0"
+                             Foreground="{StaticResource InkDim}" />
                 </StackPanel>
               </Border>
-              <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+              <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                 <StackPanel>
-                  <TextBlock Text="TODAY" Style="{StaticResource Heading}" Margin="0" />
+                  <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource KpiBadge}">
+                      <TextBlock Text="{x:Static app:Glyphs.Clock}" Style="{StaticResource Glyph}" HorizontalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="TODAY" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                  </StackPanel>
                   <TextBlock Text="{Binding TodayNetSales, Mode=OneWay}" Style="{StaticResource Figure}" />
                   <TextBlock Style="{StaticResource Label}" Margin="0,4,0,0">
                     <Run Text="{Binding TodayBills, Mode=OneWay}" /><Run Text=" bills since midnight" />
                   </TextBlock>
                 </StackPanel>
               </Border>
-              <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+              <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                 <StackPanel>
-                  <TextBlock Text="CASH TAKEN" Style="{StaticResource Heading}" Margin="0" />
+                  <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource KpiBadge}">
+                      <TextBlock Text="{x:Static app:Glyphs.Drawer}" Style="{StaticResource Glyph}" Foreground="{StaticResource Positive}" HorizontalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="CASH TAKEN" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                  </StackPanel>
                   <TextBlock Text="{Binding PeriodCash, Mode=OneWay}" Style="{StaticResource Figure}" />
                   <TextBlock Text="what the drawer should hold, less your float"
                              Style="{StaticResource Label}" Margin="0,4,0,0" TextWrapping="Wrap" />
@@ -245,19 +284,36 @@
                     reach the bank", and counted store credit - still owed - and points - given
                     away - as money on its way to the bank account.
                   -->
-                  <TextBlock Text="CARD AND UPI" Style="{StaticResource Heading}" Margin="0" />
+                  <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource KpiBadge}">
+                      <TextBlock Text="{x:Static app:Glyphs.Bank}" Style="{StaticResource Glyph}" HorizontalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="CARD AND UPI" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                  </StackPanel>
                   <TextBlock Text="{Binding PeriodBank, Mode=OneWay}" Style="{StaticResource Figure}" />
                   <TextBlock Text="what should reach the bank"
                              Style="{StaticResource Label}" Margin="0,4,0,0" TextWrapping="Wrap" />
-                  <TextBlock Text="{Binding PeriodNotBanked, Mode=OneWay}" Foreground="{StaticResource Negative}"
+                  <TextBlock Text="{Binding PeriodNotBanked, Mode=OneWay}" Foreground="{StaticResource Warning}"
                              FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" />
                 </StackPanel>
               </Border>
             </UniformGrid>
 
+            <!-- The trend: every day of the period, with the seven-day average over it. -->
+            <charts:ChartCard Title="Takings, day by day" Subtitle="{Binding PeriodText, Mode=OneWay}"
+                              Glyph="{x:Static app:Glyphs.Chart}" Margin="0,0,0,16"
+                              Caption="Point at a day - or Tab to the chart and use the arrow keys - for its bills. Drag across the chart to zoom in. The dashed line is the seven-day average: whether it climbs is whether the shop is growing.">
+              <charts:CategoryChart Data="{Binding SalesChart, Mode=OneWay}" Height="290" />
+            </charts:ChartCard>
+
             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
               <StackPanel>
-                <TextBlock Text="WHAT THE SHOP EARNED" Style="{StaticResource Heading}" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                  <Border Style="{StaticResource KpiBadge}">
+                    <TextBlock Text="{x:Static app:Glyphs.Star}" Style="{StaticResource Glyph}" Foreground="{StaticResource Positive}" HorizontalAlignment="Center" />
+                  </Border>
+                  <TextBlock Text="WHAT THE SHOP EARNED" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                </StackPanel>
 
                 <UniformGrid Rows="1" Margin="0,0,0,4">
                   <StackPanel Margin="0,0,16,0">
@@ -279,8 +335,21 @@
 
                 <TextBlock Text="{Binding MarginCoverage, Mode=OneWay}" Style="{StaticResource Label}"
                            TextWrapping="Wrap" Margin="0,6,0,0" />
+                <TextBlock Text="{Binding ExpensesLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                <TextBlock Text="{Binding AfterExpensesLine, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0" />
               </StackPanel>
             </Border>
+
+            <!--
+              The margin map: every priced item, placed by how fast it sells against what it keeps,
+              drawn as big as what it took. The same four boxes as the saved web page.
+            -->
+            <charts:ChartCard Title="Margin against how fast it sells" Glyph="{x:Static app:Glyphs.Bubbles}" Margin="0,0,0,16"
+                              Subtitle="Each item placed by units sold and margin, drawn as big as what it took"
+                              Visibility="{Binding HasMargins, Converter={StaticResource BoolToVisibility}}"
+                              Caption="Split at this shop's own middle: half its items sell faster than the upright line, half earn more than the level one. Click a box's name above the chart, or press its number, to hide it.">
+              <charts:BubbleChart Data="{Binding MarginChart, Mode=OneWay}" Height="360" />
+            </charts:ChartCard>
 
             <Grid Margin="0,0,0,16" Visibility="{Binding HasMargins, Converter={StaticResource BoolToVisibility}}">
               <Grid.ColumnDefinitions>
@@ -307,83 +376,44 @@
               </Border>
             </Grid>
 
-            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-              <StackPanel>
-                <TextBlock Text="DAY BY DAY" Style="{StaticResource Heading}" />
-                <ItemsControl ItemsSource="{Binding Daily}" Height="150">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <Grid Margin="1,0" ToolTip="{Binding Tooltip}">
-                        <Grid.RowDefinitions>
-                          <RowDefinition Height="*" />
-                          <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid Grid.Row="0">
-                          <Grid.RowDefinitions>
-                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Rest}}" />
-                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Share}}" />
-                          </Grid.RowDefinitions>
-                          <Border Grid.Row="1" CornerRadius="3,3,0,0" MinHeight="2"
-                                  Background="{StaticResource Positive}" Opacity="0.8" />
-                        </Grid>
-                        <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Label}"
-                                   HorizontalAlignment="Center" Margin="0,5,0,0" FontSize="9" />
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock Text="Whether the shop is growing is a question about the shape of this, not about any one day in it. Hover a bar for the bills behind it."
-                           Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
+            <!-- When: the hours of the day, and the week against them. -->
+            <Grid Margin="0,0,0,16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
 
-            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-              <StackPanel>
-                <TextBlock Text="WHO IS BUYING, AND WHAT WAS CANCELLED" Style="{StaticResource Heading}" />
-                <TextBlock Text="{Binding CustomerLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,0,4" />
-                <TextBlock Text="{Binding ReturningLine, Mode=OneWay}" Style="{StaticResource Label}"
-                           TextWrapping="Wrap" Margin="0,0,0,10" />
-                <TextBlock Text="{Binding VoidLine, Mode=OneWay}" TextWrapping="Wrap" />
-                <TextBlock Text="A cancelled sale is the ordinary way to fix a mistake at the counter. It is also the shape till fraud takes, so the figure is here to be glanced at rather than gone looking for."
-                           Style="{StaticResource Label}" Margin="0,6,0,0" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
+              <charts:ChartCard Grid.Column="0" Margin="0,0,8,0" Title="When the shop is busy"
+                                Subtitle="Takings and bills, hour by hour" Glyph="{x:Static app:Glyphs.Clock}"
+                                Caption="The quiet hours are as useful as the busy ones: they are when a delivery or a stock count fits.">
+                <charts:CategoryChart Data="{Binding HoursChart, Mode=OneWay}" Height="260" />
+              </charts:ChartCard>
 
-            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-              <StackPanel>
-                <TextBlock Text="WHEN THE SHOP IS BUSY" Style="{StaticResource Heading}" />
-                <ItemsControl ItemsSource="{Binding Hourly}" Height="150">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <Grid Margin="2,0" ToolTip="{Binding Tooltip}">
-                        <Grid.RowDefinitions>
-                          <RowDefinition Height="*" />
-                          <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid Grid.Row="0">
-                          <Grid.RowDefinitions>
-                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Rest}}" />
-                            <RowDefinition Height="{Binding Fraction, Converter={StaticResource Share}}" />
-                          </Grid.RowDefinitions>
-                          <Border Grid.Row="1" CornerRadius="3,3,0,0" MinHeight="2"
-                                  Background="{StaticResource Accent}" Opacity="0.85" />
-                        </Grid>
-                        <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Label}"
-                                   HorizontalAlignment="Center" Margin="0,5,0,0" FontSize="10" />
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock Text="The quiet hours are as useful as the busy ones — they are when a delivery or a stock count fits."
-                           Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
+              <charts:ChartCard Grid.Column="1" Margin="8,0,0,0" Title="The week, hour by hour"
+                                Subtitle="Takings by weekday, in two-hour bands" Glyph="{x:Static app:Glyphs.Heat}"
+                                Caption="The brighter the square, the more was taken then. The arrow keys move from square to square.">
+                <charts:HeatmapChart Data="{Binding WeekChart, Mode=OneWay}" Height="260" />
+              </charts:ChartCard>
+            </Grid>
+
+            <!-- How: the tenders, and the departments. -->
+            <Grid Margin="0,0,0,16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <charts:ChartCard Grid.Column="0" Margin="0,0,8,0" Title="How customers paid"
+                                Subtitle="{Binding PeriodText, Mode=OneWay}" Glyph="{x:Static app:Glyphs.Card}">
+                <charts:DonutChart Data="{Binding TenderChart, Mode=OneWay}" Height="230" />
+              </charts:ChartCard>
+
+              <charts:ChartCard Grid.Column="1" Margin="8,0,0,0" Title="Where the takings came from"
+                                Subtitle="By department" Glyph="{x:Static app:Glyphs.Pie}"
+                                Caption="{Binding DepartmentNote, Mode=OneWay}">
+                <charts:DonutChart Data="{Binding DepartmentChart, Mode=OneWay}" Height="230" />
+              </charts:ChartCard>
+            </Grid>
 
             <Grid Margin="0,0,0,16">
               <Grid.ColumnDefinitions>
@@ -393,7 +423,12 @@
 
               <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,8,0">
                 <StackPanel>
-                  <TextBlock Text="WHAT SELLS — BY WHAT IT BRINGS IN" Style="{StaticResource Heading}" />
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <Border Style="{StaticResource KpiBadge}">
+                      <TextBlock Text="{x:Static app:Glyphs.Cart}" Style="{StaticResource Glyph}" HorizontalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="WHAT SELLS — BY WHAT IT BRINGS IN" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                  </StackPanel>
                   <ItemsControl ItemsSource="{Binding TopItems}" ItemTemplate="{StaticResource RankedRowTemplate}" />
                 </StackPanel>
               </Border>
@@ -401,16 +436,24 @@
               <StackPanel Grid.Column="1" Margin="8,0,0,0">
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                   <StackPanel>
-                    <TextBlock Text="HOW CUSTOMERS PAID" Style="{StaticResource Heading}" />
-                    <ItemsControl ItemsSource="{Binding Tenders}" ItemTemplate="{StaticResource RankedRowTemplate}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                      <Border Style="{StaticResource KpiBadge}">
+                        <TextBlock Text="{x:Static app:Glyphs.People}" Style="{StaticResource Glyph}" HorizontalAlignment="Center" />
+                      </Border>
+                      <TextBlock Text="WHO IS BUYING, AND WHAT WAS CANCELLED" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding CustomerLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding ReturningLine, Mode=OneWay}" Style="{StaticResource Label}"
+                               TextWrapping="Wrap" Margin="0,0,0,10" />
+                    <TextBlock Text="{Binding VoidLine, Mode=OneWay}" TextWrapping="Wrap" />
+                    <TextBlock Text="Worth a glance: cancelling is how a counter mistake is fixed, and how till fraud is hidden."
+                               Style="{StaticResource Label}" Margin="0,6,0,0" TextWrapping="Wrap" />
                   </StackPanel>
                 </Border>
-                <Border Style="{StaticResource Card}">
-                  <StackPanel>
-                    <TextBlock Text="WHERE THE TAKINGS CAME FROM" Style="{StaticResource Heading}" />
-                    <ItemsControl ItemsSource="{Binding Categories}" ItemTemplate="{StaticResource RankedRowTemplate}" />
-                  </StackPanel>
-                </Border>
+
+                <charts:ChartCard Title="Loyalty points" Subtitle="Given and spent, day by day" Glyph="{x:Static app:Glyphs.Heart}">
+                  <charts:CategoryChart Data="{Binding PointsChart, Mode=OneWay}" Height="190" />
+                </charts:ChartCard>
               </StackPanel>
             </Grid>
 
@@ -418,18 +461,20 @@
                  that applied a nil rate, rather than one not permitted to charge at all. -->
             <Border x:Name="GstCard" Style="{StaticResource Card}" Margin="0,0,0,20">
               <StackPanel>
-                <TextBlock Text="GST BY SLAB — WHAT A RETURN IS FILED FROM" Style="{StaticResource Heading}" />
-                <DataGrid ItemsSource="{Binding GstSlabs}" AutoGenerateColumns="False" IsReadOnly="True"
-                          Background="Transparent" RowBackground="Transparent" BorderThickness="0"
-                          GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
-                          HeadersVisibility="Column" Foreground="{StaticResource Ink}">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                  <Border Style="{StaticResource KpiBadge}">
+                    <TextBlock Text="{x:Static app:Glyphs.Report}" Style="{StaticResource Glyph}" HorizontalAlignment="Center" />
+                  </Border>
+                  <TextBlock Text="GST BY SLAB — WHAT THE GST RETURN IS FILED FROM" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                </StackPanel>
+                <DataGrid AutomationProperties.Name="GST by slab" ItemsSource="{Binding GstSlabs}" AutoGenerateColumns="False" IsReadOnly="True">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="Slab" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="90" />
-                    <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="*" />
-                    <DataGridTextColumn Header="CGST" Binding="{Binding Cgst, StringFormat={}{0:N2}}" Width="*" />
-                    <DataGridTextColumn Header="SGST" Binding="{Binding Sgst, StringFormat={}{0:N2}}" Width="*" />
-                    <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="*" />
-                    <DataGridTextColumn Header="Tax" Binding="{Binding TotalTax, StringFormat={}{0:N2}}" Width="*" />
+                    <DataGridTextColumn Header="Slab" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                    <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                    <DataGridTextColumn Header="CGST" Binding="{Binding Cgst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                    <DataGridTextColumn Header="SGST" Binding="{Binding Sgst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                    <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                    <DataGridTextColumn Header="Tax" Binding="{Binding TotalTax, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
                   </DataGrid.Columns>
                 </DataGrid>
               </StackPanel>
@@ -448,7 +493,7 @@
       </TabItem>
 
       <!-- ==== Stock ==== -->
-      <TabItem Header="Stock  (Ctrl+2)">
+      <TabItem Header="Stock" v:Nav.Glyph="{x:Static app:Glyphs.Package}" v:Nav.Shortcut="Ctrl+2">
         <Grid Margin="8,12,8,8">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -461,41 +506,97 @@
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{Binding StockHeadline, Mode=OneWay}" FontSize="15"
+            <TextBlock Grid.Column="0" Text="{Binding ListHeadline, Mode=OneWay}" FontSize="15"
                        VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
               <RadioButton Content="_Needs reordering" GroupName="StockFilter" IsChecked="{Binding LowOnly}"
                            Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,14,0" />
               <RadioButton Content="Ever_ything counted" GroupName="StockFilter"
-                           Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
+                           Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,14,0" />
+              <RadioButton Content="Near its date (E_xpiry)" GroupName="StockFilter" IsChecked="{Binding ShowExpiring}"
+                           Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,14,0"
+                           Visibility="{Binding CanShowExpiring, Converter={StaticResource BoolToVisibility}}" />
+              <RadioButton Content="Not selling (_dead stock)" GroupName="StockFilter" IsChecked="{Binding ShowDead}"
+                           Foreground="{StaticResource Ink}" VerticalAlignment="Center"
+                           Visibility="{Binding CanShowDead, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
           </Grid>
 
-          <DataGrid Grid.Row="1" ItemsSource="{Binding Stock}" SelectedItem="{Binding SelectedStock}"
+          <!-- What has stopped selling, in place of the counts. -->
+          <DataGrid Grid.Row="1" ItemsSource="{Binding DeadStockItems}"
+                    Visibility="{Binding ShowDead, Converter={StaticResource BoolToVisibility}}"
+                    AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True"
+                    Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                    GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                    HeadersVisibility="Column" Foreground="{StaticResource Ink}"
+                    SelectionMode="Single" RowHeight="34">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="130" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Have" Binding="{Binding Have, StringFormat={}{0:0.###}}" Width="70" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="Last sold" Binding="{Binding LastSold, StringFormat=dd MMM yyyy, TargetNullValue='never'}" Width="110" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Days" Binding="{Binding DaysSinceSold}" Width="60" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Tied up" Binding="{Binding TiedUp, StringFormat={}{0:N2}}" Width="100" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="What to do" Binding="{Binding Advice}" Width="1.3*" MinWidth="240" ElementStyle="{StaticResource TrimmedColumn}" />
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <!-- Deliveries near their use-by date, in place of the counts. -->
+          <DataGrid Grid.Row="1" ItemsSource="{Binding ExpiryWarnings}"
+                    Visibility="{Binding ShowExpiring, Converter={StaticResource BoolToVisibility}}"
                     AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True"
                     Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                     GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                     HeadersVisibility="Column" Foreground="{StaticResource Ink}"
                     SelectionMode="Single" RowHeight="34">
             <DataGrid.RowStyle>
-              <Style TargetType="DataGridRow">
+              <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                 <Style.Triggers>
-                  <!-- None left. Coloured rather than hidden: it is the row worth acting on. -->
-                  <DataTrigger Binding="{Binding IsOut}" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource Warn}" />
+                  <DataTrigger Binding="{Binding IsExpired}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Danger}" />
                   </DataTrigger>
                 </Style.Triggers>
               </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-              <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" />
-              <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
-              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="130" />
-              <DataGridTextColumn Header="Have" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" />
-              <DataGridTextColumn Header="Full" Binding="{Binding FullLevel, StringFormat={}{0:0.###}}" Width="80" />
-              <DataGridTextColumn Header="Left" Binding="{Binding PercentLeft, StringFormat={}{0:0}%}" Width="70" />
-              <DataGridTextColumn Header="Warns at" Binding="{Binding WarnAt, StringFormat={}{0:0.###}}" Width="90" />
-              <DataGridTextColumn Header="To order" Binding="{Binding ToOrder, StringFormat={}{0:0.###}}" Width="90" />
+              <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Use by" Binding="{Binding Expires, Converter={StaticResource Show}}" Width="110" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Days" Binding="{Binding DaysLeft}" Width="60" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Likely on shelf" Binding="{Binding LikelyOnShelf, StringFormat={}{0:0.###}, TargetNullValue='not counted'}" Width="120" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="Batch" Binding="{Binding BatchNo}" Width="100" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="From" Binding="{Binding Supplier}" Width="160" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Came in" Binding="{Binding Received, StringFormat=dd MMM}" Width="80" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="What to do" Binding="{Binding Advice}" Width="1.3*" MinWidth="220" ElementStyle="{StaticResource TrimmedColumn}" />
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <DataGrid AutomationProperties.Name="Stock counts" Grid.Row="1" ItemsSource="{Binding Stock}" SelectedItem="{Binding SelectedStock}"
+                    Visibility="{Binding ShowsStockList, Converter={StaticResource BoolToVisibility}}"
+                    AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True"
+                    Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                    GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                    HeadersVisibility="Column" Foreground="{StaticResource Ink}"
+                    SelectionMode="Single" RowHeight="34">
+            <DataGrid.RowStyle>
+              <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                <Style.Triggers>
+                  <!-- None left. Coloured rather than hidden: it is the row worth acting on. -->
+                  <DataTrigger Binding="{Binding IsOut}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Warning}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="130" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Have" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="Full" Binding="{Binding FullLevel, StringFormat={}{0:0.###}}" Width="80" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="Left" Binding="{Binding PercentLeft, StringFormat={}{0:0}%}" Width="70" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Warns at" Binding="{Binding WarnAt, StringFormat={}{0:0.###}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+              <DataGridTextColumn Header="Days left" Binding="{Binding DaysLeft, StringFormat={}{0:0.#}}" Width="80" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="To order" Binding="{Binding ToOrder, StringFormat={}{0:0.###}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
             </DataGrid.Columns>
           </DataGrid>
 
@@ -513,13 +614,14 @@
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Text="New count" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
                   <TextBox Text="{Binding NewQuantity, UpdateSourceTrigger=PropertyChanged}" Width="90"
-                           Padding="8,6" Margin="0,0,14,0" />
+                           AutomationProperties.Name="New count" Padding="8,6" Margin="0,0,14,0" />
                   <TextBlock Text="Why" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
                   <TextBox Text="{Binding AdjustReason, UpdateSourceTrigger=PropertyChanged}" Width="220"
-                           Padding="8,6" Margin="0,0,14,0" />
+                           AutomationProperties.Name="Why the count changed" Padding="8,6" Margin="0,0,14,0" />
                   <Button Content="Apply" Padding="18,6" Click="Adjust_Click"
                           IsEnabled="{Binding CanAdjust, Mode=OneWay}" />
                 </StackPanel>
+                <TextBlock Text="{Binding AdjustBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
                 <TextBlock Text="The change and the reason are kept, so a count that stops matching the shelf can be traced back to where it went."
                            Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" />
               </StackPanel>
@@ -546,7 +648,7 @@
                   <ItemsControl ItemsSource="{Binding StockSheetProblems}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <TextBlock Text="{Binding}" Foreground="{StaticResource Warn}" TextWrapping="Wrap" FontSize="12.5" Margin="0,0,0,3" />
+                        <TextBlock Text="{Binding}" Foreground="{StaticResource Danger}" TextWrapping="Wrap" FontSize="12.5" Margin="0,0,0,3" />
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
@@ -558,23 +660,24 @@
       </TabItem>
 
       <!-- ==== Catalogue ==== -->
-      <TabItem x:Name="CatalogueTabItem" Header="Catalogue  (Ctrl+3)">
+      <TabItem x:Name="CatalogueTabItem" Header="Catalogue" v:Nav.Glyph="{x:Static app:Glyphs.Tag}" v:Nav.Shortcut="Ctrl+3">
         <Grid Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="440" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
 
-          <!-- One at a time -->
-          <ScrollViewer Tag="Page" x:Name="SingleItemPanel" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
-            <Border Style="{StaticResource Card}">
+          <!-- One at a time, and prices in bulk with the labels they put out of date -->
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
+            <StackPanel>
+            <Border x:Name="SingleItemPanel" Style="{StaticResource Card}" Margin="0,0,0,12">
               <StackPanel>
                 <TextBlock Text="ADD ONE ITEM" Style="{StaticResource Heading}" />
                 <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
                            Text="For a product the shop has just started stocking. It goes through exactly the same checks a file does, so nothing gets in here that would be refused there." />
 
                 <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                <TextBox x:Name="NewItemName" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,10" />
+                <TextBox AutomationProperties.Name="Item name" x:Name="NewItemName" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,10" />
 
                 <!-- Offered from the name, because the name is the only field that says what the
                      thing is. The shop's own codes come first and are marked as such. -->
@@ -604,11 +707,11 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
                     <TextBlock Text="HSN code" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding HsnCode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="HSN code" Text="{Binding HsnCode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="2">
                     <TextBlock Text="GST %" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding GstRate, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="GST rate, per cent" Text="{Binding GstRate, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                 </Grid>
 
@@ -620,11 +723,11 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
                     <TextBlock Text="SKU — your own code" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Item code (SKU)" Text="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="2">
                     <TextBlock Text="Barcode — blank for loose" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding Barcode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Barcode" Text="{Binding Barcode, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                 </Grid>
 
@@ -638,15 +741,15 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
                     <TextBlock Text="MRP" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding Mrp, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="MRP" Text="{Binding Mrp, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="2">
                     <TextBlock Text="You charge" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding SellingPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Selling price" Text="{Binding SellingPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="4">
                     <TextBlock Text="You pay" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding CostPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Cost price" Text="{Binding CostPrice, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                 </Grid>
 
@@ -660,15 +763,15 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
                     <TextBlock Text="Department" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Category" Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="2">
                     <TextBlock Text="On the shelf" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding StockQty, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Count on the shelf" Text="{Binding StockQty, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                   <StackPanel Grid.Column="4">
                     <TextBlock Text="Warn at" Style="{StaticResource Label}" Margin="0,0,0,3" />
-                    <TextBox Text="{Binding ReorderLevel, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Reorder level" Text="{Binding ReorderLevel, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
                   </StackPanel>
                 </Grid>
 
@@ -676,28 +779,35 @@
                   <AccessText Text="Sold in — _unit" Style="{x:Null}" Foreground="{StaticResource InkDim}" FontSize="12.5" />
                 </Label>
                 <!--
-                  A list rather than a drop-down: the default drop-down paints its own light face,
-                  which this dark theme's text is unreadable on. Arrow keys move through it, and typing
-                  a letter jumps to the unit whose spelling starts with it - m, u for Muzham.
+                  Every unit laid out at once, as short chips that wrap - not a drop-down, whose default
+                  face is light and unreadable in this theme, and no longer a 132-high list that
+                  scrolled inside the scrolling form. A chip carries the unit's name; what it means is
+                  its tooltip, and the line under the chips spells out the one chosen. Arrow keys move
+                  through them, and typing a letter jumps to the unit whose spelling starts with it.
                 -->
-                <ListBox x:Name="NewItemUnit" ItemsSource="{Binding UnitChoices}" SelectedItem="{Binding Unit}"
-                         TextSearch.TextPath="Code" IsTextSearchEnabled="True" Height="132" Margin="0,0,0,4"
-                         Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                <ListBox AutomationProperties.Name="Unit" x:Name="NewItemUnit" ItemsSource="{Binding UnitChoices}" SelectedItem="{Binding Unit}"
+                         TextSearch.TextPath="Code" IsTextSearchEnabled="True" Margin="0,0,0,4"
+                         Background="Transparent" BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
                          KeyboardNavigation.DirectionalNavigation="Contained">
+                  <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                  </ListBox.ItemsPanel>
                   <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource SegmentItem}">
                       <Setter Property="Focusable" Value="True" />
-                      <Setter Property="Padding" Value="8,3" />
+                      <Setter Property="Padding" Value="10,5" />
+                      <Setter Property="Margin" Value="0,0,4,4" />
                     </Style>
                   </ListBox.ItemContainerStyle>
                   <ListBox.ItemTemplate>
                     <DataTemplate>
-                      <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="13" />
+                      <TextBlock Text="{Binding Code}" FontSize="13" ToolTip="{Binding Description}" />
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <TextBlock Text="{Binding UnitHint}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                <TextBlock Text="{Binding UnitHint}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,4,0,4" />
                 <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,12"
                            Text="Leave &quot;on the shelf&quot; blank for anything you do not count, like loose rice out of a sack. Blank means not counted, which is not the same as none left." />
 
@@ -706,6 +816,7 @@
                           IsEnabled="{Binding CanSave, Mode=OneWay}" />
                   <Button Content="Clear" Padding="18,7" Click="ClearItem_Click" />
                 </StackPanel>
+                <TextBlock Text="{Binding SaveBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
 
                 <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" Margin="0,12,0,0"
                            Foreground="{StaticResource Accent}" />
@@ -713,7 +824,7 @@
                 <ItemsControl ItemsSource="{Binding Problems}" Margin="0,8,0,0">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <TextBlock Foreground="{StaticResource Warn}" TextWrapping="Wrap" Margin="0,0,0,3">
+                      <TextBlock Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,0,0,3">
                         <Run Text="{Binding Column, Mode=OneWay}" /><Run Text=": " /><Run Text="{Binding Problem, Mode=OneWay}" />
                       </TextBlock>
                     </DataTemplate>
@@ -721,6 +832,117 @@
                 </ItemsControl>
               </StackPanel>
             </Border>
+
+            <!--
+              Prices, and the labels they leave due, as two cards: the labels list sat at the foot of
+              the price card, below the fold, where nobody saw it was waiting.
+            -->
+            <Border x:Name="PricesPanel">
+              <StackPanel>
+              <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="PRICE REVISIONS" Style="{StaticResource Heading}" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="Save the price sheet, write each new price in its new_mrp or new_selling_price column, and load it back. Items whose price changed then wait in Shelf labels due until their labels are printed." />
+                <WrapPanel Margin="0,0,0,8">
+                  <Button Content="Save a price _sheet…" Padding="12,6" Margin="0,0,8,6" Click="SavePriceSheet_Click" />
+                  <Button Content="_Load a filled-in sheet…" Padding="12,6" Margin="0,0,0,6" Click="LoadPriceSheet_Click" />
+                </WrapPanel>
+                <ItemsControl ItemsSource="{Binding SheetProblems}" Margin="0,0,0,8">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding}" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,0,0,3" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="SHELF LABELS DUE" Style="{StaticResource Heading}" />
+                <TextBlock Text="{Binding LabelsHeadline, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <ListBox AutomationProperties.Name="Shelf labels due" ItemsSource="{Binding Labels}" MaxHeight="170" Margin="0,0,0,8"
+                         Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
+                  <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                      <Setter Property="Focusable" Value="True" />
+                      <Setter Property="Padding" Value="8,3" />
+                    </Style>
+                  </ListBox.ItemContainerStyle>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <Grid>
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{Binding Price, StringFormat={}{0:N2}}" Margin="10,0,0,0" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <CheckBox IsChecked="{Binding EveryItem}" Foreground="{StaticResource Ink}" Margin="0,0,0,8">
+                  <AccessText Text="A label for _every item, not only new prices" />
+                </CheckBox>
+                <WrapPanel>
+                  <Button Content="Pri_nt the labels" Padding="12,6" Margin="0,0,8,6" Click="PrintLabels_Click"
+                          IsEnabled="{Binding CanPrint, Mode=OneWay}" />
+                  <Button Content="Save as an A4 _page…" Padding="12,6" Margin="0,0,0,6" Click="SaveLabelsPage_Click"
+                          IsEnabled="{Binding CanPrint, Mode=OneWay}" />
+                </WrapPanel>
+                <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Foreground="{StaticResource Accent}" />
+              </StackPanel>
+              </Border>
+              </StackPanel>
+            </Border>
+
+            <!-- Offers and schemes: the sheet that sets them, and what each is giving. -->
+            <Border x:Name="OffersPanel" Style="{StaticResource Card}" Margin="0,16,0,0">
+              <StackPanel>
+                <TextBlock Text="OFFERS AND SCHEMES" Style="{StaticResource Heading}" />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="Save the offers sheet, fill it in - it has an example of each kind, from buy-two-get-one to money off a big bill - and load it back. The sheet is the whole list: a row taken out ends that offer." />
+                <WrapPanel Margin="0,0,0,8">
+                  <Button Content="Save the _offers sheet…" Padding="12,6" Margin="0,0,8,6" Click="SaveOfferSheet_Click" />
+                  <Button Content="Loa_d an offers sheet…" Padding="12,6" Margin="0,0,0,6" Click="LoadOfferSheet_Click" />
+                </WrapPanel>
+                <ItemsControl ItemsSource="{Binding SheetProblems}" Margin="0,0,0,8">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding}" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,0,0,3" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Headline, Mode=OneWay}" TextWrapping="Wrap" Margin="0,4,0,6" />
+                <ItemsControl ItemsSource="{Binding Rows}" Margin="0,0,0,8">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Margin="0,0,0,8">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="1" Text="{Binding State}" Margin="10,0,0,0" Foreground="{StaticResource InkMuted}" />
+                        </Grid>
+                        <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap">
+                          <Run Text="{Binding What, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding When, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding Given}" Foreground="{StaticResource Positive}" FontSize="12" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Foreground="{StaticResource Accent}" />
+              </StackPanel>
+            </Border>
+            </StackPanel>
           </ScrollViewer>
 
           <!-- A whole file -->
@@ -737,7 +959,7 @@
                          Style="{StaticResource Heading}" />
 
               <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="980" Margin="0,0,0,14"
-                         Text="Save the sheet from Excel as CSV UTF-8, then pick it here. The columns are sku, barcode, name, hsn_code, unit, mrp, selling_price, gst_rate and is_weighed — in any order, in any case. category, cost_price, stock_qty, reorder_level and full_level may be added and may be left out. CATALOGUE_FORMAT.md in the install folder is the full list. For counts alone, use the stock sheet on the Stock tab instead." />
+                         Text="Start from the blank template below: fill it in Excel, save it as CSV UTF-8, and pick it here. Its headings say what goes where, and the optional columns may be left out. For shelf counts alone, use the stock sheet on the Stock tab." />
 
               <Button Content="Save a blank _template to start from…" Padding="14,6" HorizontalAlignment="Left"
                       Margin="0,0,0,14" Click="SaveCatalogueTemplate_Click" />
@@ -755,7 +977,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="File" Style="{StaticResource Label}"
                            VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="1" x:Name="CataloguePath" Padding="8,6" Margin="0,0,10,0"
+                <TextBox AutomationProperties.Name="Catalogue file" Grid.Column="1" x:Name="CataloguePath" Padding="8,6" Margin="0,0,10,0"
                          Text="{Binding FilePath, UpdateSourceTrigger=PropertyChanged}" />
                 <Button Grid.Column="2" Content="_Browse…" Padding="16,6" Click="BrowseCatalogue_Click" />
               </Grid>
@@ -766,7 +988,7 @@
                   <StackPanel Margin="6,0,0,0">
                     <TextBlock Text="Add new items only" FontSize="15" />
                     <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="860" Margin="0,3,0,0"
-                               Text="A first load. An item whose SKU is already in the catalogue is reported as a mistake rather than written over, which is what you want when the file was meant to be all new." />
+                               Text="A first load. An item whose code is already in the catalogue is reported as a mistake, not written over." />
                   </StackPanel>
                 </RadioButton>
 
@@ -775,7 +997,7 @@
                   <StackPanel Margin="6,0,0,0">
                     <TextBlock Text="Also change items already in the catalogue" FontSize="15" />
                     <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="860" Margin="0,3,0,0"
-                               Text="A price revision. Prices, names and barcodes in the file replace what the catalogue holds. A blank stock_qty leaves the live count alone, so re-importing the file you first loaded will not put every shelf count back to what it was weeks ago." />
+                               Text="A price revision. Prices, names and barcodes in the file replace the catalogue's. A blank stock count leaves the shelf count as it is." />
                   </StackPanel>
                 </RadioButton>
               </StackPanel>
@@ -789,22 +1011,23 @@
                   <Run Text="The catalogue holds" /><Run Text=" " /><Run Text="{Binding Held, Mode=OneWay}" />
                 </TextBlock>
               </StackPanel>
+              <TextBlock Text="{Binding ImportBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
             </StackPanel>
           </Border>
 
           <TextBlock Grid.Row="1" Text="{Binding Verdict, Mode=OneWay}" TextWrapping="Wrap"
                      FontSize="15" Margin="2,14,2,0" />
 
-          <DataGrid Grid.Row="2" ItemsSource="{Binding Problems}" Margin="0,12,0,0"
+          <DataGrid AutomationProperties.Name="Problems found in the file" Grid.Row="2" ItemsSource="{Binding Problems}" Margin="0,12,0,0"
                     AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="False"
                     Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                     GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
-                    HeadersVisibility="Column" Foreground="{StaticResource Warn}"
+                    HeadersVisibility="Column" Foreground="{StaticResource Danger}"
                     SelectionMode="Single" RowHeight="32">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="Where" Binding="{Binding Where}" Width="110" />
-              <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="150" />
-              <DataGridTextColumn Header="What is wrong with it" Binding="{Binding Problem}" Width="*" />
+              <DataGridTextColumn Header="Where" Binding="{Binding Where}" Width="110" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="150" ElementStyle="{StaticResource TrimmedColumn}" />
+              <DataGridTextColumn Header="What is wrong with it" Binding="{Binding Problem}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
             </DataGrid.Columns>
           </DataGrid>
           </Grid>
@@ -812,7 +1035,7 @@
       </TabItem>
 
       <!-- ==== Hardware ==== -->
-      <TabItem Header="Hardware  (Ctrl+4)">
+      <TabItem Header="Hardware" v:Nav.Glyph="{x:Static app:Glyphs.Print}" v:Nav.Shortcut="Ctrl+4">
         <Grid x:Name="HardwareTab" Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="340" />
@@ -844,7 +1067,7 @@
                   <TextBlock Text="SCANNER" Style="{StaticResource Heading}" />
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
                              Text="A scanner that types like a keyboard puts the code wherever the caret is. Click in the box and scan something, then check it." />
-                  <TextBox Text="{Binding ScannedCode, UpdateSourceTrigger=PropertyChanged}"
+                  <TextBox AutomationProperties.Name="Scanned code" Text="{Binding ScannedCode, UpdateSourceTrigger=PropertyChanged}"
                            Padding="8,6" Margin="0,0,0,10" />
                   <Button Content="Check the scan_ner" Padding="14,8" HorizontalAlignment="Stretch"
                           Click="CheckScanner_Click" IsEnabled="{Binding CanRun, Mode=OneWay}" />
@@ -922,7 +1145,7 @@
       </TabItem>
 
       <!-- ==== Settings ==== -->
-      <TabItem Header="Settings  (Ctrl+5)">
+      <TabItem Header="Settings" v:Nav.Glyph="{x:Static app:Glyphs.Settings}" v:Nav.Shortcut="Ctrl+5">
         <ScrollViewer Tag="Page" VerticalScrollBarVisibility="Auto" Margin="8,12,8,8">
           <StackPanel MaxWidth="900" HorizontalAlignment="Left">
 
@@ -956,9 +1179,9 @@
                 <Border Background="#33FF7A66" CornerRadius="6" Padding="14,10" Margin="0,12,0,0">
                   <StackPanel>
                     <TextBlock Text="Only if the shop is genuinely on the composition scheme."
-                               Foreground="{StaticResource Warn}" FontWeight="SemiBold" />
+                               Foreground="{StaticResource Warning}" FontWeight="SemiBold" />
                     <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="A bill of supply from a shop that collected GST is the wrong document, and so is a tax invoice showing no tax. Bills already issued do not change — each one records the mode it was issued under, so your history stays as it was. The bill on screen must be finished or cleared before this can change." />
+                               Text="The wrong one issues the wrong document. Bills already issued keep the mode they were issued under. Finish or clear the bill on the till before changing it." />
                   </StackPanel>
                 </Border>
               </StackPanel>
@@ -1012,10 +1235,29 @@
                   <TextBox x:Name="LowStockPercentBox" Text="{Binding LowStockPercentText, UpdateSourceTrigger=PropertyChanged}"
                            Width="70" Padding="8,6" Margin="0,0,8,0" KeyDown="LowStockPercent_KeyDown" />
                   <TextBlock Text="% of full" FontSize="14" VerticalAlignment="Center" Margin="0,0,16,0" />
-                  <Button Content="Sa_ve" Padding="18,6" Click="SaveLowStockPercent_Click" />
+                  <Button Content="Save" Padding="18,6" Click="SaveLowStockPercent_Click" />
                 </StackPanel>
                 <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820"
-                           Text="Full is the most an item's shelf has been stocked to — a delivery, a count or a catalogue load that takes it higher raises it, and a stock sheet can set it. An item with a reorder level of its own warns at that level instead. The reorder list, the day-end report and the till's 'only 3 left' all follow this. 0 switches it off." />
+                           Text="Full is the most the shelf has held: a delivery or a count raises it, and a stock sheet can set it. An item with its own reorder level warns at that instead. 0 switches this off." />
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="UpiCard" Style="{StaticResource Card}" Margin="0,0,0,16">
+              <StackPanel>
+                <TextBlock Text="UPI WITH THE AMOUNT" Style="{StaticResource Heading}" />
+                <TextBlock Text="{Binding UpiState, Mode=OneWay}" FontSize="15" Margin="0,0,0,10" TextWrapping="Wrap" MaxWidth="820" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                  <Label Target="{Binding ElementName=UpiIdBox}" Padding="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <AccessText Text="The shop's _UPI ID" Foreground="{StaticResource Ink}" FontSize="14" />
+                  </Label>
+                  <TextBox AutomationProperties.Name="The shop&apos;s UPI ID" x:Name="UpiIdBox" Text="{Binding UpiIdText, UpdateSourceTrigger=PropertyChanged}"
+                           Width="300" Padding="8,6" Margin="0,0,16,0" KeyDown="UpiId_KeyDown" />
+                  <Button Content="Save" Padding="18,6" Click="SaveUpiId_Click" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820"
+                           Text="As the bank or the UPI app gives it, such as murugan.stores@okaxis. Customers paying by UPI then scan a code with the exact amount in it; take the payment once their app says it is paid. Nothing goes over the internet from the till. Empty the box and save to turn it off." />
+                <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" MaxWidth="820" Margin="0,4,0,0" Foreground="{StaticResource InkDim}"
+                           Text="A merchant UPI ID from the bank suits a shop better than a personal one: with its merchant code set up at installation, each payment carries a reference for the bank statement." />
               </StackPanel>
             </Border>
 
@@ -1025,14 +1267,14 @@
                 <TextBlock x:Name="PinState" Margin="0,0,0,12" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Text="PIN" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                  <PasswordBox x:Name="PinBox" Width="200" Padding="8,6" Margin="0,0,10,0" />
+                  <PasswordBox AutomationProperties.Name="New PIN" x:Name="PinBox" Width="200" Padding="8,6" Margin="0,0,10,0" />
                   <TextBlock Text="again" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                  <PasswordBox x:Name="PinBoxAgain" Width="200" Padding="8,6" Margin="0,0,18,0" />
+                  <PasswordBox AutomationProperties.Name="New PIN, again" x:Name="PinBoxAgain" Width="200" Padding="8,6" Margin="0,0,18,0" />
                   <Button Content="Save PIN" Padding="16,6" Margin="0,0,10,0" Click="SavePin_Click" />
-                  <Button Content="Remove PIN" Padding="16,6" Click="ClearPin_Click" />
+                  <Button Content="Remove PIN" Padding="16,6" Click="ClearPin_Click" Style="{StaticResource DangerButton}" Margin="12,0,0,0" />
                 </StackPanel>
                 <TextBlock Style="{StaticResource Label}" Margin="0,10,0,0" TextWrapping="Wrap" MaxWidth="820"
-                           Text="At least 4 characters, and not something everybody tries first. It is stored scrambled, so there is no way to recover a forgotten one. This keeps a cashier out of the figures; it does not encrypt the database — anyone who can log in to Windows as this user can still read it with other software." />
+                           Text="At least 4 characters, and not something everybody tries first. A forgotten PIN cannot be recovered. It keeps a cashier out of the figures; it does not lock the database itself." />
               </StackPanel>
             </Border>
 
@@ -1040,7 +1282,7 @@
         </ScrollViewer>
       </TabItem>
       <!-- ==== Maintenance ==== -->
-      <TabItem Header="Maintenance  (Ctrl+6)">
+      <TabItem Header="Maintenance" v:Nav.Glyph="{x:Static app:Glyphs.Wrench}" v:Nav.Shortcut="Ctrl+6">
         <!--
           The jobs down the left, which scrolls, and whatever they produced down the whole of the
           right. A day-end report is 60-odd lines; squeezed under the lists it showed four at a time.
@@ -1062,7 +1304,7 @@
 
                   <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                     <TextBlock Text="Keep" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBox Text="{Binding Keep, UpdateSourceTrigger=PropertyChanged}" Width="70" Padding="8,6" />
+                    <TextBox AutomationProperties.Name="Snapshots to keep" Text="{Binding Keep, UpdateSourceTrigger=PropertyChanged}" Width="70" Padding="8,6" />
                     <TextBlock Text="snapshots" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="8,0,0,0" />
                   </StackPanel>
 
@@ -1109,17 +1351,17 @@
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
                              Text="Every Z-report this lane has closed. Read one on screen, or print a duplicate — a duplicate is marked as a reprint on the paper." />
 
-                  <DataGrid ItemsSource="{Binding Closes}" SelectedItem="{Binding SelectedClose}"
+                  <DataGrid AutomationProperties.Name="Day-end reports" ItemsSource="{Binding Closes}" SelectedItem="{Binding SelectedClose}"
                             AutoGenerateColumns="False" IsReadOnly="True" Height="140"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}"
                             SelectionMode="Single" RowHeight="30" Margin="0,0,0,10">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="No" Binding="{Binding Id}" Width="50" />
-                      <DataGridTextColumn Header="Closed" Binding="{Binding ClosedAt, StringFormat=dd MMM HH:mm}" Width="*" />
-                      <DataGridTextColumn Header="Bills" Binding="{Binding InvoiceCount}" Width="58" />
-                      <DataGridTextColumn Header="Net" Binding="{Binding NetSales, StringFormat={}{0:N2}}" Width="92" />
+                      <DataGridTextColumn Header="No" Binding="{Binding Id}" Width="50" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Closed" Binding="{Binding ClosedAt, Converter={StaticResource Show}, ConverterParameter=dayTime}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Bills" Binding="{Binding InvoiceCount}" Width="58" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Net" Binding="{Binding NetSales, StringFormat={}{0:N2}}" Width="92" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
 
@@ -1138,25 +1380,25 @@
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
                              Text="Close the till before restoring. The database being replaced is moved aside rather than deleted, so restoring the wrong one can itself be undone." />
 
-                  <DataGrid ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}"
+                  <DataGrid AutomationProperties.Name="Backup snapshots" ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}"
                             AutoGenerateColumns="False" IsReadOnly="True" Height="140"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}"
                             SelectionMode="Single" RowHeight="30" Margin="0,0,0,10">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="150" />
-                      <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" />
-                      <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
+                      <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="150" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" ElementStyle="{StaticResource TrimmedColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
 
                   <TextBlock Text="{Binding RestoreTarget, Mode=OneWay}" TextWrapping="Wrap"
-                             Foreground="{StaticResource Warn}" Margin="0,0,0,10" />
+                             Foreground="{StaticResource Warning}" Margin="0,0,0,10" />
 
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Type the date" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBox Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox AutomationProperties.Name="The snapshot&apos;s date, typed to confirm" Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}"
                              Width="130" Padding="8,6" Margin="0,0,14,0" />
                     <Button Content="Restore" Padding="20,7"
                             Click="Restore_Click" IsEnabled="{Binding CanRestore, Mode=OneWay}" />
@@ -1195,6 +1437,31 @@
                   <TextBlock Text="{Binding ReportText, Mode=OneWay}" Foreground="{StaticResource Ink}"
                              FontFamily="Consolas" FontSize="12.5" />
                 </ScrollViewer>
+
+                <!-- Before anything has run: what this half of the screen is for, instead of a blank. -->
+                <StackPanel x:Name="MaintenanceEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                  <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                      <Style.Triggers>
+                        <MultiDataTrigger>
+                          <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding HasReport}" Value="False" />
+                            <Condition Binding="{Binding Log.Count}" Value="0" />
+                          </MultiDataTrigger.Conditions>
+                          <Setter Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </StackPanel.Style>
+                  <Border Width="64" Height="64" CornerRadius="32" Background="{StaticResource IconChip}" HorizontalAlignment="Center">
+                    <TextBlock Text="{x:Static app:Glyphs.Report}" Style="{StaticResource Glyph}" FontSize="26"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Text="Results appear here" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" HorizontalAlignment="Center" />
+                  <TextBlock Text="A backup's progress, a database check, or a day-end report read back." FontSize="13"
+                             Foreground="{StaticResource InkMuted}" Margin="0,6,0,0" HorizontalAlignment="Center" />
+                </StackPanel>
               </Grid>
             </Border>
 
@@ -1203,7 +1470,7 @@
       </TabItem>
 
       <!-- ==== Customers ==== -->
-      <TabItem Header="Customers  (Ctrl+7)">
+      <TabItem Header="Customers" v:Nav.Glyph="{x:Static app:Glyphs.People}" v:Nav.Shortcut="Ctrl+7">
         <Grid x:Name="CustomersTab" Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="400" />
@@ -1225,20 +1492,34 @@
               <TextBlock Grid.Row="0" Text="{Binding ResultsHeading, Mode=OneWay}" Style="{StaticResource Heading}" />
               <TextBlock Grid.Row="1" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,8"
                          Text="Type part of a name or a mobile number. Leave it empty to see who spends most." />
-              <TextBox Grid.Row="2" x:Name="CustomerSearch" Padding="8,6" Margin="0,0,0,10"
+              <TextBox AutomationProperties.Name="Find a customer by name or mobile number" Grid.Row="2" x:Name="CustomerSearch" Padding="8,6" Margin="0,0,0,10"
                        Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}"
                        PreviewKeyDown="CustomerSearch_PreviewKeyDown" />
 
               <!-- What the shop is owed on credit, in all, and the switch to the list of who owes it. -->
               <StackPanel Grid.Row="3" Margin="0,0,0,10"
                           Visibility="{Binding HasCredit, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding TotalOwedLine, Mode=OneWay}" Foreground="{StaticResource Negative}"
-                           TextWrapping="Wrap" Margin="0,0,0,6" />
+                <!-- Amber when somebody owes, the quiet ink when nobody does: money owed is not a fault. -->
+                <TextBlock Text="{Binding TotalOwedLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,0,6">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding ShopIsOwed}" Value="True">
+                          <Setter Property="Foreground" Value="{StaticResource Warning}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
                 <CheckBox Content="Only customers who _owe" IsChecked="{Binding OnlyOwing}"
                           Foreground="{StaticResource Ink}" />
+                <Button Content="Statements for _everyone who owes" Padding="12,5" Margin="0,8,0,0"
+                        HorizontalAlignment="Left" Click="SaveEveryoneOwing_Click"
+                        ToolTip="One page each, for the month-end round: saved as a page to print or send." />
               </StackPanel>
 
-              <DataGrid Grid.Row="4" x:Name="CustomerResults"
+              <DataGrid AutomationProperties.Name="Customers" Grid.Row="4" x:Name="CustomerResults"
                         ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}"
                         AutoGenerateColumns="False" IsReadOnly="True"
                         Background="Transparent" RowBackground="Transparent" BorderThickness="0"
@@ -1246,10 +1527,10 @@
                         HeadersVisibility="Column" Foreground="{StaticResource Ink}"
                         SelectionMode="Single" RowHeight="32">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="Customer" Binding="{Binding Label}" Width="*" />
-                  <DataGridTextColumn Header="Visits" Binding="{Binding Visits}" Width="52" />
-                  <DataGridTextColumn Header="Spent" Binding="{Binding Spent, StringFormat={}{0:N2}}" Width="90" />
-                  <DataGridTextColumn Header="Owes" Binding="{Binding Owed, StringFormat={}{0:N2}}" Width="80" />
+                  <DataGridTextColumn Header="Customer" Binding="{Binding Label}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                  <DataGridTextColumn Header="Visits" Binding="{Binding Visits}" Width="52" ElementStyle="{StaticResource TrimmedColumn}" />
+                  <DataGridTextColumn Header="Spent" Binding="{Binding Spent, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                  <DataGridTextColumn Header="Owes" Binding="{Binding Owed, StringFormat={}{0:N2}}" Width="80" ElementStyle="{StaticResource NumberColumn}" />
                 </DataGrid.Columns>
               </DataGrid>
 
@@ -1278,7 +1559,7 @@
                     <Run Text="{Binding Points, Mode=OneWay}" /><Run Text=" points  ·  " />
                     <Run Text="{Binding SinceLastVisit, Mode=OneWay}" />
                   </TextBlock>
-                  <TextBlock Text="{Binding Owes, Mode=OneWay}" Foreground="{StaticResource Negative}"
+                  <TextBlock Text="{Binding Owes, Mode=OneWay}" Foreground="{StaticResource Warning}"
                              FontSize="16" FontWeight="SemiBold" Margin="0,-6,0,12"
                              Visibility="{Binding OwesAnything, Converter={StaticResource BoolToVisibility}}" />
 
@@ -1313,38 +1594,11 @@
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
-                  <StackPanel>
-                    <TextBlock Text="MONTH BY MONTH" Style="{StaticResource Heading}" />
-                    <ItemsControl ItemsSource="{Binding Months}" Height="150">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                          <Grid Margin="2,0" ToolTip="{Binding Tooltip}">
-                            <Grid.RowDefinitions>
-                              <RowDefinition Height="*" />
-                              <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="0">
-                              <Grid.RowDefinitions>
-                                <RowDefinition Height="{Binding Fraction, Converter={StaticResource Rest}}" />
-                                <RowDefinition Height="{Binding Fraction, Converter={StaticResource Share}}" />
-                              </Grid.RowDefinitions>
-                              <Border Grid.Row="1" CornerRadius="3,3,0,0" MinHeight="2"
-                                      Background="{StaticResource Positive}" Opacity="0.8" />
-                            </Grid>
-                            <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Label}"
-                                       HorizontalAlignment="Center" Margin="0,5,0,0" FontSize="10" />
-                          </Grid>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
-                               Text="A month they did not come in is drawn as nothing, not left out - a regular who has stopped coming shows as a gap at the end." />
-                  </StackPanel>
-                </Border>
+                <charts:ChartCard Grid.Column="0" Margin="0,0,7,0" Title="Month by month"
+                                  Subtitle="What they spent, over the last year" Glyph="{x:Static app:Glyphs.Calendar}"
+                                  Caption="A month they did not come in is drawn as nothing, not left out - a regular who has stopped coming shows as a gap at the end.">
+                  <charts:CategoryChart Data="{Binding MonthsChart, Mode=OneWay}" Height="190" />
+                </charts:ChartCard>
 
                 <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0">
                   <StackPanel>
@@ -1360,16 +1614,22 @@
                       Visibility="{Binding HasKhata, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel>
                   <TextBlock Text="KHATA" Style="{StaticResource Heading}" />
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="Save a _statement" Padding="14,5" Margin="0,0,10,0" Click="SaveStatement_Click" />
+                    <Button Content="Copy it for _WhatsApp" Padding="14,5" Click="CopyStatement_Click" />
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Everything since they last owed nothing, with what they owe now, how old it is, and a UPI code for it when the shop has a UPI ID. The till prints the same with Ctrl+K." />
                   <DataGrid ItemsSource="{Binding Khata}" AutoGenerateColumns="False" IsReadOnly="True"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}" RowHeight="30"
                             MaxHeight="260">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="When" Binding="{Binding At, StringFormat=dd MMM yyyy  HH:mm}" Width="170" />
-                      <DataGridTextColumn Header="What" Binding="{Binding Description}" Width="*" />
-                      <DataGridTextColumn Header="+ / -" Binding="{Binding Change, StringFormat={}{0:N2}}" Width="100" />
-                      <DataGridTextColumn Header="Owed after" Binding="{Binding BalanceAfter, StringFormat={}{0:N2}}" Width="110" />
+                      <DataGridTextColumn Header="When" Binding="{Binding At, Converter={StaticResource Show}, ConverterParameter=dateTime}" Width="170" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="What" Binding="{Binding Description}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="+ / -" Binding="{Binding Change, StringFormat={}{0:N2}}" Width="100" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Owed after" Binding="{Binding BalanceAfter, StringFormat={}{0:N2}}" Width="110" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -1378,16 +1638,21 @@
               <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                 <StackPanel>
                   <TextBlock Text="RECENT BILLS" Style="{StaticResource Heading}" />
-                  <DataGrid ItemsSource="{Binding RecentBills}" AutoGenerateColumns="False" IsReadOnly="True"
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="Save the _bill as a page" Padding="14,5" Click="SaveBillPage_Click" />
+                    <TextBlock Style="{StaticResource Label}" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap"
+                               Text="Pick a bill below: a full A4 tax invoice of it, to print or send." />
+                  </StackPanel>
+                  <DataGrid ItemsSource="{Binding RecentBills}" SelectedItem="{Binding SelectedBill}" AutoGenerateColumns="False" IsReadOnly="True"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}" RowHeight="30"
                             MaxHeight="260">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" />
-                      <DataGridTextColumn Header="When" Binding="{Binding At, StringFormat=dd MMM yyyy  HH:mm}" Width="170" />
-                      <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="60" />
-                      <DataGridTextColumn Header="Paid" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="100" />
+                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="When" Binding="{Binding At, Converter={StaticResource Show}, ConverterParameter=dateTime}" Width="170" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="60" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Paid" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="100" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -1410,8 +1675,24 @@
                   </Grid>
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10"
                              Text="The name prints on their bills from now on. The mobile number is how the till finds them, so it is not changed here." />
+                  <TextBlock Text="{Binding BusinessLine, Mode=OneWay}" TextWrapping="Wrap" Margin="0,4,0,8" />
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="200" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="GSTIN" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBox Grid.Column="1" Text="{Binding EditGstin, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,14,0"
+                             CharacterCasing="Upper" MaxLength="15" />
+                    <TextBlock Grid.Column="2" Text="Address" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBox Grid.Column="3" Text="{Binding EditAddress, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                  </Grid>
+                  <Button Content="Save GST _details" Padding="16,6" HorizontalAlignment="Left" Margin="0,0,0,12"
+                          Click="SaveBusiness_Click" />
                   <Button Content="_Forget this customer" Padding="16,6" HorizontalAlignment="Left"
-                          Click="ForgetCustomer_Click" />
+                          Click="ForgetCustomer_Click" Style="{StaticResource DangerButton}" />
                   <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
                              Text="For a customer who asks to be removed. Their name, number and points are deleted; their bills are kept for the shop's books but no longer say who they were for. This cannot be undone." />
                 </StackPanel>
@@ -1423,7 +1704,7 @@
       </TabItem>
 
       <!-- ==== GST return ==== -->
-      <TabItem x:Name="GstTabItem" Header="GST  (Ctrl+8)">
+      <TabItem x:Name="GstTabItem" Header="GST" v:Nav.Glyph="{x:Static app:Glyphs.Report}" v:Nav.Shortcut="Ctrl+8">
         <Grid x:Name="GstTab" Margin="8,12,8,8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="360" />
@@ -1501,7 +1782,7 @@
               <Border Style="{StaticResource Card}"
                       Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel>
-                  <TextBlock Text="BEFORE FILING" Style="{StaticResource Heading}" Foreground="{StaticResource Warn}" />
+                  <TextBlock Text="BEFORE FILING" Style="{StaticResource Heading}" Foreground="{StaticResource Warning}" />
                   <ItemsControl ItemsSource="{Binding Warnings}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
@@ -1527,17 +1808,17 @@
               <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                 <StackPanel>
                   <TextBlock Text="SALES BY RATE — TO CUSTOMERS WITHOUT A GSTIN (B2CS)" Style="{StaticResource Heading}" />
-                  <DataGrid ItemsSource="{Binding RateWise}" AutoGenerateColumns="False" IsReadOnly="True"
+                  <DataGrid AutomationProperties.Name="Sales by rate" ItemsSource="{Binding RateWise}" AutoGenerateColumns="False" IsReadOnly="True"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Place of supply" Binding="{Binding PlaceOfSupply}" Width="110" />
-                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="70" />
-                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="*" />
-                      <DataGridTextColumn Header="CGST" Binding="{Binding Cgst, StringFormat={}{0:N2}}" Width="*" />
-                      <DataGridTextColumn Header="SGST" Binding="{Binding Sgst, StringFormat={}{0:N2}}" Width="*" />
-                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="*" />
+                      <DataGridTextColumn Header="Place of supply" Binding="{Binding PlaceOfSupply}" Width="110" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="70" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="CGST" Binding="{Binding Cgst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="SGST" Binding="{Binding Sgst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="*" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -1552,12 +1833,12 @@
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" />
-                      <DataGridTextColumn Header="Value" Binding="{Binding InvoiceValue, StringFormat={}{0:N2}}" Width="110" />
-                      <DataGridTextColumn Header="State" Binding="{Binding PlaceOfSupply}" Width="60" />
-                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="60" />
-                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="110" />
-                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="100" />
+                      <DataGridTextColumn Header="Bill" Binding="{Binding InvoiceNo}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Value" Binding="{Binding InvoiceValue, StringFormat={}{0:N2}}" Width="110" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="State" Binding="{Binding PlaceOfSupply}" Width="60" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="60" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="110" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="IGST" Binding="{Binding Igst, StringFormat={}{0:N2}}" Width="100" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -1566,18 +1847,18 @@
               <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                 <StackPanel>
                   <TextBlock Text="HSN SUMMARY — EVERY CODE, IN THE UNIT IT WAS SOLD IN" Style="{StaticResource Heading}" />
-                  <DataGrid ItemsSource="{Binding Hsn}" AutoGenerateColumns="False" IsReadOnly="True"
+                  <DataGrid AutomationProperties.Name="HSN summary" ItemsSource="{Binding Hsn}" AutoGenerateColumns="False" IsReadOnly="True"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="60" />
-                      <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" />
-                      <DataGridTextColumn Header="UQC" Binding="{Binding Uqc}" Width="150" />
-                      <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="60" />
-                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="50" />
-                      <DataGridTextColumn Header="Value" Binding="{Binding TotalValue, StringFormat={}{0:N2}}" Width="90" />
-                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="90" />
+                      <DataGridTextColumn Header="HSN" Binding="{Binding Hsn}" Width="60" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="UQC" Binding="{Binding Uqc}" Width="150" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="60" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}%}" Width="50" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Value" Binding="{Binding TotalValue, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -1585,18 +1866,481 @@
 
               <Border Style="{StaticResource Card}">
                 <StackPanel>
-                  <TextBlock Text="BILLS ISSUED — CANCELLED ONES INCLUDED" Style="{StaticResource Heading}" />
-                  <DataGrid ItemsSource="{Binding Documents}" AutoGenerateColumns="False" IsReadOnly="True"
+                  <TextBlock Text="BILLS AND CREDIT NOTES ISSUED — CANCELLED ONES INCLUDED" Style="{StaticResource Heading}" />
+                  <DataGrid AutomationProperties.Name="Documents issued" ItemsSource="{Binding Documents}" AutoGenerateColumns="False" IsReadOnly="True"
                             Background="Transparent" RowBackground="Transparent" BorderThickness="0"
                             GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
                             HeadersVisibility="Column" Foreground="{StaticResource Ink}">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="From" Binding="{Binding From}" Width="*" />
-                      <DataGridTextColumn Header="To" Binding="{Binding To}" Width="*" />
-                      <DataGridTextColumn Header="Issued" Binding="{Binding Total}" Width="80" />
-                      <DataGridTextColumn Header="Cancelled" Binding="{Binding Cancelled}" Width="90" />
+                      <DataGridTextColumn Header="Document" Binding="{Binding Nature}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="From" Binding="{Binding From}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="To" Binding="{Binding To}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Issued" Binding="{Binding Total}" Width="80" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Cancelled" Binding="{Binding Cancelled}" Width="90" ElementStyle="{StaticResource TrimmedColumn}" />
                     </DataGrid.Columns>
                   </DataGrid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <!-- ==== Purchases ==== -->
+      <TabItem x:Name="PurchasesTabItem" Header="Purchases" v:Nav.Glyph="{x:Static app:Glyphs.Cart}" v:Nav.Shortcut="Ctrl+9">
+        <Grid x:Name="PurchasesTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="370" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Who the shop buys from, what it owes them, and paying them. -->
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="SUPPLIERS" Style="{StaticResource Heading}" />
+                  <Label Target="{Binding ElementName=SupplierSearchBox}" Padding="0" Margin="0,0,0,3">
+                    <AccessText Text="_Find a supplier" Foreground="{StaticResource InkMuted}" FontSize="12" />
+                  </Label>
+                  <TextBox AutomationProperties.Name="Find a supplier" x:Name="SupplierSearchBox" Text="{Binding SupplierSearch, UpdateSourceTrigger=PropertyChanged}"
+                           Padding="8,6" Margin="0,0,0,8" />
+                  <CheckBox IsChecked="{Binding OnlyOwed}" Foreground="{StaticResource Ink}" Margin="0,0,0,6">
+                    <AccessText Text="Only those we _owe" />
+                  </CheckBox>
+                  <TextBlock Text="{Binding TotalOwedLine}" TextWrapping="Wrap" Margin="0,0,0,8">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsOwingSuppliers}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Warning}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <ListBox AutomationProperties.Name="Suppliers" x:Name="SupplierList" ItemsSource="{Binding Suppliers}" SelectedItem="{Binding SelectedSupplier}"
+                           Height="170" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                      <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                        <Setter Property="Focusable" Value="True" />
+                        <Setter Property="Padding" Value="8,4" />
+                      </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate>
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding Supplier.Name}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="1" Text="{Binding Owed, StringFormat={}{0:N2}}" Margin="10,0,0,0" />
+                        </Grid>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="THE SUPPLIER'S ACCOUNT" Style="{StaticResource Heading}" />
+                  <TextBlock Text="{Binding SupplierLine}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                  <TextBlock Text="{Binding OwedLine}" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,8" />
+                  <ItemsControl ItemsSource="{Binding History}" Margin="0,0,0,10">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="72" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding At, Converter={StaticResource Show}, ConverterParameter=day}" Style="{StaticResource Label}" />
+                          <TextBlock Grid.Column="1" Text="{Binding Description}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="2" Text="{Binding BalanceAfter, StringFormat={}{0:N2}}" FontSize="12.5" Margin="8,0,0,0" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <TextBlock Text="PAY THEM" Style="{StaticResource Heading}" />
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                      <TextBlock Text="Amount" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Amount paid" Text="{Binding PaymentAmount, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                      <TextBlock Text="UPI ref, cheque no" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Payment reference" Text="{Binding PaymentReference, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                  </Grid>
+                  <ListBox AutomationProperties.Name="Paid by" ItemsSource="{Binding PaymentMethods}" SelectedItem="{Binding PaymentMethod}"
+                           Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" Margin="0,0,0,8"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                      <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                      <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                        <Setter Property="Focusable" Value="True" />
+                        <Setter Property="Padding" Value="8,4" />
+                      </Style>
+                    </ListBox.ItemContainerStyle>
+                  </ListBox>
+                  <Button Content="_Record the payment" Padding="14,7" HorizontalAlignment="Stretch"
+                          Click="PaySupplier_Click" IsEnabled="{Binding CanPay, Mode=OneWay}" />
+                  <TextBlock Text="{Binding PayBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
+                             Text="Cash from the till comes off what the drawer should hold at the day's close. Nothing more than is owed can be paid - enter the bill first." />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="ADD A SUPPLIER" Style="{StaticResource Heading}" />
+                  <Label Target="{Binding ElementName=NewSupplierNameBox}" Padding="0" Margin="0,0,0,3">
+                    <AccessText Text="Ne_w supplier's name" Foreground="{StaticResource InkMuted}" FontSize="12" />
+                  </Label>
+                  <TextBox AutomationProperties.Name="New supplier&apos;s name" x:Name="NewSupplierNameBox" Text="{Binding NewSupplierName, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,8" />
+                  <TextBlock Text="GSTIN" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                  <TextBox AutomationProperties.Name="New supplier&apos;s GSTIN" Text="{Binding NewSupplierGstin, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" Margin="0,0,0,3"
+                           CharacterCasing="Upper" MaxLength="15" />
+                  <TextBlock Text="{Binding NewSupplierGstinNote}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="90" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                      <TextBlock Text="Phone" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="New supplier&apos;s phone" Text="{Binding NewSupplierPhone, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="State code" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="New supplier&apos;s state code" Text="{Binding NewSupplierState, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" MaxLength="2" />
+                    </StackPanel>
+                  </Grid>
+                  <CheckBox IsChecked="{Binding NewSupplierChargesGst}" Foreground="{StaticResource Ink}" Margin="0,0,0,10"
+                            Content="Charges GST on their bills (untick for a composition dealer)" />
+                  <Button Content="_Add the supplier" Padding="14,7" HorizontalAlignment="Stretch" Click="AddSupplier_Click" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- The bill that came with the delivery, and the bills already entered. -->
+          <ScrollViewer Tag="Page" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+              <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" FontSize="14" Margin="2,0,2,10" />
+
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="{Binding BillHeading}" Style="{StaticResource Heading}" />
+
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="160" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                      <Label Target="{Binding ElementName=BillNoBox}" Padding="0" Margin="0,0,0,3">
+                        <AccessText Text="Bill _number, as printed" Foreground="{StaticResource InkMuted}" FontSize="12" />
+                      </Label>
+                      <TextBox AutomationProperties.Name="Supplier&apos;s bill number" x:Name="BillNoBox" Text="{Binding BillNo, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="Bill date" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Bill date" Text="{Binding BillDate, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                  </Grid>
+
+                  <Label Target="{Binding ElementName=PurchaseItemBox}" Padding="0" Margin="0,0,0,3">
+                    <AccessText Text="_Item — part of a name, a SKU, or scan it" Foreground="{StaticResource InkMuted}" FontSize="12" />
+                  </Label>
+                  <TextBox AutomationProperties.Name="Item on the bill" x:Name="PurchaseItemBox" Text="{Binding ItemQuery, UpdateSourceTrigger=PropertyChanged}" Padding="8,6"
+                           Margin="0,0,0,4" PreviewKeyDown="PurchaseItemBox_PreviewKeyDown" />
+                  <ListBox x:Name="PurchaseMatches" ItemsSource="{Binding ItemMatches}" MaxHeight="150" Margin="0,0,0,4"
+                           Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                           KeyDown="PurchaseMatches_KeyDown" MouseDoubleClick="PurchaseMatches_MouseDoubleClick">
+                    <ListBox.Style>
+                      <Style TargetType="ListBox">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding ItemMatches.Count}" Value="0">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </ListBox.Style>
+                    <ListBox.ItemContainerStyle>
+                      <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                        <Setter Property="Focusable" Value="True" />
+                        <Setter Property="Padding" Value="8,3" />
+                      </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock>
+                          <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  ·  " Foreground="{StaticResource InkMuted}" /><Run Text="{Binding Sku, Mode=OneWay}" Foreground="{StaticResource InkMuted}" />
+                        </TextBlock>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                  <TextBlock Text="{Binding LineItemLine}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="80" />
+                      <ColumnDefinition Width="100" />
+                      <ColumnDefinition Width="70" />
+                      <ColumnDefinition Width="90" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="120" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                      <TextBlock Text="Quantity" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Quantity" x:Name="LineQuantityBox" Text="{Binding LineQuantity, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                      <TextBlock Text="Rate before tax" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Rate" Text="{Binding LineRate, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                      <TextBlock Text="GST %" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="GST rate" Text="{Binding LineGst, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                      <TextBlock Text="Discount" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Discount" Text="{Binding LineDiscount, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4" Margin="0,0,8,0">
+                      <TextBlock Text="Batch" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Batch" Text="{Binding LineBatch, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="5" Margin="0,0,8,0">
+                      <TextBlock Text="Best before" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Use-by date" Text="{Binding LineExpiry, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" KeyDown="PurchaseLineField_KeyDown" />
+                    </StackPanel>
+                    <Button Grid.Column="6" Content="Add _line" Padding="14,6" VerticalAlignment="Bottom" Click="AddPurchaseLine_Click" />
+                  </Grid>
+
+                  <DataGrid AutomationProperties.Name="Lines on the bill" x:Name="PurchaseLinesGrid" ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}"
+                            AutoGenerateColumns="False" IsReadOnly="True" Height="150" Margin="0,0,0,10"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}" SelectionMode="Single"
+                            PreviewKeyDown="PurchaseLinesGrid_PreviewKeyDown">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="60" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:N2}}" Width="80" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="GST" Binding="{Binding GstRate, StringFormat={}{0:0.##}%}" Width="55" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Taxable" Binding="{Binding TaxableValue, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Tax" Binding="{Binding Tax, StringFormat={}{0:N2}}" Width="75" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource Label}" FontSize="13" VerticalAlignment="Center">
+                      <Run Text="Taxable" /> <Run Text="{Binding TaxableLine, Mode=OneWay}" /><Run Text="   ·   " /><Run Text="{Binding TaxLine, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Grid.Column="1" FontSize="18" FontWeight="SemiBold">
+                      <Run Text="Lines come to " FontSize="13" FontWeight="Normal" Foreground="{StaticResource InkMuted}" /><Run Text="{Binding LinesTotalLine, Mode=OneWay}" />
+                    </TextBlock>
+                  </Grid>
+
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="160" />
+                      <ColumnDefinition Width="130" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                      <TextBlock Text="Total printed on the bill" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Total printed on the bill" Text="{Binding PrintedTotal, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                      <TextBlock Text="Paid now" Style="{StaticResource Label}" Margin="0,0,0,3" />
+                      <TextBox AutomationProperties.Name="Paid now" Text="{Binding PaidNow, UpdateSourceTrigger=PropertyChanged}" Padding="8,6" />
+                    </StackPanel>
+                    <ListBox AutomationProperties.Name="What was paid now, paid by" Grid.Column="2" ItemsSource="{Binding PaymentMethods}" SelectedItem="{Binding PaidNowMethod}"
+                             Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" VerticalAlignment="Bottom"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                      <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                          <Setter Property="Focusable" Value="True" />
+                          <Setter Property="Padding" Value="8,4" />
+                        </Style>
+                      </ListBox.ItemContainerStyle>
+                    </ListBox>
+                  </Grid>
+
+                  <StackPanel Orientation="Horizontal">
+                    <Button Content="_Save the bill" Padding="22,8" Margin="0,0,10,0" Click="SavePurchase_Click"
+                            IsEnabled="{Binding CanSaveBill, Mode=OneWay}" />
+                    <Button Content="Start over" Padding="16,8" Click="ClearPurchase_Click" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding SaveBillBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,0"
+                             Text="Enter moves a line in; Delete takes the selected line out. The printed total is checked against the lines - a round-off of up to a rupee is fine, more means a line is typed wrong." />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="BILLS ALREADY ENTERED" Style="{StaticResource Heading}" />
+                  <DataGrid AutomationProperties.Name="Recent bills" ItemsSource="{Binding Recent}" SelectedItem="{Binding SelectedBill}"
+                            AutoGenerateColumns="False" IsReadOnly="True" Height="170" Margin="0,0,0,10"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}" SelectionMode="Single">
+                    <DataGrid.RowStyle>
+                      <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsVoided}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Dated" Binding="{Binding BillDate, Converter={StaticResource Show}}" Width="100" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Bill" Binding="{Binding BillNo}" Width="110" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Lines" Binding="{Binding LineCount}" Width="55" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat={}{0:N2}}" Width="95" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Cancelled" Binding="{Binding VoidedAt, Converter={StaticResource Show}, ConverterParameter=day}" Width="85" ElementStyle="{StaticResource TrimmedColumn}" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Why" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Text="{Binding VoidReason, UpdateSourceTrigger=PropertyChanged}" Width="260" Padding="8,6" Margin="0,0,10,0"
+                             AutomationProperties.Name="Why the bill is being cancelled" />
+                    <Button Content="_Cancel this bill" Padding="14,6" Click="VoidPurchase_Click"
+                            IsEnabled="{Binding CanVoid, Mode=OneWay}" Style="{StaticResource DangerButton}" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding VoidBlocker, Mode=OneWay}" Style="{StaticResource WhyNot}" />
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
+                             Text="For a bill entered wrongly. It stays in the book, marked; what it put on the shelf comes back off; it is no longer owed; and it can then be entered again." />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <!-- "Reorder", not "Orders": at the till, Ctrl+O's "Order" is a customer's order. This is what to buy. -->
+      <TabItem x:Name="OrdersTabItem" Header="Reorder" v:Nav.Glyph="{x:Static app:Glyphs.Checklist}" v:Nav.Shortcut="Ctrl+0">
+        <Grid x:Name="OrdersTab" Margin="8,12,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="330" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- How long an order lasts, and who there is something to order from. -->
+          <ScrollViewer Tag="Page" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+              <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="EACH ORDER LASTS" Style="{StaticResource Heading}" />
+                  <Label Target="{Binding ElementName=CoverDaysBox}" Padding="0" Margin="0,0,0,3">
+                    <AccessText Text="_Days, at the rate things sell" Foreground="{StaticResource InkMuted}" FontSize="12" />
+                  </Label>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox AutomationProperties.Name="Days of stock to order for" x:Name="CoverDaysBox" Text="{Binding CoverDaysText, UpdateSourceTrigger=PropertyChanged}" Padding="8,6"
+                             MaxLength="3" KeyDown="CoverDaysBox_KeyDown" />
+                    <Button Grid.Column="1" Content="_Work it out" Padding="12,6" Margin="8,0,0,0" Click="ApplyCoverDays_Click" />
+                  </Grid>
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
+                             Text="What sold over the last four weeks, less what came back, is the rate. An order is enough to sell at that rate for these days, less what is on the shelf, and never less than what gets back to a reorder level." />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="ORDER FROM" Style="{StaticResource Heading}" />
+                  <ListBox AutomationProperties.Name="Suppliers to order from" x:Name="OrderSupplierList" ItemsSource="{Binding Suppliers}" SelectedItem="{Binding SelectedSupplier}"
+                           MinHeight="120" MaxHeight="360" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                      <Style TargetType="ListBoxItem" BasedOn="{StaticResource TintedListItem}">
+                        <Setter Property="Focusable" Value="True" />
+                        <Setter Property="Padding" Value="8,4" />
+                      </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate>
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding Supplier}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="1" Text="{Binding Lines.Count, Converter={StaticResource Plural}, ConverterParameter=item}" Margin="10,0,0,0"
+                                     Foreground="{StaticResource InkMuted}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- The picked supplier's order. -->
+          <ScrollViewer Tag="Page" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+              <TextBlock Text="{Binding Status, Mode=OneWay}" TextWrapping="Wrap" FontSize="14" Margin="2,0,2,6" />
+              <TextBlock Text="{Binding Headline, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource Label}" Margin="2,0,2,10" />
+
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Text="{Binding SupplierHeading}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,4" />
+                  <TextBlock Text="{Binding EstimateLine}" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                  <DataGrid AutomationProperties.Name="Items to order" x:Name="OrderLinesGrid" ItemsSource="{Binding Lines}" AutoGenerateColumns="False" IsReadOnly="True"
+                            Background="Transparent" RowBackground="Transparent" BorderThickness="0" MaxHeight="420"
+                            GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource Line}"
+                            HeadersVisibility="Column" Foreground="{StaticResource Ink}" Margin="0,0,0,12">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Have" Binding="{Binding Have, StringFormat={}{0:0.###}}" Width="70" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Sells a day" Binding="{Binding PerDay, StringFormat={}{0:0.##}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Days left" Binding="{Binding DaysLeft, StringFormat={}{0:0.#}}" Width="80" ElementStyle="{StaticResource TrimmedColumn}" />
+                      <DataGridTextColumn Header="Order" Binding="{Binding Order, StringFormat={}{0:0.###}}" Width="70" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Last rate" Binding="{Binding LastRate, StringFormat={}{0:N2}}" Width="85" ElementStyle="{StaticResource NumberColumn}" />
+                      <DataGridTextColumn Header="Cost" Binding="{Binding Cost, StringFormat={}{0:N2}}" Width="90" ElementStyle="{StaticResource NumberColumn}" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+
+                  <StackPanel Orientation="Horizontal">
+                    <Button Content="_Copy this order" Padding="14,7" Margin="0,0,10,0" Click="CopyOrder_Click"
+                            IsEnabled="{Binding CanCopy, Mode=OneWay}" />
+                    <Button Content="_Save the whole list…" Padding="14,7" Click="SaveOrderList_Click"
+                            IsEnabled="{Binding CanSave, Mode=OneWay}" />
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,8,0,0"
+                             Text="Copy puts the order on the clipboard as a message - the shop, the date, each item and how many - to paste to the supplier from your own phone or computer. Save writes every supplier's list as a spreadsheet." />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1607,16 +2351,24 @@
     </TabControl>
 
     <!-- Footer ================================================================================ -->
-    <Border Grid.Row="2" Background="{StaticResource SurfaceRaised}" Padding="24,10">
+    <Border Grid.Row="2" Background="{StaticResource SurfaceRaised}" BorderBrush="{StaticResource CardEdge}"
+            BorderThickness="0,1,0,0" Padding="24,10">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
+
+        <!-- Wraps rather than trims: the end of a message is as often the part that matters. -->
         <TextBlock Grid.Column="0" x:Name="StatusLine" Text="{Binding Status, Mode=OneWay}"
-                   Foreground="{StaticResource Accent}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="1" Style="{StaticResource Label}" VerticalAlignment="Center"
-                   Text="Esc closes this and goes back to billing" />
+                   Foreground="{StaticResource Accent}" VerticalAlignment="Center" TextWrapping="Wrap"
+                   MaxHeight="60" Margin="0,0,16,0" AutomationProperties.LiveSetting="Polite" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Border CornerRadius="4" Padding="6,1" Background="#14FFFFFF" Margin="0,0,8,0">
+            <TextBlock Text="Esc" FontFamily="{StaticResource FigureFont}" FontSize="11" Foreground="{StaticResource Accent}" />
+          </Border>
+          <TextBlock Style="{StaticResource Label}" VerticalAlignment="Center" Text="back to billing" />
+        </StackPanel>
       </Grid>
     </Border>
   </Grid>

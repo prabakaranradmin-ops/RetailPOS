@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Pos.App.Input;
 using Pos.App.ViewModels;
@@ -39,7 +40,12 @@ public class LayoutFitTests : IDisposable
     /// <summary>The panel on a cheap till, and the smallest screen this has to work on.</summary>
     private const double TillWidth = 1366;
 
-    private const double TillHeight = 768;
+    /// <summary>
+    /// What a maximised window gets of a 768-high screen once the taskbar and the title bar have
+    /// theirs. Laid out at this size exactly (<see cref="Wpf.LayOutAt"/>), not at the size of the
+    /// screen the tests happen to run on.
+    /// </summary>
+    private const double TillHeight = 698;
 
     /// <summary>A pixel of slack, for a layout that rounds against itself.</summary>
     private const double Slack = 1.0;
@@ -85,11 +91,12 @@ public class LayoutFitTests : IDisposable
 
             var origin = button.TransformToAncestor(window).Transform(new Point(0, 0));
             var right = origin.X + button.ActualWidth;
+            var width = AreaWidth(window);
 
-            if (origin.X < -Slack || right > window.ActualWidth + Slack)
+            if (origin.X < -Slack || right > width + Slack)
             {
                 offscreen.Add(
-                    $"{label} spans {origin.X:N0} to {right:N0}, outside a window {window.ActualWidth:N0} wide");
+                    $"{label} spans {origin.X:N0} to {right:N0}, outside a window {width:N0} wide");
             }
         }
 
@@ -221,6 +228,15 @@ public class LayoutFitTests : IDisposable
             + string.Join("\n  ", overflowing));
     }
 
+    /// <summary>
+    /// How wide the window's content was laid out: the size <see cref="Wpf.LayOutAt"/> pinned it to,
+    /// which on a smaller test screen is wider than the window itself.
+    /// </summary>
+    private static double AreaWidth(Window window) =>
+        window.Content is FrameworkElement root && !double.IsNaN(root.Width)
+            ? root.Width + root.Margin.Left + root.Margin.Right
+            : window.ActualWidth;
+
     private static string Describe(Button button) =>
         button.Content as string
         ?? button.Name
@@ -240,7 +256,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 AssertEveryButtonIsReachable(window, "the billing screen");
                 AssertNoButtonLabelIsCutOff(window, "the billing screen");
@@ -276,12 +292,499 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 AssertEveryButtonIsReachable(window, "the billing screen with a long item name");
                 AssertNoButtonLabelIsCutOff(window, "the billing screen with a long item name");
                 AssertNoKeyIsHiddenUnderPay(window, "the billing screen with a long item name");
                 AssertNothingOverflowsSideways(window, "the billing screen with a long item name");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The return pane open over a real bill with a long name on it, part picked and a line marked
+    /// damaged - the widest the pane's rows get.
+    /// </summary>
+    [Fact]
+    public void TheReturnPaneFitsWithABillOnIt()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "OIL001", barcode: "8901234567913", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m),
+            Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        harness.Scan("8901234567913");
+        harness.Scan("8901234567890");
+        harness.Press(Key.F12);
+        harness.Press(Key.Enter);
+        harness.Press(Key.Enter);
+
+        harness.Press(Key.F9);
+        harness.Press(Key.Enter);
+        harness.ViewModel.EditBuffer = "1d";
+        harness.Press(Key.Enter);
+
+        Assert.True(harness.ViewModel.IsReturning);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNoKeyIsHiddenUnderPay(window, "the billing screen with the return pane open");
+                AssertNothingOverflowsSideways(window, "the billing screen with the return pane open");
+
+                var pane = (FrameworkElement)window.FindName("ReturnList");
+                Assert.True(pane.IsVisible);
+                Assert.True(pane.ActualWidth <= TillWidth);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>All twenty-four quick keys, with names too long for a tile.</summary>
+    [Fact]
+    public void TheQuickKeysFitWithEveryKeyTaken()
+    {
+        var loose = Enumerable.Range(1, 30)
+            .Select(i => Catalogue.Item(sku: $"LOOSE{i:D2}", name: $"Country tomato, hybrid, from the Oddanchatram market lot {i}", price: 30m + i, unit: UnitType.Kilogram))
+            .ToArray();
+
+        using var harness = new BillingHarness(loose);
+        harness.Press(Key.F11);
+
+        Assert.Equal(24, harness.ViewModel.QuickKeyTiles.Count);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the quick keys open");
+
+                var box = (FrameworkElement)window.FindName("QuickKeyBox");
+                var top = box.TranslatePoint(new Point(0, 0), window).Y;
+                Assert.True(box.IsVisible && top > 0, $"the quick key box starts at {top:0}, off the top of the screen");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>The cash pane at its tallest: an expense, with every category listed under the box.</summary>
+    [Fact]
+    public void TheCashPaneFitsWithTheCategoriesOpen()
+    {
+        using var harness = new BillingHarness();
+
+        harness.Press(Key.M, ModifierKeys.Control);
+        harness.Press(Key.Down);
+        harness.ViewModel.EditBuffer = "120";
+        harness.Press(Key.Enter);
+
+        Assert.True(harness.ViewModel.IsChoosingExpenseCategory);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNoKeyIsHiddenUnderPay(window, "the billing screen with the cash pane open");
+                AssertNothingOverflowsSideways(window, "the billing screen with the cash pane open");
+
+                var box = (FrameworkElement)window.FindName("DrawerBox");
+                var bottom = box.TranslatePoint(new Point(0, box.ActualHeight), window).Y;
+                Assert.True(box.IsVisible && bottom < TillHeight, $"the cash box ends at {bottom:0} of {TillHeight}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// A long WhatsApp list pasted into the order box: the box scrolls inside itself rather than
+    /// pushing the pane off the screen.
+    /// </summary>
+    [Fact]
+    public void TheOrderPaneFitsWithALongMessagePasted()
+    {
+        using var harness = new BillingHarness();
+
+        harness.Press(Key.O, ModifierKeys.Control);
+        harness.ViewModel.EditBuffer = string.Join("\n", Enumerable.Range(1, 40).Select(i => $"{i}. Premium organic cold pressed groundnut oil 5 litre tin x {i}"));
+
+        Assert.True(harness.ViewModel.IsTakingOrder);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the order pane open");
+
+                var box = (FrameworkElement)window.FindName("OrderBox");
+                var top = box.TranslatePoint(new Point(0, 0), window).Y;
+                var bottom = box.TranslatePoint(new Point(0, box.ActualHeight), window).Y;
+                Assert.True(box.IsVisible && top > 0 && bottom < TillHeight, $"the order box runs from {top:0} to {bottom:0} of {TillHeight}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>The business pane, at the address with a long one typed in.</summary>
+    [Fact]
+    public void TheBusinessPaneFits()
+    {
+        using var harness = new BillingHarness();
+        harness.AddCustomer("9800011122", name: "Sri Venkateswara Wholesale Provisions and General Merchants");
+        harness.Press(Key.F7);
+        harness.ViewModel.EditBuffer = "9800011122";
+        harness.Press(Key.Enter);
+        harness.Press(Key.G, ModifierKeys.Control);
+        harness.ViewModel.EditBuffer = "29AABCK1234M1ZG";
+        harness.Press(Key.Enter);
+        harness.ViewModel.EditBuffer = "No. 1234, 5th Cross, 12th Main, Industrial Suburb, Rajajinagar, Bengaluru, Karnataka 560010";
+
+        Assert.True(harness.ViewModel.IsSettingBusiness);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the business pane open");
+
+                var box = (FrameworkElement)window.FindName("BusinessBox");
+                var bottom = box.TranslatePoint(new Point(0, box.ActualHeight), window).Y;
+                Assert.True(box.IsVisible && bottom < TillHeight, $"the business box ends at {bottom:0} of {TillHeight}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>F8 at its tallest: the customer picked, paying back by UPI, the code and the keys under it.</summary>
+    /// <remarks>
+    /// The sale before it went on the khata, so the last sale's note is up as well as the message
+    /// bar. With the code stacked under the tenders the card was taller than the room above those
+    /// two, and its keys were behind them; only the code itself was being checked.
+    /// </remarks>
+    [Fact]
+    public void TheKhataPaymentPaneFitsWithTheUpiCode()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        harness.ViewModel.Upi = new UpiPayee("sri.lakshmi.stores.main.road@okhdfcbank", "Sri Lakshmi Stores, Main Road, Tirunelveli");
+        harness.AddCustomer("9500012345", name: "Lakshmi Narayanan Subramaniam");
+        harness.Press(Key.F7);
+        harness.ViewModel.EditBuffer = "9500012345";
+        harness.Press(Key.Enter);
+        harness.Scan("8901234567890");
+        harness.Press(Key.F12);
+        harness.Press(Key.Down);
+        harness.Press(Key.Down);
+        harness.Press(Key.Down);
+        harness.Press(Key.Enter);
+        harness.Press(Key.Enter);
+
+        harness.Press(Key.F8);
+        harness.ViewModel.EditBuffer = "9500012345";
+        harness.Press(Key.Enter);
+        harness.Press(Key.Down);
+
+        Assert.True(harness.ViewModel.ShowsUpiQr);
+        Assert.True(harness.ViewModel.ShowsStandingNote);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+                Wpf.Settle(window);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the khata payment open");
+
+                var code = (QrCodeView)window.FindName("CollectUpiCode");
+                var top = code.TranslatePoint(new Point(0, 0), window).Y;
+                var bottom = code.TranslatePoint(new Point(0, code.ActualHeight), window).Y;
+
+                Assert.True(code.IsVisible && top > 0 && bottom < TillHeight, $"the khata UPI code runs from {top:0} to {bottom:0} of {TillHeight}");
+                Assert.NotNull(code.Code);
+
+                var pane = (FrameworkElement)window.FindName("CollectPane");
+                var note = (FrameworkElement)window.FindName("StandingNotePanel");
+                var paneBottom = pane.TranslatePoint(new Point(0, pane.ActualHeight), window).Y;
+                var noteTop = note.TranslatePoint(new Point(0, 0), window).Y;
+
+                Assert.True(note.IsVisible, "the last sale's note is not showing, so there is nothing to be under");
+                Assert.True(paneBottom <= noteTop + Slack, $"the khata pane ends at {paneBottom:0}, under the last sale's note at {noteTop:0}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>The payment pane at its tallest: two payments taken, and the UPI code for the rest.</summary>
+    [Fact]
+    public void ThePaymentPaneFitsWithTheUpiCode()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "OIL001", barcode: "8901234567913", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m));
+
+        harness.ViewModel.Upi = new UpiPayee("sri.lakshmi.stores.main.road@okhdfcbank", "Sri Lakshmi Stores, Main Road, Tirunelveli");
+        harness.ViewModel.Store = BillingHarness.Store;
+        harness.AddCustomer("9500012345", name: "Lakshmi Narayanan Subramaniam");
+        harness.Press(Key.F7);
+        harness.ViewModel.EditBuffer = "9500012345";
+        harness.Press(Key.Enter);
+        harness.Scan("8901234567913");
+        harness.Press(Key.F12);
+
+        // And taken on the phone: the banner saying so is in the pane too.
+        harness.Press(Key.W, ModifierKeys.Control);
+        Assert.True(harness.ViewModel.IsPaperless);
+
+        harness.ViewModel.EditBuffer = "100";
+        harness.Press(Key.Enter);
+        harness.Press(Key.Down);
+        harness.ViewModel.EditBuffer = "100";
+        harness.Press(Key.Enter);
+        harness.Press(Key.Down);
+
+        Assert.True(harness.ViewModel.ShowsUpiQr);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the UPI code open");
+
+                var code = (QrCodeView)window.FindName("UpiCode");
+                var top = code.TranslatePoint(new Point(0, 0), window).Y;
+                var bottom = code.TranslatePoint(new Point(0, code.ActualHeight), window).Y;
+
+                Assert.True(code.IsVisible && top > 0 && bottom < TillHeight, $"the UPI code runs from {top:0} to {bottom:0} of {TillHeight}");
+                Assert.NotNull(code.Code);
+                Assert.True(code.ActualWidth >= 180, $"the UPI code is only {code.ActualWidth:0} wide");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// "Still due" and "Change" are clear of the message bar, with the pane at its tallest.
+    /// </summary>
+    /// <remarks>
+    /// The bar is drawn over the panes so it can be read while one is open, and the payment pane,
+    /// centred on the whole screen, had its two totals behind it - the figures the cashier reads
+    /// out, hidden by the message telling them to take the payment.
+    /// </remarks>
+    [Fact]
+    public void ThePaymentFiguresAreNotUnderTheMessageBar()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "OIL001", barcode: "8901234567913", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m));
+
+        harness.ViewModel.Upi = new UpiPayee("sri.lakshmi.stores.main.road@okhdfcbank", "Sri Lakshmi Stores, Main Road, Tirunelveli");
+        harness.ViewModel.Store = BillingHarness.Store;
+        harness.Scan("8901234567913");
+        harness.Press(Key.F12);
+        harness.Press(Key.W, ModifierKeys.Control);
+        harness.ViewModel.EditBuffer = "100";
+        harness.Press(Key.Enter);
+        harness.Press(Key.Down);
+        harness.ViewModel.EditBuffer = "100";
+        harness.Press(Key.Enter);
+        harness.Press(Key.Down);
+
+        Assert.True(harness.ViewModel.ShowsUpiQr);
+        Assert.False(string.IsNullOrEmpty(harness.ViewModel.StatusMessage));
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+                Wpf.Settle(window);
+
+                var totals = (FrameworkElement)window.FindName("PaneTotals");
+                var bar = (FrameworkElement)window.FindName("MessageStrip");
+                var code = (FrameworkElement)window.FindName("UpiPanel");
+
+                var totalsBottom = totals.TranslatePoint(new Point(0, totals.ActualHeight), window).Y;
+                var codeBottom = code.TranslatePoint(new Point(0, code.ActualHeight), window).Y;
+                var barTop = bar.TranslatePoint(new Point(0, 0), window).Y;
+
+                Assert.True(bar.IsVisible, "the message bar is not showing, so there is nothing to be under");
+                Assert.True(totalsBottom <= barTop + Slack, $"the totals end at {totalsBottom:0}, under the message bar at {barTop:0}");
+                Assert.True(codeBottom <= barTop + Slack, $"the UPI code ends at {codeBottom:0}, under the message bar at {barTop:0}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The bill's columns reach the edge of the grid, and the item name has the room the codes
+    /// leave when there is no space for them.
+    /// </summary>
+    [Fact]
+    public void TheBillsColumnsFillTheGrid()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "OIL001", barcode: "8901234567913", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m));
+
+        harness.Scan("8901234567913");
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+                Wpf.Settle(window);
+
+                var grid = (DataGrid)window.FindName("LineGrid");
+                var shown = grid.Columns.Where(c => c.Visibility == Visibility.Visible).Sum(c => c.ActualWidth);
+                var hsn = grid.Columns.Single(c => Equals(c.Header, "HSN"));
+                var item = grid.Columns.Single(c => Equals(c.Header, "Item"));
+
+                Assert.Equal(grid.ActualWidth >= MainBillingView.ReferenceColumnsMinWidth, hsn.Visibility == Visibility.Visible);
+                Assert.True(grid.ActualWidth - shown < 24, $"the columns come to {shown:0} of a grid {grid.ActualWidth:0} wide");
+                Assert.True(item.ActualWidth > item.MinWidth, $"the item name is squeezed to {item.ActualWidth:0}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// On a 1024 × 768 counter all-in-one the line total is still whole: the columns that are
+    /// only reference - HSN, barcode, the rate before tax - make way for it.
+    /// </summary>
+    /// <remarks>
+    /// The grid gets about 600 units there, and the columns' floors used to come to 890: Rate,
+    /// Disc and Total fell off the right-hand edge, with nothing to scroll them back.
+    /// </remarks>
+    [Fact]
+    public void TheLineTotalIsWholeOnA1024Screen()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "OIL001", barcode: "8901234567913", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m));
+
+        harness.Scan("8901234567913");
+        harness.Press(Key.F4);
+        harness.ViewModel.EditBuffer = "99";
+        harness.Press(Key.Enter);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, 1024, 698);
+
+                var grid = (DataGrid)window.FindName("LineGrid");
+                var visible = grid.Columns.Where(c => c.Visibility == Visibility.Visible).ToList();
+                var total = grid.Columns.Single(c => Equals(c.Header, "Total"));
+
+                Assert.DoesNotContain(visible, c => Equals(c.Header, "Before GST") || Equals(c.Header, "HSN") || Equals(c.Header, "Barcode"));
+                Assert.True(visible.Sum(c => c.ActualWidth) <= grid.ActualWidth + Slack,
+                    $"the columns come to {visible.Sum(c => c.ActualWidth):0} of a grid {grid.ActualWidth:0} wide");
+                Assert.True(total.ActualWidth >= total.MinWidth, $"Total is {total.ActualWidth:0} wide");
+
+                AssertNothingOverflowsSideways(window, "the billing screen at 1024 × 768");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The customer's screen, at the smallest monitor a shop puts there: the whole code and its
+    /// amount on screen, large enough to scan from across the counter.
+    /// </summary>
+    [Fact]
+    public void TheCustomersScreenShowsTheWholeUpiCode()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        harness.ViewModel.Upi = new UpiPayee("sri.lakshmi.stores@okaxis", "Sri Lakshmi Stores");
+        harness.Scan("8901234567890");
+        harness.Press(Key.F12);
+        harness.Press(Key.Down);
+        harness.Press(Key.Down);
+
+        Wpf.Run(() =>
+        {
+            using var display = new CustomerDisplayViewModel(harness.ViewModel, "Sri Lakshmi Stores");
+            var window = new CustomerDisplayWindow(display);
+
+            try
+            {
+                Wpf.LayOutAt(window, 1024, 768);
+
+                var code = (QrCodeView)window.FindName("UpiCode");
+                var panel = (FrameworkElement)window.FindName("UpiPanel");
+                var bottom = panel.TranslatePoint(new Point(0, panel.ActualHeight), window).Y;
+
+                Assert.True(code.IsVisible && code.Code is not null, "the UPI code is not shown");
+                Assert.True(bottom <= 768 + Slack, $"the UPI panel ends at {bottom:0} of 768");
+                Assert.True(Math.Min(code.ActualWidth, code.ActualHeight) >= 200, $"the UPI code is only {code.ActualWidth:0} by {code.ActualHeight:0}");
             }
             finally
             {
@@ -310,7 +813,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
 
@@ -334,11 +837,17 @@ public class LayoutFitTests : IDisposable
     }
 
     /// <summary>
-    /// Eight tabs, and their headers on one row. A ninth, or a longer header, would wrap the strip
-    /// onto a second row at 1366 wide and take the height from every tab under it.
+    /// Every box to type in, every list and every table on the owner's screen has a name a screen
+    /// reader can say.
     /// </summary>
+    /// <remarks>
+    /// Without one Narrator calls a box "edit" and a table "data grid", and the owner is left to guess
+    /// which of the eight boxes on the purchase form the caret is in. Asked of each control's
+    /// automation peer, which is what a screen reader asks: a name set on the control, or a label
+    /// that says it is for it, both count.
+    /// </remarks>
     [Fact]
-    public void TheOwnersScreenOpensOnEightTabsInOneRow()
+    public void EveryBoxListAndTableOnTheOwnersScreenHasAName()
     {
         Wpf.Run(() =>
         {
@@ -346,18 +855,188 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                var unnamed = new List<string>();
+
+                for (var i = 0; i < tabs.Items.Count; i++)
+                {
+                    tabs.SelectedIndex = i;
+                    window.UpdateLayout();
+
+                    var tab = (tabs.Items[i] as TabItem)?.Header?.ToString() ?? $"tab {i + 1}";
+
+                    foreach (var control in Wpf.Descendants<Control>(window))
+                    {
+                        if (control is not (TextBox or PasswordBox or ComboBox or ListBox or DataGrid) || !control.IsVisible)
+                            continue;
+
+                        var name = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(control)?.GetName();
+
+                        if (string.IsNullOrWhiteSpace(name))
+                            unnamed.Add($"{tab}: {control.GetType().Name} {Bound(control)}");
+                    }
+                }
+
+                Assert.True(unnamed.Count == 0,
+                    "These have no name a screen reader can say:\n  " + string.Join("\n  ", unnamed.Distinct()));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        static string Bound(Control control)
+        {
+            var property = control switch
+            {
+                TextBox => TextBox.TextProperty,
+                ComboBox => ComboBox.SelectedItemProperty,
+                ItemsControl => ItemsControl.ItemsSourceProperty,
+                _ => null,
+            };
+
+            var path = property is null ? null : System.Windows.Data.BindingOperations.GetBindingExpression(control, property)?.ParentBinding.Path?.Path;
+
+            return string.IsNullOrEmpty(control.Name) ? $"bound to {path ?? "nothing"}" : control.Name;
+        }
+    }
+
+    /// <summary>
+    /// No two things on screen answer to the same Alt key.
+    /// </summary>
+    /// <remarks>
+    /// Two controls with one access key do not both fire: WPF moves focus between them instead, and
+    /// the key the runbook tells the owner to press does nothing. The price sheet was given Alt+P
+    /// beside the header's "Save as a web page", and only the acceptance run noticed.
+    /// </remarks>
+    [Fact]
+    public void NoTwoControlsOnATabShareAnAccessKey()
+    {
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                var clashes = new List<string>();
+
+                for (var i = 0; i < tabs.Items.Count; i++)
+                {
+                    tabs.SelectedIndex = i;
+                    window.UpdateLayout();
+
+                    var name = (tabs.Items[i] as TabItem)?.Header?.ToString() ?? $"tab {i + 1}";
+
+                    foreach (var group in Wpf.Descendants<AccessText>(window)
+                                 .Where(a => a.IsVisible && a.AccessKey != '\0')
+                                 .GroupBy(a => char.ToUpperInvariant(a.AccessKey))
+                                 .Where(g => g.Count() > 1))
+                    {
+                        clashes.Add($"{name}: Alt+{group.Key} on {string.Join(" and ", group.Select(a => $"'{a.Text}'"))}");
+                    }
+                }
+
+                Assert.True(clashes.Count == 0, "These access keys are taken twice:\n  " + string.Join("\n  ", clashes));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The sections are a list down the left, one column, every header on screen without scrolling
+    /// at 1366x768. A list that ran off the bottom would hide the last sections from anyone who does
+    /// not know the Ctrl+number for them.
+    /// </summary>
+    [Fact]
+    public void TheOwnersSectionsAreOneColumnAllOnScreen()
+    {
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
 
-                Assert.Equal(8, tabs.Items.Count);
+                Assert.Equal(10, tabs.Items.Count);
 
-                var tops = tabs.Items.Cast<TabItem>()
-                    .Select(item => Math.Round(item.TranslatePoint(new Point(0, 0), window).Y))
-                    .Distinct()
-                    .ToList();
+                var headers = tabs.Items.Cast<TabItem>().ToList();
+                var lefts = headers.Select(item => Math.Round(item.TranslatePoint(new Point(0, 0), window).X)).Distinct().ToList();
 
-                Assert.True(tops.Count == 1, $"the tab headers are on {tops.Count} rows");
+                Assert.True(lefts.Count == 1, $"the section headers are in {lefts.Count} columns");
+
+                var content = (FrameworkElement)window.Content;
+
+                foreach (var header in headers)
+                {
+                    var bottom = header.TranslatePoint(new Point(0, header.ActualHeight), window).Y;
+                    Assert.True(bottom <= content.ActualHeight, $"'{header.Header}' ends at {bottom:0}, below the {content.ActualHeight:0} the window shows");
+                }
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The Purchases tab halfway through a delivery: a supplier picked, matches listed for the item
+    /// being typed, and lines on the bill with a long name among them.
+    /// </summary>
+    [Fact]
+    public void ThePurchasesTabFitsWithABillHalfEntered()
+    {
+        var items = new ItemRepository(_temp.Database);
+        items.UpsertRange(
+        [
+            Catalogue.Item(sku: "OIL001", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m) with { StockQty = 3m },
+            Catalogue.Item(sku: "OIL002", name: "Refined Sunflower Oil 1 Litre Pouch", price: 180m),
+        ]);
+
+        new PurchaseRepository(_temp.Database).AddSupplier(new Supplier(0, "Sri Venkateswara Wholesale Provisions and Oil Traders", "9443012345", "33AEIPH7795F1Z9", "33", true));
+
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 8;
+                window.UpdateLayout();
+
+                var purchases = (PurchasesViewModel)((FrameworkElement)window.FindName("PurchasesTab")).DataContext;
+                purchases.SelectedSupplier = purchases.Suppliers.Single();
+                purchases.BillNo = "SVW/2026-27/00412";
+
+                purchases.ItemQuery = "OIL001";
+                purchases.LineQuantity = "12";
+                purchases.LineRate = "1180.50";
+                Assert.Null(purchases.AddLine());
+
+                purchases.ItemQuery = "oil";
+                window.UpdateLayout();
+
+                Assert.Single(purchases.Lines);
+                Assert.NotEmpty(purchases.ItemMatches);
+
+                AssertEveryButtonIsReachable(window, "the Purchases tab with a bill half entered");
+                AssertNoButtonLabelIsCutOff(window, "the Purchases tab with a bill half entered");
+                AssertNothingOverflowsSideways(window, "the Purchases tab with a bill half entered");
             }
             finally
             {
@@ -388,7 +1067,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
                 tabs.SelectedIndex = 7;
@@ -450,7 +1129,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
                 tabs.SelectedIndex = 6;
@@ -487,7 +1166,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
                 tabs.SelectedIndex = 3;
@@ -531,7 +1210,7 @@ public class LayoutFitTests : IDisposable
 
             try
             {
-                Wpf.LayOut(window, TillWidth, TillHeight);
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
 
                 var tabs = Wpf.Descendants<TabControl>(window).First();
                 tabs.SelectedIndex = 5;
@@ -567,7 +1246,9 @@ public class LayoutFitTests : IDisposable
             applyPin: _ => null,
             saveWebPage: (_, _) => null,
             receiptLayout: ReceiptLayout.Standard,
-            applyReceiptLayout: _ => null);
+            applyReceiptLayout: _ => null,
+            upiId: "sri.lakshmi.stores@okaxis",
+            applyUpiId: _ => null);
 
         var maintenance = new MaintenanceViewModel(
             _temp.Database,
@@ -589,6 +1270,70 @@ public class LayoutFitTests : IDisposable
                 new CustomerRepository(_temp.Database)),
             new GstReturnViewModel(
                 month => new Pos.Core.Analytics.GstReturnQuery(_temp.Database).Gather(settings.LaneId, month, "33"),
-                (_, _) => []));
+                (_, _) => []),
+            new PurchasesViewModel(
+                new PurchaseRepository(_temp.Database),
+                query => items.Search(query),
+                code => items.FindByBarcode(code) ?? items.FindBySku(code),
+                settings.LaneId,
+                "33"),
+            new PricesViewModel(
+                new PriceRepository(_temp.Database),
+                _ => PrintOutcome.NotConfigured(),
+                BillingHarness.Store.Name),
+            new OrdersViewModel(
+                cover => new Pos.Core.Analytics.OrderListQuery(_temp.Database).Gather(cover),
+                _ => { },
+                BillingHarness.Store.Name),
+            new OffersViewModel(new OfferRepository(_temp.Database), items.Skus, items.Categories));
+    }
+
+    /// <summary>
+    /// The Orders tab with something to order from a supplier with a long name, and an item with a
+    /// long name on it - the widest the list and the order get.
+    /// </summary>
+    [Fact]
+    public void TheOrdersTabFitsWithAnOrderOnIt()
+    {
+        var items = new ItemRepository(_temp.Database);
+        items.UpsertRange([Catalogue.Item(sku: "OIL001", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m) with { StockQty = 0m }]);
+        var oil = items.FindBySku("OIL001")!;
+
+        var purchases = new PurchaseRepository(_temp.Database);
+        var supplier = purchases.AddSupplier(new Supplier(0, "Sri Venkateswara Wholesale Provisions and Oil Traders", "9443012345", "33AEIPH7795F1Z9", "33", true));
+        var line = PurchaseLine.Price(new PurchaseLineEntry(oil, 12m, 1180.50m, 5m, 0m), interState: false, chargesGst: true);
+        purchases.Record(new PurchaseBill(supplier, "SVW/1", DateOnly.FromDateTime(DateTime.Today), [line], InterState: false), BillingHarness.LaneId, DateTimeOffset.Now, null);
+
+        // Down to one of the twelve delivered: low, so on the list to fill back up.
+        new StockRepository(_temp.Database).Set(oil.Id, 1m, StockReason.Adjust, BillingHarness.LaneId);
+
+        Wpf.Run(() =>
+        {
+            var window = BuildOwnerView();
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                var tabs = Wpf.Descendants<TabControl>(window).First();
+                tabs.SelectedIndex = 9;
+                window.UpdateLayout();
+
+                var orders = (OrdersViewModel)((FrameworkElement)window.FindName("OrdersTab")).DataContext;
+                orders.Load();
+                window.UpdateLayout();
+
+                Assert.NotNull(orders.SelectedSupplier);
+                Assert.NotEmpty(orders.Lines);
+
+                AssertEveryButtonIsReachable(window, "the Orders tab with an order on it");
+                AssertNoButtonLabelIsCutOff(window, "the Orders tab with an order on it");
+                AssertNothingOverflowsSideways(window, "the Orders tab with an order on it");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
     }
 }

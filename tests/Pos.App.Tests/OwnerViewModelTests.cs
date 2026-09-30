@@ -77,9 +77,17 @@ public class OwnerViewModelTests : IDisposable
         {
             _percent = percent;
             return null;
+        },
+        upiId: _upiId,
+        applyUpiId: id =>
+        {
+            _upiId = id;
+            return null;
         });
 
     private decimal _percent = LowStock.DefaultPercent;
+
+    private string? _upiId;
 
     private ReceiptLayout? _layout;
     private string? _refuseLayoutWith;
@@ -298,6 +306,52 @@ public class OwnerViewModelTests : IDisposable
         Assert.Contains("off", owner.Status);
     }
 
+    // ---- The UPI code with the amount ---------------------------------------------------------
+
+    [Fact]
+    public void TheUpiIdIsSetAndTheCardSaysWhatItDoes()
+    {
+        var owner = Build();
+        Assert.Contains("Not set", owner.UpiState);
+
+        owner.UpiIdText = " murugan.stores@okaxis ";
+        Assert.Null(owner.SetUpiId());
+
+        Assert.Equal("murugan.stores@okaxis", _upiId);
+        Assert.Equal("murugan.stores@okaxis", owner.UpiIdText);
+        Assert.Contains("paid to murugan.stores@okaxis", owner.UpiState);
+        Assert.Contains("F12, then UPI", owner.Status);
+    }
+
+    [Theory]
+    [InlineData("murugan")]
+    [InlineData("murugan stores@okaxis")]
+    [InlineData("9876543210")]
+    public void AUpiIdThatCannotBeRightIsRefused(string typed)
+    {
+        _upiId = "murugan.stores@okaxis";
+        var owner = Build();
+        owner.UpiIdText = typed;
+
+        Assert.NotNull(owner.SetUpiId());
+        Assert.Equal("murugan.stores@okaxis", _upiId);
+        Assert.Contains("is not a UPI ID", owner.Status);
+    }
+
+    [Fact]
+    public void AnEmptyBoxTurnsTheCodeOff()
+    {
+        _upiId = "murugan.stores@okaxis";
+        var owner = Build();
+        owner.UpiIdText = "";
+
+        Assert.Null(owner.SetUpiId());
+
+        Assert.Null(_upiId);
+        Assert.Contains("Not set", owner.UpiState);
+        Assert.Contains("off", owner.Status);
+    }
+
     // ---- The stock sheet -----------------------------------------------------------------------
 
     [Fact]
@@ -315,7 +369,7 @@ public class OwnerViewModelTests : IDisposable
         {
             Assert.Null(owner.SaveStockSheet(path));
             Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, File.ReadAllBytes(path).Take(3).ToArray());
-            Assert.Contains("2 item(s)", owner.Status);
+            Assert.Contains("2 items", owner.Status);
 
             // Filled in the way Excel would give it back: the new counts in the last column.
             var filled = File.ReadAllLines(path)
@@ -331,7 +385,7 @@ public class OwnerViewModelTests : IDisposable
             Assert.False(owner.HasStockSheetProblems);
 
             Assert.Null(owner.ApplyStockSheet(plan));
-            Assert.Contains("2 count(s) changed", owner.Status);
+            Assert.Contains("2 counts changed", owner.Status);
 
             var items = new ItemRepository(_temp.Database);
             Assert.Equal(40m, items.FindBySku("DAL")!.StockQty);

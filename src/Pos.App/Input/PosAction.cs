@@ -58,4 +58,73 @@ public enum PosAction
     /// Open the owner's screen: the figures, what needs reordering, and the lane's settings.
     /// </summary>
     OwnerView,
+
+    /// <summary>Take goods back against a past bill, and issue a credit note for them.</summary>
+    ReturnGoods,
+
+    /// <summary>Record the float, an expense, or cash put into or taken out of the drawer.</summary>
+    CashDrawer,
+
+    /// <summary>Add a loose item - nothing to scan - off its quick key.</summary>
+    QuickKeys,
+
+    /// <summary>Take an order over the phone or on WhatsApp, or save the bill as one.</summary>
+    TakeOrder,
+
+    /// <summary>While taking UPI: print the code with the amount, for the customer to scan.</summary>
+    PrintUpiCode,
+
+    /// <summary>Print the customer's khata statement, and copy a message of it to send them.</summary>
+    KhataStatement,
+
+    /// <summary>The bill on the customer's WhatsApp: instead of paper while paying, or afterwards.</summary>
+    DigitalBill,
+
+    /// <summary>The customer on the bill is a business: their GSTIN and address.</summary>
+    BusinessCustomer,
+
+    /// <summary>
+    /// Every key and what it does, read off the keymap - including the ones with no room on the
+    /// strip, such as the UPI slip, the khata statement and voiding a sale.
+    /// </summary>
+    ShowKeys,
+}
+
+/// <summary>What each action is called on the key sheet and the strip.</summary>
+public static class PosActionText
+{
+    /// <summary>A short description, in the order and groups the key sheet lists them.</summary>
+    public static IReadOnlyList<(string Group, PosAction Action, string Text)> Sheet { get; } =
+    [
+        ("The bill", PosAction.FocusSearch, "Scan or search"),
+        ("The bill", PosAction.Commit, "Add the item, or go ahead"),
+        ("The bill", PosAction.Cancel, "Back out"),
+        ("The bill", PosAction.MoveUp, "Up a line or a choice"),
+        ("The bill", PosAction.MoveDown, "Down a line or a choice"),
+        ("The bill", PosAction.EditQuantity, "Change the quantity"),
+        ("The bill", PosAction.IncrementQuantity, "One more"),
+        ("The bill", PosAction.DecrementQuantity, "One fewer"),
+        ("The bill", PosAction.EditDiscount, "Discount the line"),
+        ("The bill", PosAction.DeleteLine, "Remove the line"),
+        ("The bill", PosAction.QuickKeys, "Loose items off their keys"),
+        ("The bill", PosAction.HoldBill, "Hold the bill"),
+        ("The bill", PosAction.RecallBill, "Take back a held bill or an order"),
+        ("The bill", PosAction.NewBill, "Start a new bill"),
+        ("Paying", PosAction.Tender, "Pay and print"),
+        ("Paying", PosAction.PrintUpiCode, "Print the UPI code with the amount"),
+        ("Paying", PosAction.DigitalBill, "The bill on WhatsApp instead of paper"),
+        ("Customers", PosAction.FindCustomer, "Put a customer on the bill"),
+        ("Customers", PosAction.BusinessCustomer, "A business customer's GSTIN"),
+        ("Customers", PosAction.ReceivePayment, "Take a khata payment"),
+        ("Customers", PosAction.KhataStatement, "Print a khata statement"),
+        ("Customers", PosAction.TakeOrder, "Take a phone or WhatsApp order"),
+        ("Customers", PosAction.ReturnGoods, "Goods coming back"),
+        ("The day", PosAction.CashDrawer, "Float, expenses, cash in and out"),
+        ("The day", PosAction.ReprintInvoice, "Reprint a bill"),
+        ("The day", PosAction.VoidInvoice, "Void a paid bill"),
+        ("The day", PosAction.SetCashier, "Who is on the till"),
+        ("The day", PosAction.OwnerView, "The owner's screen"),
+        ("The day", PosAction.CloseDay, "Close the day"),
+        ("The day", PosAction.ShowKeys, "This sheet"),
+    ];
 }

@@ -33,6 +33,21 @@ public enum BillingMode
 
     /// <summary>Taking a customer's payment against what they owe on credit.</summary>
     Collect = 7,
+
+    /// <summary>Taking goods back against a past bill, on a credit note.</summary>
+    Return = 8,
+
+    /// <summary>The float, an expense, cash put in or taken out.</summary>
+    Drawer = 9,
+
+    /// <summary>Picking a loose item off the quick keys.</summary>
+    QuickKeys = 10,
+
+    /// <summary>Taking an order over the phone or on WhatsApp.</summary>
+    Order = 11,
+
+    /// <summary>Giving the customer on the bill a GSTIN and an address: a bill to a business.</summary>
+    Business = 12,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -47,7 +62,7 @@ public enum EditableColumn
 /// list, and exposes every one of them as an action so the whole flow is reachable from the
 /// keyboard (SRS UR-03).
 /// </summary>
-public sealed class BillingViewModel : ObservableObject, IBillingActions, IDisposable
+public sealed partial class BillingViewModel : ObservableObject, IBillingActions, IDisposable
 {
     private readonly InvoiceEngine _bill;
     private readonly ItemRepository _items;
@@ -122,9 +137,13 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         IInvoiceStore? invoices = null,
         DayCloseService? dayClose = null,
         string? cashierName = null,
-        CreditService? credit = null)
+        CreditService? credit = null,
+        ReturnService? returns = null,
+        CashDrawerService? cashDrawer = null)
     {
         _credit = credit;
+        _returns = returns;
+        _cashDrawer = cashDrawer;
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(heldBills);
@@ -148,6 +167,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         _debouncer = new SearchDebouncer(scheduler, OnDebounceElapsed, debounceWindow);
 
         Lines.CollectionChanged += (_, _) => Renumber();
+        PropertyChanged += OnChangedForUpi;
 
         RefreshHeldBills();
     }
@@ -284,10 +304,17 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             Raise(nameof(IsVoiding));
             Raise(nameof(IsSettingCashier));
             Raise(nameof(IsCollecting));
+            Raise(nameof(IsReturning));
+            Raise(nameof(IsUsingDrawer));
+            Raise(nameof(IsUsingQuickKeys));
+            Raise(nameof(IsTakingOrder));
+            Raise(nameof(IsSettingBusiness));
         }
     }
 
     public bool IsCollecting => _mode == BillingMode.Collect;
+
+    public bool IsReturning => _mode == BillingMode.Return;
 
     public bool IsRecalling => _mode == BillingMode.Recall;
 
@@ -342,6 +369,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             // and finding whose payment is being taken.
             if ((Mode == BillingMode.Customer && !IsNamingCustomer) || (Mode == BillingMode.Collect && _collectCustomer is null))
                 RefreshCustomerMatches();
+
+            if (Mode == BillingMode.QuickKeys)
+                OnQuickKeyTyped();
         }
     }
 
@@ -419,7 +449,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     /// <summary>What the payment box is asking for.</summary>
     public string CollectPrompt => _collectCustomer is { } who
-        ? $"{who.Name ?? who.MobileNo} owes {SafeOwed(who):N2} - amount paid, Enter for all of it"
+        ? $"{who.Name ?? who.MobileNo} owes {Show.Money(SafeOwed(who))} - amount paid, {CommitKey} for all of it"
         : "Whose payment? Mobile number, or part of a name";
 
     /// <summary>
@@ -437,13 +467,13 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         if (_credit is null)
         {
-            StatusMessage = "Customer credit is not available on this lane.";
+            StatusMessage = "The khata is not available on this lane.";
             return;
         }
 
         if (Mode == BillingMode.Tender || !_bill.IsEmpty)
         {
-            StatusMessage = "Finish, park or clear the bill first - a payment against credit is not part of a sale.";
+            StatusMessage = "Finish, park or clear the bill first - a khata payment is not part of a sale.";
             return;
         }
 
@@ -481,7 +511,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
             if (owed <= 0m)
             {
-                StatusMessage = $"{who.Name ?? who.MobileNo} owes nothing on credit.";
+                StatusMessage = $"{who.Name ?? who.MobileNo} owes nothing on the khata.";
                 return;
             }
 
@@ -491,7 +521,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             EditBuffer = string.Empty;
             RaiseCollect();
 
-            StatusMessage = $"{who.Name ?? who.MobileNo} owes {owed:N2}. Type what they are paying, or commit for all of it. Up and down for cash, UPI or card.";
+            StatusMessage = $"{who.Name ?? who.MobileNo} owes {Show.Money(owed)}. Type what they are paying, or {CommitKey} for all of it. Up and down for cash, UPI or card.";
             return;
         }
 
@@ -524,8 +554,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        var message = $"{customer.Name ?? customer.MobileNo} paid {result.Payment.Amount:N2} by {TenderName(tender)}. "
-            + (result.StillOwed > 0m ? $"{result.StillOwed:N2} still owed." : "Nothing more owed.");
+        var message = $"{customer.Name ?? customer.MobileNo} paid {Show.Money(result.Payment.Amount)} by {TenderName(tender)}. "
+            + (result.StillOwed > 0m ? $"{Show.Money(result.StillOwed)} still owed." : "Nothing more owed.");
 
         if (result.Drawer == DrawerKickResult.Failed)
             message += " THE DRAWER DID NOT OPEN - use the key.";
@@ -535,6 +565,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         CancelCollect();
         StatusMessage = message;
+
+        // The last sale's note says what this customer owed then. Left up, it would contradict the
+        // payment just taken ("now owes ₹189.00" above "₹89.00 still owed").
+        if (customer.MobileNo == _standingNoteOwer)
+            StandingNote = string.Empty;
     }
 
     private void CancelCollect()
@@ -593,8 +628,58 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public string StatusMessage
     {
         get => _statusMessage;
-        private set => Set(ref _statusMessage, value ?? string.Empty);
+        private set
+        {
+            if (!Set(ref _statusMessage, value ?? string.Empty))
+                return;
+
+            Raise(nameof(StatusKind));
+            Raise(nameof(ShowsStandingNote));
+        }
     }
+
+    /// <summary>What the message is - done, held up, refused - which gives it its colour and icon.</summary>
+    public MessageKind StatusKind => MessageKinds.Classify(_statusMessage);
+
+    /// <summary>
+    /// What still needs doing about the last sale: the receipt that did not print, the drawer that
+    /// did not open, what the customer now owes on the khata.
+    /// </summary>
+    /// <remarks>
+    /// The message bar says one thing at a time, and the next keystroke used to replace a warning
+    /// nobody had acted on yet - "the receipt did not print" was gone the moment the cashier
+    /// scanned the next customer's first item. This stays until the next bill has a line on it.
+    /// </remarks>
+    public string StandingNote
+    {
+        get => _standingNote;
+        private set
+        {
+            if (Set(ref _standingNote, value ?? string.Empty))
+                Raise(nameof(ShowsStandingNote));
+        }
+    }
+
+    private string _standingNote = string.Empty;
+
+    /// <summary>The customer the standing note says owes money, when it says so.</summary>
+    private string? _standingNoteOwer;
+
+    /// <summary>Shown only once something else is in the message bar; until then the bar already says it.</summary>
+    public bool ShowsStandingNote => _standingNote.Length > 0 && _standingNote != _statusMessage;
+
+    /// <summary>
+    /// The key that goes ahead, as the messages name it. Enter out of the box; set from the lane's
+    /// keymap, so a shop that moved it is told the key it actually presses. The messages used to
+    /// say "commit" - the code's name for the action, not a key anybody has.
+    /// </summary>
+    public string CommitKey { get; set; } = "Enter";
+
+    /// <summary>
+    /// Raised when what was scanned or typed matched nothing, so the view can select it: the next
+    /// scan then replaces it instead of landing on the end of it and failing too.
+    /// </summary>
+    public event EventHandler? SearchRejected;
 
     // ---- Parked bills ------------------------------------------------------------------------
 
@@ -685,7 +770,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     /// millisecond gaps that tell a scanner burst from typing, and it has no wall time to give.
     /// This is a label a cashier glances at, and it re-reads whenever the bill changes.
     /// </remarks>
-    public string TodayLabel => DateTimeOffset.Now.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+    public string TodayLabel => Show.Date(DateTimeOffset.Now);
 
     public decimal TenderedCash => TenderedOf(TenderType.Cash);
     public decimal TenderedCard => TenderedOf(TenderType.Card);
@@ -695,6 +780,19 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     private decimal TenderedOf(TenderType type) =>
         Payments.Where(p => p.Type == type).Sum(p => p.Amount);
+
+    /// <summary>
+    /// Whether the side panel has anything to say about money off, money taken, or points.
+    /// </summary>
+    /// <remarks>
+    /// Each section shows only when it has something in it. With all of them always on, the panel
+    /// scrolled on a 720-high screen and hid the payment split below the fold, while "Discount 0.00"
+    /// and a row of zero tenders took the room.
+    /// </remarks>
+    public bool HasDiscount => Totals.TotalDiscount > 0m;
+
+    /// <inheritdoc cref="HasDiscount"/>
+    public bool HasPayments => Payments.Count > 0;
 
     /// <summary>Points this bill would earn if it were settled as it stands.</summary>
     /// <remarks>
@@ -718,16 +816,11 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     /// which is the shelf discount, plus anything taken off the line by hand. Blank rather than
     /// "Saved 0.00" when there is nothing in it — a zero saving is not worth a line on the screen.
     /// </remarks>
-    public string SavingsLabel
-    {
-        get
-        {
-            var saved = Lines.Sum(l => (l.Line.Mrp - l.Line.UnitPrice) * l.Line.Quantity)
-                        + Totals.TotalDiscount;
+    public string SavingsLabel => SavedAmount > 0m ? $"Saved {Show.Money(SavedAmount)}" : string.Empty;
 
-            return saved > 0m ? $"Saved {saved:N2}" : string.Empty;
-        }
-    }
+    /// <summary>The saving itself, for a screen that words it in its own language.</summary>
+    public decimal SavedAmount =>
+        Lines.Sum(l => (l.Line.Mrp - l.Line.UnitPrice) * l.Line.Quantity) + Totals.TotalDiscount;
 
     /// <summary>Raises everything the side panel reads. Called wherever the bill or the basket moves.</summary>
     private void RefreshSidePanel()
@@ -738,7 +831,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
                      nameof(TenderedCash), nameof(TenderedCard), nameof(TenderedUpi),
                      nameof(TenderedCredit), nameof(TenderedPoints),
                      nameof(PointsEarning), nameof(PointsRedeemedNow), nameof(ChangeDue),
-                     nameof(SavingsLabel),
+                     nameof(SavingsLabel), nameof(HasDiscount), nameof(HasPayments),
                  })
         {
             Raise(name);
@@ -766,6 +859,20 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     public void Commit()
     {
         ClearPendingNewBill();
+
+        // Enter over the key sheet closes it, rather than acting on a screen the cashier cannot see.
+        if (IsShowingKeys)
+        {
+            IsShowingKeys = false;
+            return;
+        }
+
+        // Nor does it close the day: that takes the close key itself, a second time, on purpose.
+        if (IsConfirmingDayClose)
+        {
+            StatusMessage = $"{CloseDayKey} again to close the day, {CancelKey} to keep selling.";
+            return;
+        }
 
         switch (Mode)
         {
@@ -796,6 +903,26 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Collect:
                 CommitCollect();
                 return;
+
+            case BillingMode.Return:
+                CommitReturn();
+                return;
+
+            case BillingMode.Drawer:
+                CommitDrawer();
+                return;
+
+            case BillingMode.QuickKeys:
+                CommitQuickKey();
+                return;
+
+            case BillingMode.Order:
+                CommitOrder();
+                return;
+
+            case BillingMode.Business:
+                CommitBusiness();
+                return;
         }
 
         if (IsEditing)
@@ -809,7 +936,20 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
     public void Cancel()
     {
+        // Esc over the key sheet or the close-the-day pane closes that, and nothing more.
+        var wasClosingDay = IsConfirmingDayClose;
+        var wasShowingKeys = IsShowingKeys;
+
         ClearPendingConfirmations();
+
+        if (wasClosingDay)
+        {
+            StatusMessage = "The day stays open.";
+            return;
+        }
+
+        if (wasShowingKeys)
+            return;
 
         switch (Mode)
         {
@@ -825,6 +965,26 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             case BillingMode.Collect:
                 CancelCollect();
                 StatusMessage = "No payment taken.";
+                return;
+
+            case BillingMode.Return:
+                BackOutOfReturn();
+                return;
+
+            case BillingMode.Drawer:
+                BackOutOfDrawer();
+                return;
+
+            case BillingMode.QuickKeys:
+                BackOutOfQuickKeys();
+                return;
+
+            case BillingMode.Order:
+                BackOutOfOrder();
+                return;
+
+            case BillingMode.Business:
+                BackOutOfBusiness();
                 return;
 
             case BillingMode.Customer:
@@ -848,7 +1008,13 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         }
 
         if (IsResultListOpen || _searchText.Length > 0)
+        {
             ClearSearch();
+            return;
+        }
+
+        // Nothing else to back out of: the order's misses have been seen, and can go.
+        ForgetOrderMisses();
     }
 
     public void DeleteLine()
@@ -858,6 +1024,12 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (Mode == BillingMode.Tender)
         {
             RemoveLastPayment();
+            return;
+        }
+
+        if (Mode == BillingMode.Return)
+        {
+            UnpickReturnLine();
             return;
         }
 
@@ -904,13 +1076,15 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
+        // A recalled order parked again is still the order it was.
+        var order = _recalledOrder;
         var token = _heldBills.NextToken(_laneId);
-        _heldBills.Park(_laneId, token, _now(), _bill.Customer, _bill.SnapshotLines());
+        _heldBills.Park(_laneId, token, _now(), _bill.Customer, _bill.SnapshotLines(), order);
 
         ClearBill();
         RefreshHeldBills();
 
-        StatusMessage = $"Bill parked as {token}.";
+        StatusMessage = order is null ? $"Bill parked as {token}." : $"Order parked again as {token}.";
     }
 
     public void RecallBill()
@@ -934,7 +1108,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         Mode = BillingMode.Recall;
         SelectedHeldBillIndex = 0;
-        StatusMessage = "Choose a parked bill, then press the commit key.";
+        StatusMessage = $"Choose a parked bill with the arrows, then press {CommitKey}.";
     }
 
     /// <summary>
@@ -986,13 +1160,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         _basket = new TenderBasket(_bill.Totals.AmountPayable);
         _pointsRedeemed = 0;
+        IsPaperless = false;
         Payments.Clear();
         SelectedTenderTypeIndex = 0;
         EditBuffer = string.Empty;
         Mode = BillingMode.Tender;
         RefreshTender();
 
-        StatusMessage = $"{AmountDue:0.00} due. Choose a tender, type an amount, then commit.";
+        StatusMessage = $"{Show.Money(AmountDue)} due. Choose a tender, type an amount, then press {CommitKey}.";
     }
 
     /// <summary>Attaches a customer by mobile number, which is what unlocks loyalty on the bill.</summary>
@@ -1033,7 +1208,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         Mode = BillingMode.Reprint;
         EditBuffer = string.Empty;
-        StatusMessage = "Commit for the last bill, or type an invoice number or mobile number.";
+        StatusMessage = $"{CommitKey} for the last bill, or type an invoice number or mobile number.";
     }
 
     /// <summary>
@@ -1063,31 +1238,37 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        if (!_pendingDayClose)
+        if (!PendingDayClose)
         {
             var preview = _dayClose.Preview(_laneId);
 
-            _pendingDayClose = true;
-            // A day with no sales is not a day with no money when somebody paid back credit, and
+            DayCloseRows = CloseRows(preview);
+
+            // A day with no sales is not a day with no money when somebody paid back a khata, and
             // "nothing has been sold" there reads as "nothing to close" - which would leave that
             // cash off every report.
-            var collected = preview.CollectedCredit
-                ? $" {preview.CreditCollected:0.00} collected on credit."
+            DayCloseNote = preview.TookNothing
+                ? preview.MovedMoneyWithoutSales
+                    ? "No sales since the last close, but money moved through the drawer."
+                    : "Nothing has been sold since the last close."
                 : string.Empty;
 
-            StatusMessage = preview.TookNothing
-                ? preview.CollectedCredit
-                    ? $"No sales since the last close, but{collected} {preview.CashExpected:0.00} expected in the drawer. Press again to close."
-                    : "Nothing has been sold since the last close. Press again to close anyway."
-                : $"{preview.InvoiceCount} invoice(s), {preview.NetSales:0.00} net.{collected} {preview.CashExpected:0.00} expected in the drawer. Press again to close.";
+            PendingDayClose = true;
+
+            var again = $"{CloseDayKey} again to close the day, {CancelKey} to keep selling.";
+
+            StatusMessage = preview.TookNothing && !preview.MovedMoneyWithoutSales
+                ? $"Nothing has been sold since the last close. {again}"
+                : $"{(preview.TookNothing ? "No sales" : Plural.Of(preview.InvoiceCount, "bill"))}, "
+                  + $"{Show.Money(preview.CashExpected)} expected in the drawer. {again}";
 
             return;
         }
 
-        _pendingDayClose = false;
+        PendingDayClose = false;
 
         var result = _dayClose.Close(_laneId);
-        var message = $"Day closed. Report {result.Day.Id}: {result.Day.InvoiceCount} invoice(s), {result.Day.NetSales:0.00} net, {result.Day.CashExpected:0.00} expected in the drawer.";
+        var message = $"Day closed. Report {result.Day.Id}: {Plural.Of(result.Day.InvoiceCount, "bill")}, {Show.Money(result.Day.NetSales)} net, {Show.Money(result.Day.CashExpected)} expected in the drawer.";
 
         if (!result.Print.Succeeded && result.Print.Status == PrintStatus.Failed)
             message += " The report did not print — reprint it once the printer is fixed.";
@@ -1120,7 +1301,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         _pendingVoidInvoiceNo = null;
         Mode = BillingMode.Void;
         EditBuffer = string.Empty;
-        StatusMessage = "Commit for the last bill, or type the invoice number to void.";
+        StatusMessage = $"{CommitKey} for the last bill, or type the invoice number to void.";
     }
 
     /// <summary>Sets who is on the till, at the start of a shift or when it changes.</summary>
@@ -1222,6 +1403,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (text.Length == 0)
             return;
 
+        // A label from the shop's own scale: the item and its weight or price are in the code. Read
+        // however it arrived - scanned, or typed off a smudged label.
+        if (ScaleLabels.Read(text) is { } label)
+        {
+            AddScaleLabel(label);
+            return;
+        }
+
         if (kind == InputKind.Scanner)
         {
             var scanned = _items.FindByBarcode(text);
@@ -1250,6 +1439,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (SearchResults.Count == 0)
         {
             StatusMessage = $"No item matches '{text}'.";
+            SearchRejected?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -1259,7 +1449,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
-        StatusMessage = $"{SearchResults.Count} matches. Move to one and press the commit key.";
+        StatusMessage = $"{SearchResults.Count} matches. Move to one with the arrows and press {CommitKey}.";
     }
 
     private void RunSearch(string text)
@@ -1275,9 +1465,46 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Raise(nameof(IsResultListOpen));
     }
 
-    private void AddItem(Item item)
+    /// <summary>How the shop's scale lays out its labels. Off unless the lane sets it.</summary>
+    public ScaleBarcodeFormat ScaleLabels { get; set; } = ScaleBarcodeFormat.Off;
+
+    /// <summary>
+    /// A scale label onto the bill: the item by its code, at the weight on the label, or at the
+    /// quantity that makes the price on the label to the paisa.
+    /// </summary>
+    private void AddScaleLabel(ScaleLabel label)
     {
-        var line = _bill.AddItem(item);
+        var item = _items.FindBySku(label.ItemCode) ?? _items.FindBySku(label.ShortItemCode);
+
+        if (item is null)
+        {
+            ClearSearch();
+            StatusMessage = $"A scale label for item {label.ShortItemCode}, but no item has that SKU. Check the scale's item codes match the catalogue.";
+            return;
+        }
+
+        if (label.ForItem(item, out var problem) is not { } how)
+        {
+            ClearSearch();
+            StatusMessage = problem ?? $"The scale label cannot be for {item.Name}.";
+            return;
+        }
+
+        AddItem(item, how.Quantity);
+
+        if (how.Discount > 0m)
+        {
+            _bill.SetDiscount(_bill.Lines.Count - 1, how.Discount);
+            Lines[^1].Refresh();
+            RefreshTotals();
+        }
+
+        StatusMessage = $"{item.Name}, {how.Quantity:0.###} {Units.ScreenLabel(item.UnitType)} off the scale label.{StockNote(item, LowStockPercent)}";
+    }
+
+    private void AddItem(Item item, decimal quantity = 1m)
+    {
+        var line = _bill.AddItem(item, quantity);
 
         Lines.Add(new InvoiceLineViewModel(line));
         SelectedLineIndex = Lines.Count - 1;
@@ -1285,8 +1512,34 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         ClearSearch();
         RefreshTotals();
 
-        StatusMessage = $"{item.Name} added.{StockNote(item, LowStockPercent)}";
+        StatusMessage = $"{item.Name} added.{StockNote(item, LowStockPercent)}{DateNote(item)}{TakeOfferNote()}";
     }
+
+    /// <summary>
+    /// Says to look at the date when a delivery of this item is past it, or at it, and probably
+    /// still on the shelf. Nothing when the lane has no expiry dates to go on, and nothing - rather
+    /// than a failed scan - when they cannot be read.
+    /// </summary>
+    private string DateNote(Item item)
+    {
+        if (ExpiryNote is null)
+            return string.Empty;
+
+        try
+        {
+            return ExpiryNote(item.Id) is { Length: > 0 } note ? "  " + note : string.Empty;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Reads what to tell the cashier about an item's use-by dates. Set by the composition root on a
+    /// lane that records expiry dates on its deliveries.
+    /// </summary>
+    public Func<long, string?>? ExpiryNote { get; set; }
 
     /// <summary>
     /// What to say about the shelf when an item is rung up, or nothing at all.
@@ -1375,13 +1628,29 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
                 SelectedCollectTenderIndex = Math.Clamp(_selectedCollectTenderIndex + delta, 0, CollectTenders.Count - 1);
                 return;
 
+            case BillingMode.Return:
+                MoveInReturn(delta);
+                return;
+
+            case BillingMode.Drawer:
+                MoveInDrawer(delta);
+                return;
+
+            case BillingMode.QuickKeys:
+                MoveInQuickKeys(delta);
+                return;
+
+            case BillingMode.Order:
+                MoveInOrder(delta);
+                return;
+
             case BillingMode.Customer:
             case BillingMode.Collect:
                 if (CustomerMatches.Count > 0 && !IsNamingCustomer)
                 {
                     SelectedCustomerMatchIndex = Math.Clamp(_selectedCustomerMatchIndex + delta, 0, CustomerMatches.Count - 1);
                     var picked = CustomerMatches[_selectedCustomerMatchIndex];
-                    StatusMessage = $"{picked.Name ?? picked.MobileNo} - commit to {(Mode == BillingMode.Collect ? "take their payment" : "attach")}.";
+                    StatusMessage = $"{picked.Name ?? picked.MobileNo} - {CommitKey} to {(Mode == BillingMode.Collect ? "take their payment" : "attach")}.";
                 }
 
                 return;
@@ -1511,7 +1780,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         // with the whole payment already entered.
         if (SelectedTenderType == TenderType.StoreCredit && !HasCustomer)
         {
-            StatusMessage = "Store credit needs a customer on the bill - somebody has to owe it. Esc, then F7 to attach them.";
+            StatusMessage = $"The khata needs a customer on the bill - somebody has to owe it. {CancelKey}, then F7 to attach them.";
             return;
         }
 
@@ -1542,9 +1811,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         StatusMessage = _basket.IsSettled
             ? _basket.ChangeDue > 0m
-                ? $"Change {_basket.ChangeDue:0.00}. Commit again to finish."
-                : "Paid in full. Commit again to finish."
-            : $"{_basket.Remaining:0.00} still due.";
+                ? $"Change {Show.Money(_basket.ChangeDue)}. {CommitKey} again to finish."
+                : $"Paid in full. {CommitKey} again to finish."
+            : $"{Show.Money(_basket.Remaining)} still due.";
     }
 
     /// <summary>
@@ -1591,7 +1860,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         // The redemption may still exceed what is left to pay if other tenders came first.
         if (redemption.Value > _basket.Remaining)
         {
-            StatusMessage = $"Only {_basket.Remaining:0.00} is left to pay; redeem fewer points.";
+            StatusMessage = $"Only {Show.Money(_basket.Remaining)} is left to pay; redeem fewer points.";
             return;
         }
 
@@ -1601,7 +1870,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         EditBuffer = string.Empty;
         RefreshTender();
 
-        StatusMessage = $"{redemption.Points} points redeemed, worth {redemption.Value:0.00}. {_basket.Remaining:0.00} still due.";
+        StatusMessage = $"{Plural.Of(redemption.Points, "point")} redeemed, worth {Show.Money(redemption.Value)}. {Show.Money(_basket.Remaining)} still due.";
     }
 
     private void RemoveLastPayment()
@@ -1621,7 +1890,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         EditBuffer = string.Empty;
         RefreshTender();
 
-        StatusMessage = $"Payment removed. {_basket.Remaining:0.00} due.";
+        StatusMessage = $"Payment removed. {Show.Money(_basket.Remaining)} due.";
     }
 
     private void CompleteSale()
@@ -1633,7 +1902,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         try
         {
-            result = _checkout.Complete(_laneId, _bill, _basket, _pointsRedeemed, _recalledFromToken);
+            result = _checkout.Complete(_laneId, _bill, _basket, _pointsRedeemed, _recalledFromToken, printReceipt: !_paperless);
         }
         catch (InvalidOperationException ex)
         {
@@ -1643,18 +1912,21 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         LastSale = result;
 
-        var message = $"{result.Invoice.InvoiceNo} settled for {result.Invoice.GrandTotal:0.00}.";
+        var message = $"{result.Invoice.InvoiceNo} settled for {Show.Money(result.Invoice.GrandTotal)}.";
 
         if (result.ChangeDue > 0m)
-            message += $" Change {result.ChangeDue:0.00}.";
+            message += $" Change {Show.Money(result.ChangeDue)}.";
 
         if (result.PointsEarned > 0)
-            message += $" {result.PointsEarned} points earned, balance {result.NewLoyaltyBalance}.";
+            message += $" {Plural.Of(result.PointsEarned, "point")} earned, balance {result.NewLoyaltyBalance}.";
 
         // A sale that went on the khata says what the customer now owes, in the one moment the
         // cashier and the customer are both looking at the same screen.
-        if (result.Invoice.Sale.Customer is { } buyer && result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.StoreCredit))
-            message += $" {buyer.Name ?? buyer.MobileNo} now owes {SafeOwed(buyer):N2}.";
+        var buyer = result.Invoice.Sale.Customer;
+        var wentOnKhata = buyer is not null && result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.StoreCredit);
+
+        if (wentOnKhata)
+            message += $" {buyer!.Name ?? buyer.MobileNo} now owes {Show.Money(SafeOwed(buyer))}.";
 
         if (result.Drawer == DrawerKickResult.Failed)
             message += " The cash drawer did not open — open it by hand.";
@@ -1664,6 +1936,12 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (result.Print.Status == PrintStatus.Failed)
             message += $" THE RECEIPT DID NOT PRINT: {result.Print.Detail}. Fix the printer, then reprint this bill.";
 
+        // Taken on the phone instead of on paper: sent now, while the customer is still there to
+        // say it arrived.
+        if (_paperless)
+            message += " " + SendDigitally(result.Invoice);
+
+        IsPaperless = false;
         _basket = null;
         _pointsRedeemed = 0;
         _recalledFromToken = null;
@@ -1674,12 +1952,19 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         RefreshTender();
 
         StatusMessage = message;
+
+        // Something about this sale still needs doing - a bill to reprint, a drawer to open by hand,
+        // a khata to mention - so it stays in view until the next bill starts, whatever is said
+        // in the meantime.
+        StandingNote = wentOnKhata || MessageKinds.Classify(message) == MessageKind.Warning ? message : string.Empty;
+        _standingNoteOwer = wentOnKhata ? buyer!.MobileNo : null;
     }
 
     private void AbandonTender()
     {
         _basket = null;
         _pointsRedeemed = 0;
+        IsPaperless = false;
         Payments.Clear();
         EditBuffer = string.Empty;
         Mode = BillingMode.Billing;
@@ -1761,6 +2046,14 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             return;
         }
 
+        // A business is as often known by its GSTIN as by a phone number.
+        if (typed.Length == 15 && _customers.FindByGstin(typed) is { } business)
+        {
+            ResetCustomerLookup();
+            AttachCustomer(business);
+            return;
+        }
+
         // Letters are a search, not a number to add somebody under.
         if (!LooksLikeAPhoneNumber(typed))
         {
@@ -1775,7 +2068,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         if (!string.Equals(_pendingCustomerMobile, typed, StringComparison.Ordinal))
         {
             _pendingCustomerMobile = typed;
-            StatusMessage = $"No customer on {typed}. Commit again to add them.";
+            StatusMessage = $"No customer on {typed}. {CommitKey} again to add them.";
             return;
         }
 
@@ -1790,7 +2083,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Raise(nameof(IsNamingCustomer));
         Raise(nameof(CustomerPrompt));
 
-        StatusMessage = $"Adding {typed}. Type their name, or commit to skip it.";
+        StatusMessage = $"Adding {typed}. Type their name, or {CommitKey} to skip it.";
     }
 
     /// <summary>Digits, with the spaces, dashes and leading plus people type into numbers.</summary>
@@ -1821,7 +2114,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         RefreshTotals();
         RefreshCustomer();
 
-        StatusMessage = $"{CustomerLabel} attached. {customer.LoyaltyBalance} points.";
+        StatusMessage = customer.Gstin is { } gstin
+            ? $"{CustomerLabel} attached: a bill to a business, GSTIN {gstin}. {customer.LoyaltyBalance} points."
+            : $"{CustomerLabel} attached. {customer.LoyaltyBalance} points.";
     }
 
     /// <summary>
@@ -1882,7 +2177,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
             {
                 var result = _checkout.VoidSale(confirmed, reason: null);
 
-                var message = $"{result.Invoice.InvoiceNo} voided for {result.Invoice.GrandTotal:0.00}.";
+                var message = $"{result.Invoice.InvoiceNo} voided for {Show.Money(result.Invoice.GrandTotal)}.";
 
                 if (result.LoyaltyReversed)
                     message += $" Points put back, balance {result.NewLoyaltyBalance}.";
@@ -1932,8 +2227,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         _pendingVoidInvoiceNo = invoice.InvoiceNo;
         EditBuffer = invoice.InvoiceNo;
 
-        StatusMessage = $"Void {invoice.InvoiceNo} for {invoice.GrandTotal:0.00}, " +
-            $"{invoice.Sale.Lines.Count} line(s)? Commit again to confirm.";
+        StatusMessage = $"Void {invoice.InvoiceNo} for {Show.Money(invoice.GrandTotal)}, " +
+            $"{Plural.Of(invoice.Sale.Lines.Count, "line")}? {CommitKey} again to confirm.";
     }
 
     private void CommitCashier()
@@ -1984,6 +2279,7 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
 
         _bill.Restore(recalled.Lines, recalled.Customer);
         _recalledFromToken = recalled.Token;
+        _recalledOrder = recalled.Order;
 
         RebuildLines();
         RefreshHeldBills();
@@ -1993,7 +2289,9 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         SelectedHeldBillIndex = -1;
         Mode = BillingMode.Billing;
 
-        StatusMessage = $"Recalled {recalled.Token}.";
+        StatusMessage = recalled.Order is { } order
+            ? $"Order {recalled.Token}, {order.Label}{(order.Note is { Length: > 0 } note ? $": {note}" : "")}. Take payment with F12 when they pay."
+            : $"Recalled {recalled.Token}.";
     }
 
     private void ClearBill()
@@ -2002,6 +2300,8 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
         Lines.Clear();
         SelectedLineIndex = -1;
         _recalledFromToken = null;
+        _recalledOrder = null;
+        ForgetOrderMisses();
         ClearSearch();
         RefreshTotals();
         RefreshCustomer();
@@ -2026,11 +2326,19 @@ public sealed class BillingViewModel : ObservableObject, IBillingActions, IDispo
     {
         _pendingNewBillConfirmation = false;
         _pendingCustomerMobile = null;
-        _pendingDayClose = false;
+        PendingDayClose = false;
+        IsShowingKeys = false;
     }
 
     private void RefreshTotals()
     {
+        // Offers first: every figure below includes what they give.
+        ApplyOffers();
+
+        // The next bill has started: whatever was left to do about the last one has had its chance.
+        if (!_bill.IsEmpty)
+            StandingNote = string.Empty;
+
         Raise(nameof(Totals));
         Raise(nameof(GrandTotal));
         Raise(nameof(TotalBeforeRounding));

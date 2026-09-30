@@ -1,6 +1,7 @@
 using System.IO;
 using Pos.App.ViewModels;
 using Pos.Core.Configuration;
+using Pos.Core.Domain.Printing;
 using Xunit;
 
 namespace Pos.App.Tests;
@@ -142,6 +143,24 @@ public class HardwareScreenTests
 
         Assert.NotEqual(wide, narrow);
         Assert.All(narrow.Split('\n'), line => Assert.True(line.TrimEnd().Length <= 32, $"'{line}' is wider than 32 characters."));
+    }
+
+    /// <summary>
+    /// On a Tamil lane the text preview says it is approximate, and where to look instead: counted
+    /// in letters, Tamil words run past the rule that the paper keeps them inside.
+    /// </summary>
+    [Fact]
+    public void ATamilTextPreviewSaysItIsApproximate()
+    {
+        var tamil = Screen(new PosSettings { ReceiptLanguage = ReceiptLanguage.Tamil });
+        var english = Screen(new PosSettings());
+
+        tamil.ShowPreview();
+        english.ShowPreview();
+
+        Assert.Contains("Approximate for Tamil", tamil.Summary);
+        Assert.Contains("Draw it as the printer will", tamil.Summary);
+        Assert.DoesNotContain("Approximate", english.Summary);
     }
 
     /// <summary>

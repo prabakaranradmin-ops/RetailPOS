@@ -187,9 +187,15 @@ public class ReprintAndCloseDayTests
 
         till.Press(Key.F12, ModifierKeys.Shift);
 
-        Assert.Contains("1 invoice(s)", till.ViewModel.StatusMessage);
-        Assert.Contains("Press again to close", till.ViewModel.StatusMessage);
+        Assert.Contains("1 bill", till.ViewModel.StatusMessage);
+        Assert.Contains("Shift+F12 again to close the day, Esc to keep selling", till.ViewModel.StatusMessage);
         Assert.Null(till.DayCloses.FindLatest(BillingHarness.LaneId));
+
+        // The figures in their own pane, a line each, with the drawer figure last and marked.
+        Assert.True(till.ViewModel.IsConfirmingDayClose);
+        Assert.Equal(new DayCloseRow("Bills", "1"), till.ViewModel.DayCloseRows[0]);
+        Assert.Equal(new DayCloseRow("Net sales", "₹189.00"), till.ViewModel.DayCloseRows[1]);
+        Assert.True(till.ViewModel.DayCloseRows[^1].Emphasis);
 
         till.Press(Key.F12, ModifierKeys.Shift);
 
@@ -212,7 +218,41 @@ public class ReprintAndCloseDayTests
 
         // The second Shift+F12 was a fresh first press, so nothing closed.
         Assert.Null(till.DayCloses.FindLatest(BillingHarness.LaneId));
-        Assert.Contains("Press again to close", till.ViewModel.StatusMessage);
+        Assert.Contains("again to close the day", till.ViewModel.StatusMessage);
+    }
+
+    /// <summary>Esc over the close pane keeps the day open, and says so.</summary>
+    [Fact]
+    public void EscKeepsTheDayOpen()
+    {
+        using var till = Till();
+        Sell(till, "8901234567890");
+
+        till.Press(Key.F12, ModifierKeys.Shift);
+        till.Press(Key.Escape);
+
+        Assert.False(till.ViewModel.IsConfirmingDayClose);
+        Assert.Equal("The day stays open.", till.ViewModel.StatusMessage);
+
+        till.Press(Key.F12, ModifierKeys.Shift);
+        Assert.Null(till.DayCloses.FindLatest(BillingHarness.LaneId));
+    }
+
+    /// <summary>
+    /// Enter over the pane does not close the day - the key beside it takes payment, and a close
+    /// cannot be undone - and does not act on the bill hidden behind it either.
+    /// </summary>
+    [Fact]
+    public void EnterDoesNotCloseTheDay()
+    {
+        using var till = Till();
+        Sell(till, "8901234567890");
+
+        till.Press(Key.F12, ModifierKeys.Shift);
+        till.Press(Key.Enter);
+
+        Assert.True(till.ViewModel.IsConfirmingDayClose);
+        Assert.Null(till.DayCloses.FindLatest(BillingHarness.LaneId));
     }
 
     /// <summary>

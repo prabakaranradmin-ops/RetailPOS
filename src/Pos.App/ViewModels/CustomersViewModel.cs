@@ -33,6 +33,9 @@ public sealed class CustomersViewModel : ObservableObject
     private CustomerSummary? _selected;
     private CustomerProfile? _profile;
     private string _editName = string.Empty;
+    private string _editGstin = string.Empty;
+    private string _editAddress = string.Empty;
+    private Customer? _record;
     private string _status = string.Empty;
 
     public CustomersViewModel(CustomerQuery query, ICustomerStore store, ICreditStore? credit = null)
@@ -55,7 +58,7 @@ public sealed class CustomersViewModel : ObservableObject
         }
     }
 
-    /// <summary>What the shop is owed on credit, in all, for the head of the list.</summary>
+    /// <summary>What the shop is owed on the khata, in all, for the head of the list.</summary>
     public string TotalOwedLine
     {
         get => _totalOwedLine;
@@ -64,13 +67,25 @@ public sealed class CustomersViewModel : ObservableObject
 
     public bool HasCredit => _credit is not null;
 
+    /// <summary>
+    /// Whether anybody owes anything: the total is amber then, and the quiet ink when nobody does.
+    /// Money owed to the shop is something to see to, not a fault, and it was red.
+    /// </summary>
+    public bool ShopIsOwed
+    {
+        get => _shopIsOwed;
+        private set => Set(ref _shopIsOwed, value);
+    }
+
+    private bool _shopIsOwed;
+
     /// <summary>The chosen customer's khata, newest first, each line with the balance after it.</summary>
     public ObservableCollection<CreditMovement> Khata { get; } = [];
 
     public bool HasKhata => Khata.Count > 0;
 
     /// <summary>What the chosen customer owes, or empty when they owe nothing.</summary>
-    public string Owes => _profile is { Customer.Owed: > 0m } p ? $"Owes {Money(p.Customer.Owed)} on credit" : string.Empty;
+    public string Owes => _profile is { Customer.Owed: > 0m } p ? $"Owes {Show.Money(p.Customer.Owed)} on the khata" : string.Empty;
 
     public bool OwesAnything => _profile is { Customer.Owed: > 0m };
 
@@ -86,13 +101,185 @@ public sealed class CustomersViewModel : ObservableObject
         {
             var owing = _credit.Owing(10_000);
 
+            ShopIsOwed = owing.Count > 0;
             TotalOwedLine = owing.Count == 0
-                ? "Nobody owes the shop anything on credit."
-                : $"{Money(owing.Sum(o => o.Owed))} owed to the shop by {owing.Count} customer(s).";
+                ? "Nobody owes the shop anything on the khata."
+                : $"{Show.Money(owing.Sum(o => o.Owed))} owed to the shop by {Plural.Of(owing.Count, "customer")}.";
         }
         catch (Exception ex)
         {
             TotalOwedLine = $"What is owed could not be read: {ex.Message}";
+        }
+    }
+
+    // ---- Statements ------------------------------------------------------------------------------
+
+    /// <summary>The shop's name, for the message a statement is sent as.</summary>
+    public string ShopName { get; set; } = string.Empty;
+
+    /// <summary>The shop's UPI ID, for the code to pay a statement with. Null: no code.</summary>
+    public UpiPayee? Upi { get; set; }
+
+    /// <summary>Puts text on the clipboard. Set by the composition root.</summary>
+    public Action<string>? CopyText { get; set; }
+
+    /// <summary>Lays statements out as a page to print or send. Set by the composition root.</summary>
+    public Func<IReadOnlyList<KhataStatement>, string>? RenderStatements { get; set; }
+
+    /// <summary>
+    /// The chosen customer's statement - everything since they last owed nothing - as a message
+    /// on the clipboard, to paste into WhatsApp.
+    /// </summary>
+    /// <returns>What went wrong, or null.</returns>
+    public string? CopyStatement()
+    {
+        if (Statement() is not { } statement)
+            return Status;
+
+        try
+        {
+            if (CopyText is not { } copy)
+                return Status = "This screen cannot reach the clipboard.";
+
+            copy(statement.Message(ShopName, Upi));
+        }
+        catch (Exception ex)
+        {
+            return Status = $"The message could not be copied: {ex.Message}";
+        }
+
+        Status = $"{statement.Customer.Name ?? statement.Customer.MobileNo}'s statement is on the clipboard: {Money(Math.Max(0m, statement.Closing))} owed. Paste it into WhatsApp.";
+        return null;
+    }
+
+    /// <summary>The chosen customer's statement as a page, for the owner to save and print or send.</summary>
+    /// <returns>The page, or null with <see cref="Status"/> saying why not.</returns>
+    public string? StatementPage() =>
+        Statement() is { } statement ? Render([statement]) : null;
+
+    /// <summary>
+    /// A statement for everybody who owes, one a page: the month-end round, printed in one go.
+    /// </summary>
+    /// <returns>The page, or null with <see cref="Status"/> saying why not.</returns>
+    public string? EveryoneOwingPage()
+    {
+        if (_credit is null)
+        {
+            Status = "The khata is not available on this lane.";
+            return null;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var statements = new List<KhataStatement>();
+
+        try
+        {
+            foreach (var owing in _credit.Owing(10_000))
+            {
+                var customer = new Customer { Id = owing.CustomerId, MobileNo = owing.MobileNo, Name = owing.Name };
+                statements.Add(KhataStatement.SinceLastClear(customer, _credit.Ledger(owing.CustomerId), today));
+            }
+        }
+        catch (Exception ex)
+        {
+            Status = $"The khatas could not be read: {ex.Message}";
+            return null;
+        }
+
+        if (statements.Count == 0)
+        {
+            Status = "Nobody owes anything on the khata.";
+            return null;
+        }
+
+        return Render(statements);
+    }
+
+    private string? Render(IReadOnlyList<KhataStatement> statements)
+    {
+        if (RenderStatements is not { } render)
+        {
+            Status = "This screen cannot lay out a statement.";
+            return null;
+        }
+
+        return render(statements);
+    }
+
+    /// <summary>A bill as a full A4 invoice, by its number. Set by the composition root.</summary>
+    public Func<string, string?>? RenderBill { get; set; }
+
+    /// <summary>The bill picked in the recent bills, for saving as a page.</summary>
+    public CustomerBill? SelectedBill { get; set; }
+
+    /// <summary>The picked bill as a full A4 invoice to print or send - the same bill, laid out for paper.</summary>
+    /// <returns>The page, or null with <see cref="Status"/> saying why not.</returns>
+    public string? BillPage()
+    {
+        if (SelectedBill is not { } bill)
+        {
+            Status = "Pick one of their recent bills first.";
+            return null;
+        }
+
+        if (RenderBill is not { } render)
+        {
+            Status = "This screen cannot lay out a bill.";
+            return null;
+        }
+
+        try
+        {
+            if (render(bill.InvoiceNo) is { } page)
+                return page;
+
+            Status = $"{bill.InvoiceNo} could not be found.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"{bill.InvoiceNo} could not be read: {ex.Message}";
+        }
+
+        return null;
+    }
+
+    /// <summary>What the page was saved as: said once the owner has picked where.</summary>
+    public void Saved(string path, int statements) =>
+        Status = statements == 1 ? $"Statement saved to {path}." : $"{Plural.Of(statements, "statement")} saved to {path}, one a page.";
+
+    private KhataStatement? Statement()
+    {
+        if (_profile is null)
+        {
+            Status = "Pick a customer first.";
+            return null;
+        }
+
+        if (_credit is null)
+        {
+            Status = "The khata is not available on this lane.";
+            return null;
+        }
+
+        var summary = _profile.Customer;
+        var customer = new Customer { Id = summary.Id, MobileNo = summary.MobileNo, Name = summary.Name };
+
+        try
+        {
+            var statement = KhataStatement.SinceLastClear(customer, _credit.Ledger(customer.Id), DateOnly.FromDateTime(DateTime.Today));
+
+            if (statement.Lines.Count == 0 && statement.Closing == 0m)
+            {
+                Status = $"{customer.Name ?? customer.MobileNo} owes nothing on the khata: there is no statement to send.";
+                return null;
+            }
+
+            return statement;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Their khata could not be read: {ex.Message}";
+            return null;
         }
     }
 
@@ -101,6 +288,9 @@ public sealed class CustomersViewModel : ObservableObject
 
     /// <summary>Spend by month, oldest first, a zero for a month they did not come in.</summary>
     public ObservableCollection<TrendBar> Months { get; } = [];
+
+    /// <summary>The same months as a chart. Null when nobody is picked.</summary>
+    public Pos.App.Charts.CategoryChartData? MonthsChart { get; private set; }
 
     /// <summary>What they buy most, by what it came to.</summary>
     public ObservableCollection<RankedRow> TopItems { get; } = [];
@@ -216,7 +406,7 @@ public sealed class CustomersViewModel : ObservableObject
             Status = Results.Count == 0 && _searchText.Trim().Length > 0
                 ? $"No customer matches \"{_searchText.Trim()}\"."
                 : Results.Count == 0 && OnlyOwing
-                    ? "Nobody owes anything on credit."
+                    ? "Nobody owes anything on the khata."
                     : string.Empty;
         }
         catch (Exception ex)
@@ -237,6 +427,60 @@ public sealed class CustomersViewModel : ObservableObject
             Raise(nameof(Selected));
             LoadProfile();
         }
+    }
+
+    /// <summary>The GSTIN box, prefilled with what is on file.</summary>
+    public string EditGstin
+    {
+        get => _editGstin;
+        set => Set(ref _editGstin, value ?? string.Empty);
+    }
+
+    /// <summary>The address box, prefilled with what is on file.</summary>
+    public string EditAddress
+    {
+        get => _editAddress;
+        set => Set(ref _editAddress, value ?? string.Empty);
+    }
+
+    /// <summary>Whether the chosen customer is a business, and what that means for their bills.</summary>
+    public string BusinessLine => _record?.Gstin is { } gstin
+        ? $"A business: GSTIN {gstin}, {GstStates.Label(Gstin.StateCode(gstin))}. Their bills are tax invoices to a registered buyer, filed bill by bill (B2B)."
+        : "Not a business: their bills carry no GSTIN. Give them one here, or with Ctrl+G at the till.";
+
+    /// <summary>Makes the chosen customer a business - their GSTIN and address - or takes the GSTIN off with an empty box.</summary>
+    /// <returns>What went wrong, or null.</returns>
+    public string? SaveBusiness()
+    {
+        if (_profile is null)
+            return "Pick a customer first.";
+
+        var gstin = EditGstin.Trim();
+
+        if (gstin.Length > 0 && Gstin.Problem(gstin) is { } problem)
+            return problem;
+
+        try
+        {
+            _record = _store.SetBusiness(_profile.Customer.Id, gstin.Length == 0 ? null : gstin, EditAddress);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
+        }
+        catch (Exception ex)
+        {
+            return $"Could not save it: {ex.Message}";
+        }
+
+        EditGstin = _record.Gstin ?? string.Empty;
+        EditAddress = _record.Address ?? string.Empty;
+        Raise(nameof(BusinessLine));
+
+        Status = _record.Gstin is { } saved
+            ? $"Saved. {_record.Name ?? _record.MobileNo}'s bills from now on carry GSTIN {saved}."
+            : $"The GSTIN is taken off. {_record.Name ?? _record.MobileNo}'s bills are ordinary bills again.";
+        return null;
     }
 
     /// <summary>Gives the chosen customer a name, changes it, or clears it.</summary>
@@ -295,7 +539,7 @@ public sealed class CustomersViewModel : ObservableObject
         Search();
 
         // After the list is re-read, which clears the status line.
-        Status = $"{who} has been forgotten. {unlinked} bill(s) kept, no longer linked to anyone.";
+        Status = $"{who} has been forgotten. {Plural.Of(unlinked, "bill")} kept, no longer linked to anyone.";
         return null;
     }
 
@@ -309,6 +553,7 @@ public sealed class CustomersViewModel : ObservableObject
         TopItems.Clear();
         RecentBills.Clear();
         Khata.Clear();
+        MonthsChart = null;
 
         _profile = null;
 
@@ -345,12 +590,26 @@ public sealed class CustomersViewModel : ObservableObject
 
         EditName = _profile?.Customer.Name ?? string.Empty;
 
+        // The GSTIN and address are on the customer's own record rather than in the summary.
+        try
+        {
+            _record = _profile is { } picked ? _store.FindByMobile(picked.Customer.MobileNo) : null;
+        }
+        catch (Exception)
+        {
+            _record = null;
+        }
+
+        EditGstin = _record?.Gstin ?? string.Empty;
+        EditAddress = _record?.Address ?? string.Empty;
+        Raise(nameof(BusinessLine));
+
         foreach (var name in new[]
                  {
                      nameof(HasSelection), nameof(ShowsHint), nameof(Title), nameof(Mobile), nameof(Points),
                      nameof(Visits), nameof(Spent), nameof(AverageBasket), nameof(FirstVisit),
                      nameof(LastVisit), nameof(SinceLastVisit), nameof(Owes), nameof(OwesAnything),
-                     nameof(HasKhata),
+                     nameof(HasKhata), nameof(MonthsChart),
                  })
         {
             Raise(name);
@@ -359,6 +618,8 @@ public sealed class CustomersViewModel : ObservableObject
 
     private void FillMonths(CustomerProfile profile)
     {
+        MonthsChart = OwnerCharts.CustomerMonths(profile.Months);
+
         var best = profile.Months.Count == 0 ? 0m : profile.Months.Max(m => m.Spent);
 
         foreach (var month in profile.Months)
@@ -366,10 +627,10 @@ public sealed class CustomersViewModel : ObservableObject
             var date = month.Month.ToDateTime(TimeOnly.MinValue);
 
             Months.Add(new TrendBar(
-                date.ToString("MMM", Indian),
+                date.ToString("MMM", CultureInfo.InvariantCulture),
                 month.Spent,
                 best == 0m ? 0 : (double)(month.Spent / best),
-                $"{date.ToString("MMMM yyyy", Indian)} - {Money(month.Spent)} over {month.Bills} bill(s)"));
+                $"{date.ToString("MMMM yyyy", CultureInfo.InvariantCulture)} - {Show.Money(month.Spent)} over {Plural.Of(month.Bills, "bill")}"));
         }
     }
 
@@ -383,7 +644,7 @@ public sealed class CustomersViewModel : ObservableObject
 
             TopItems.Add(new RankedRow(
                 item.Name,
-                $"{item.Quantity.ToString("0.###", Indian)} {unit} over {item.Bills} bill(s)",
+                $"{item.Quantity.ToString("0.###", Indian)} {unit} over {Plural.Of(item.Bills, "bill")}",
                 Money(item.Spent),
                 best == 0m ? 0 : (double)(item.Spent / best)));
         }
@@ -392,5 +653,5 @@ public sealed class CustomersViewModel : ObservableObject
     private static string Money(decimal amount) => amount.ToString("N2", Indian);
 
     private static string Day(DateTimeOffset? at) =>
-        at is { } value ? value.LocalDateTime.ToString("dd MMM yyyy", Indian) : "-";
+        at is { } value ? Show.Date(value.ToLocalTime()) : "-";
 }

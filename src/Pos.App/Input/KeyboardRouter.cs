@@ -33,6 +33,33 @@ public interface IBillingActions
 
     /// <summary>Open the owner's screen: the figures, the reorder list and the lane's settings.</summary>
     void OwnerView();
+
+    /// <summary>Take goods back against a past bill, on a credit note.</summary>
+    void ReturnGoods();
+
+    /// <summary>The float, an expense, or cash in or out of the drawer.</summary>
+    void CashDrawer();
+
+    /// <summary>A loose item off its quick key.</summary>
+    void QuickKeys();
+
+    /// <summary>An order over the phone or on WhatsApp.</summary>
+    void TakeOrder();
+
+    /// <summary>The UPI code with the amount, on paper.</summary>
+    void PrintUpiCode();
+
+    /// <summary>A customer's khata statement, on paper and on the clipboard.</summary>
+    void PrintKhataStatement();
+
+    /// <summary>A bill to the customer's phone.</summary>
+    void SendDigitalBill();
+
+    /// <summary>A GSTIN for the customer on the bill.</summary>
+    void SetBusiness();
+
+    /// <summary>The key sheet: open it, or close it again.</summary>
+    void ShowKeys();
 }
 
 /// <summary>
@@ -72,6 +99,12 @@ public sealed class KeyboardRouter
         return true;
     }
 
+    /// <summary>
+    /// Runs an action without a key: a click on the key strip at the foot of the screen, which does
+    /// exactly what the key it shows does.
+    /// </summary>
+    public void Run(PosAction action) => Dispatch(action);
+
     private void Dispatch(PosAction action)
     {
         switch (action)
@@ -97,6 +130,15 @@ public sealed class KeyboardRouter
             case PosAction.SetCashier: _target.SetCashier(); break;
             case PosAction.ReceivePayment: _target.ReceivePayment(); break;
             case PosAction.OwnerView: _target.OwnerView(); break;
+            case PosAction.ReturnGoods: _target.ReturnGoods(); break;
+            case PosAction.CashDrawer: _target.CashDrawer(); break;
+            case PosAction.QuickKeys: _target.QuickKeys(); break;
+            case PosAction.TakeOrder: _target.TakeOrder(); break;
+            case PosAction.PrintUpiCode: _target.PrintUpiCode(); break;
+            case PosAction.KhataStatement: _target.PrintKhataStatement(); break;
+            case PosAction.DigitalBill: _target.SendDigitalBill(); break;
+            case PosAction.BusinessCustomer: _target.SetBusiness(); break;
+            case PosAction.ShowKeys: _target.ShowKeys(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a
             // debug run beats a key that silently does nothing at the till.

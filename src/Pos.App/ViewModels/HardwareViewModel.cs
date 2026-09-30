@@ -163,6 +163,11 @@ public sealed class HardwareViewModel : ObservableObject
             PreviewText = Check(_ => { }).PreviewText(paperWidthChars);
             Show(Pane.Text);
             Summary = $"The bill as this lane would print it, at {paperWidthChars ?? _settings.Hardware.PrinterPaperWidthChars} characters wide.";
+
+            // Counted in letters, a Tamil word is narrower than it prints, so the text's columns do
+            // not line up where the paper's will: said, rather than left to look like a fault.
+            if (_settings.ReceiptLanguage == ReceiptLanguage.Tamil)
+                Summary += " Approximate for Tamil: the words print wider than their letters here. Draw it as the printer will to check the columns.";
         }
         catch (Exception ex)
         {
@@ -201,7 +206,7 @@ public sealed class HardwareViewModel : ObservableObject
 
             PreviewImagePath = path;
             Show(Pane.Image);
-            Summary = $"Rendered {pixels.Width}x{pixels.Height} dots — this is what the paper will look like.";
+            Summary = "Drawn as the printer will print it: this is what the paper will look like.";
         }
         catch (Exception ex)
         {

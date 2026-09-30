@@ -578,7 +578,45 @@ public class KeyboardOnlyFlowTests
         using var till = Till();
 
         Assert.False(till.Press(Key.A));
-        Assert.False(till.Press(Key.F11));
+        Assert.False(till.Press(Key.F10));
+    }
+
+    /// <summary>
+    /// F1 lists every key - the six with no room on the strip among them - and Esc, Enter or F1
+    /// again closes it.
+    /// </summary>
+    [Fact]
+    public void F1ShowsEveryKeyAndClosesAgain()
+    {
+        using var till = Till();
+
+        Assert.True(till.Press(Key.F1));
+        Assert.True(till.ViewModel.IsShowingKeys);
+
+        till.Press(Key.F1);
+        Assert.False(till.ViewModel.IsShowingKeys);
+
+        till.Press(Key.F1);
+        till.Press(Key.Escape);
+        Assert.False(till.ViewModel.IsShowingKeys);
+
+        till.Press(Key.F1);
+        till.Press(Key.Enter);
+        Assert.False(till.ViewModel.IsShowingKeys);
+    }
+
+    [Fact]
+    public void TheKeySheetListsEveryActionWithItsKeys()
+    {
+        var sheet = Views.MainBillingView.BuildKeySheet(Keymap.Default);
+
+        foreach (var action in Enum.GetValues<PosAction>())
+            Assert.Contains(PosActionText.Sheet, entry => entry.Action == action);
+
+        Assert.Contains(sheet, row => row.Keys == "Ctrl+Shift+V" && row.Text == "Void a paid bill");
+        Assert.Contains(sheet, row => row.Keys == "Ctrl+U" && row.Text == "Who is on the till");
+        Assert.Contains(sheet, row => row.Keys == "Esc" && row.Text == "Back out");
+        Assert.Contains(sheet, row => row.Keys == "Enter" && row.Text == "Add the item, or go ahead");
     }
 
     // ---- The whole checkout ------------------------------------------------------------------

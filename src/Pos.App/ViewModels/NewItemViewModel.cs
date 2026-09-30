@@ -42,6 +42,29 @@ public sealed class NewItemViewModel : ObservableObject
     {
         _items = items ?? throw new ArgumentNullException(nameof(items));
         _hsn = hsn ?? throw new ArgumentNullException(nameof(hsn));
+
+        Follow(nameof(CanSave), nameof(SaveBlocker));
+    }
+
+    /// <summary>
+    /// Why "Add it" is greyed out, in a line under it: what is still to be filled in. Empty once it
+    /// can be pressed. A greyed button that does not say why is a form nobody finishes.
+    /// </summary>
+    public string SaveBlocker
+    {
+        get
+        {
+            var missing = new (string Value, string Name)[]
+                {
+                    (_sku, "the code"), (_name, "the name"), (_hsnCode, "the HSN code"),
+                    (_gstRate, "the GST rate"), (_mrp, "the MRP"), (_sellingPrice, "the selling price"),
+                }
+                .Where(f => f.Value.Trim().Length == 0)
+                .Select(f => f.Name)
+                .ToList();
+
+            return missing.Count == 0 ? string.Empty : $"Still to fill in: {string.Join(", ", missing)}.";
+        }
     }
 
     /// <summary>Raised once an item has actually been written, so the screen around this can re-read.</summary>
@@ -165,9 +188,10 @@ public sealed class NewItemViewModel : ObservableObject
     public string UnitLabel => _unit.Code;
 
     /// <summary>What the chosen unit means at the till, said once under the picker.</summary>
-    public string UnitHint => _unit.Fractional
+    /// <summary>The chosen unit in full, and how the till counts it: the chips above carry only its name.</summary>
+    public string UnitHint => $"{_unit.Description}. " + (_unit.Fractional
         ? $"The till takes part of one — 0.5 or 1.25 {_unit.Code}. Price it per {_unit.Code}."
-        : $"The till takes whole ones only — 1, 2, 3 {_unit.Code}. Price it per {_unit.Code}.";
+        : $"The till takes whole ones only — 1, 2, 3 {_unit.Code}. Price it per {_unit.Code}.");
 
     public string Category
     {

@@ -148,7 +148,41 @@ public class OwnerAnalyticsTests : IDisposable
         var screen = Build();
         screen.Refresh();
 
-        Assert.Contains("Covers all", screen.MarginCoverage, StringComparison.Ordinal);
+        Assert.Equal("Covers every item sold in this period.", screen.MarginCoverage);
+    }
+
+    /// <summary>
+    /// The departments add up the lines; net sales are the bills as paid, after their round-off.
+    /// Where the two differ the chart says by how much, instead of showing an owner a second total
+    /// for the same days - "covers all 873.25" beside net sales of 873.00.
+    /// </summary>
+    [Fact]
+    public void ARoundOffBetweenTheLinesAndTheBillsIsExplainedNotLeftAsASecondTotal()
+    {
+        var dal = Add("DAL001", "Toor Dal 1kg", price: 100.25m, cost: 60m);
+        var bill = new InvoiceEngine(HomeState, roundToRupee: true);
+        bill.AddItem(dal);
+
+        var basket = new TenderBasket(bill.Totals.AmountPayable);
+        basket.Add(TenderType.Cash, bill.Totals.AmountPayable);
+        Checkout().Complete(Lane, bill, basket);
+
+        var screen = Build();
+        screen.Refresh();
+
+        Assert.Equal("Item values, before the bills' round-off of −₹0.25: the bills came to ₹100.00.", screen.DepartmentNote);
+        Assert.DoesNotContain("100.25", screen.MarginCoverage);
+    }
+
+    [Fact]
+    public void WithNoRoundOffTheDepartmentsNeedNoNote()
+    {
+        Sell(Add("DAL001", "Toor Dal 1kg", price: 100m, cost: 60m));
+
+        var screen = Build();
+        screen.Refresh();
+
+        Assert.Equal(string.Empty, screen.DepartmentNote);
     }
 
     /// <summary>
@@ -225,7 +259,7 @@ public class OwnerAnalyticsTests : IDisposable
         var screen = Build();
         screen.Refresh();
 
-        Assert.Contains("bill(s)", screen.Daily[^1].Tooltip, StringComparison.Ordinal);
+        Assert.Matches(@"\d bills?\b", screen.Daily[^1].Tooltip);
     }
 
     /// <summary>
@@ -280,7 +314,7 @@ public class OwnerAnalyticsTests : IDisposable
         screen.Refresh();
 
         Assert.True(screen.HasVoids);
-        Assert.Contains("1 sale(s) cancelled", screen.VoidLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1 sale cancelled", screen.VoidLine, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("% of bills", screen.VoidLine, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -297,7 +331,7 @@ public class OwnerAnalyticsTests : IDisposable
         var screen = Build();
         screen.Refresh();
 
-        Assert.Contains("1 of 2 bill(s)", screen.CustomerLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1 of 2 bills", screen.CustomerLine, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("walk-in", screen.CustomerLine, StringComparison.OrdinalIgnoreCase);
     }
 

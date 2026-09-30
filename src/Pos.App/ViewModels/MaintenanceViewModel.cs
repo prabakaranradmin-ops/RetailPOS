@@ -12,9 +12,7 @@ namespace Pos.App.ViewModels;
 /// <param name="TakenAt">When it was taken, read from the file name rather than its timestamp.</param>
 public sealed record SnapshotRow(string Path, DateTimeOffset? TakenAt, long Bytes)
 {
-    public string Taken => TakenAt is { } at
-        ? at.ToString("dd MMM yyyy  HH:mm", CultureInfo.InvariantCulture)
-        : "unknown";
+    public string Taken => TakenAt is { } at ? Show.DateAndTime(at) : "unknown";
 
     public string Size => $"{Bytes / 1024:N0} KB";
 
@@ -305,12 +303,12 @@ public sealed class MaintenanceViewModel : ObservableObject
         Say($"{result.Bytes / 1024:N0} KB, verified.");
 
         if (result.Pruned.Count > 0)
-            Say($"Removed {result.Pruned.Count} older snapshot(s), keeping {Keep}.");
+            Say($"Removed {Plural.Of(result.Pruned.Count, "older snapshot")}, keeping {Keep}.");
 
         var held = backup.Existing().Count;
-        Say($"{held} snapshot(s) on hand.");
+        Say($"{Plural.Of(held, "snapshot")} on hand.");
 
-        return $"Backed up: {result.Bytes / 1024:N0} KB, verified, {held} snapshot(s) on hand.";
+        return $"Backed up: {result.Bytes / 1024:N0} KB, verified, {Plural.Of(held, "snapshot")} on hand.";
     },
     then: RefreshSnapshots);
 

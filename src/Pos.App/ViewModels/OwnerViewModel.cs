@@ -44,7 +44,13 @@ public sealed class OwnerViewModel : ObservableObject
     private readonly Func<int, string, string?>? _saveWebPage;
     private readonly Func<ReceiptLayout, string?>? _applyReceiptLayout;
     private readonly Func<decimal, string?>? _applyLowStockPercent;
+    private readonly Func<IReadOnlyList<ExpiryWarning>>? _expiring;
+    private readonly Func<IReadOnlyList<DeadStockItem>>? _deadStock;
+    private readonly Func<string?, string?>? _applyUpiId;
+    private string _upiIdText;
     private readonly string _laneId;
+    private bool _showExpiring;
+    private bool _showDead;
     private string _lowStockPercentText;
 
     private int _days = 30;
@@ -75,7 +81,17 @@ public sealed class OwnerViewModel : ObservableObject
 
         // The share of full an item counts as low at, and how to change it for the lane.
         decimal lowStockPercent = LowStock.DefaultPercent,
-        Func<decimal, string?>? applyLowStockPercent = null)
+        Func<decimal, string?>? applyLowStockPercent = null,
+
+        // Deliveries near their use-by date. Optional: a lane wired without it shows no such list.
+        Func<IReadOnlyList<ExpiryWarning>>? expiring = null,
+
+        // What has stopped selling. Optional for the same reason.
+        Func<IReadOnlyList<DeadStockItem>>? deadStock = null,
+
+        // The shop's UPI ID for the code with the amount, and how to change it for the lane.
+        string? upiId = null,
+        Func<string?, string?>? applyUpiId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(gather);
@@ -87,6 +103,11 @@ public sealed class OwnerViewModel : ObservableObject
         _saveWebPage = saveWebPage;
         _applyReceiptLayout = applyReceiptLayout;
         _applyLowStockPercent = applyLowStockPercent;
+        _expiring = expiring;
+        _deadStock = deadStock;
+        _applyUpiId = applyUpiId;
+        UpiId = string.IsNullOrWhiteSpace(upiId) ? null : upiId.Trim();
+        _upiIdText = UpiId ?? string.Empty;
         _gather = () => gather(_days);
 
         TaxMode = taxMode;
@@ -109,6 +130,41 @@ public sealed class OwnerViewModel : ObservableObject
     public ObservableCollection<RankedRow> WorstMargins { get; } = [];
     public ObservableCollection<GstSlab> GstSlabs { get; } = [];
     public ObservableCollection<StockLevel> Stock { get; } = [];
+
+    // ---- The charts ------------------------------------------------------------------------------
+
+    /// <summary>Takings day by day with a seven-day average over them.</summary>
+    public Pos.App.Charts.CategoryChartData? SalesChart { get; private set; }
+
+    /// <summary>The shop's day: takings by the hour, and the bills behind them.</summary>
+    public Pos.App.Charts.CategoryChartData? HoursChart { get; private set; }
+
+    /// <summary>The week against the hours, shaded by takings.</summary>
+    public Pos.App.Charts.HeatmapData? WeekChart { get; private set; }
+
+    /// <summary>How customers paid.</summary>
+    public Pos.App.Charts.DonutData? TenderChart { get; private set; }
+
+    /// <summary>Where the takings came from, by department.</summary>
+    public Pos.App.Charts.DonutData? DepartmentChart { get; private set; }
+
+    /// <summary>Every priced item, by how fast it sells against what it earns.</summary>
+    public Pos.App.Charts.BubbleData? MarginChart { get; private set; }
+
+    /// <summary>Loyalty points given and spent, day by day.</summary>
+    public Pos.App.Charts.CategoryChartData? PointsChart { get; private set; }
+
+    /// <summary>Takings day by day, for the line under the period's total.</summary>
+    public IReadOnlyList<double> SalesSpark { get; private set; } = [];
+
+    /// <summary>The best day in the period, said in a line under the total.</summary>
+    public string BestDayLine { get; private set; } = string.Empty;
+
+    /// <summary>Under the departments: how their item values differ from the bills' net sales, when they do.</summary>
+    public string DepartmentNote { get; private set; } = string.Empty;
+
+    /// <summary>What the charts cover: "The last 30 days".</summary>
+    public string PeriodText => _days == 1 ? "Today" : $"The last {_days} days";
 
     public string PeriodNetSales { get; private set; } = "0.00";
     public string PeriodBills { get; private set; } = "0";
@@ -149,6 +205,12 @@ public sealed class OwnerViewModel : ObservableObject
 
     /// <summary>False when no item sold in the window carried a cost price at all.</summary>
     public bool HasMargins { get; private set; }
+
+    /// <summary>What the shop spent that was not stock, and on what.</summary>
+    public string ExpensesLine { get; private set; } = string.Empty;
+
+    /// <summary>What the priced items earned, less the period's expenses. Said only when both are known.</summary>
+    public string AfterExpensesLine { get; private set; } = string.Empty;
 
     // ---- Cancelled sales -------------------------------------------------------------------------
 
@@ -198,6 +260,97 @@ public sealed class OwnerViewModel : ObservableObject
         }
     }
 
+    /// <summary>The Stock tab showing deliveries near their date instead of the counts.</summary>
+    public bool ShowExpiring
+    {
+        get => _showExpiring;
+        set
+        {
+            if (!Set(ref _showExpiring, value))
+                return;
+
+            if (value)
+                LoadExpiring();
+
+            Raise(nameof(ShowsStockList));
+            Raise(nameof(ListHeadline));
+        }
+    }
+
+    /// <summary>The Stock tab showing what has stopped selling instead of the counts.</summary>
+    public bool ShowDead
+    {
+        get => _showDead;
+        set
+        {
+            if (!Set(ref _showDead, value))
+                return;
+
+            if (value)
+                LoadDead();
+
+            Raise(nameof(ShowsStockList));
+            Raise(nameof(ListHeadline));
+        }
+    }
+
+    public bool ShowsStockList => !_showExpiring && !_showDead;
+
+    public bool CanShowDead => _deadStock is not null;
+
+    /// <summary>Counted items on the shelf that have not sold for two months, most money first.</summary>
+    public ObservableCollection<DeadStockItem> DeadStockItems { get; } = [];
+
+    public string DeadHeadline { get; private set; } = string.Empty;
+
+    private void LoadDead()
+    {
+        DeadStockItems.Clear();
+
+        if (_deadStock is null)
+        {
+            DeadHeadline = "This lane does not read what has stopped selling.";
+            Raise(nameof(DeadHeadline));
+            return;
+        }
+
+        try
+        {
+            foreach (var item in _deadStock())
+                DeadStockItems.Add(item);
+        }
+        catch (Exception ex)
+        {
+            DeadHeadline = $"The list could not be read: {ex.Message}";
+            Raise(nameof(DeadHeadline));
+            Raise(nameof(ListHeadline));
+            return;
+        }
+
+        var tiedUp = DeadStockItems.Sum(i => i.TiedUp ?? 0m);
+        var never = DeadStockItems.Count(i => i.NeverSold);
+
+        DeadHeadline = DeadStockItems.Count == 0
+            ? $"Everything counted on the shelf has sold in the last {DeadStock.Days} days."
+            : $"{Plural.Of(DeadStockItems.Count, "item")} on the shelf not sold in {DeadStock.Days} days"
+              + (never > 0 ? $", {never} never sold" : string.Empty)
+              + (tiedUp > 0m ? $" - {Show.Money(tiedUp)} tied up in them at cost." : ".")
+              + " Put them on offer, return them, or stop ordering them.";
+
+        Raise(nameof(DeadHeadline));
+        Raise(nameof(ListHeadline));
+    }
+
+    public bool CanShowExpiring => _expiring is not null;
+
+    /// <summary>Deliveries within a month of their use-by date and probably still on the shelf.</summary>
+    public ObservableCollection<ExpiryWarning> ExpiryWarnings { get; } = [];
+
+    public string ExpiryHeadline { get; private set; } = string.Empty;
+
+    /// <summary>What the Stock tab's line above the list says, for whichever list is showing.</summary>
+    public string ListHeadline => _showExpiring ? ExpiryHeadline : _showDead ? DeadHeadline : StockHeadline;
+
     public bool IsBusy
     {
         get => _busy;
@@ -209,6 +362,12 @@ public sealed class OwnerViewModel : ObservableObject
         get => _status;
         private set => Set(ref _status, value);
     }
+
+    /// <summary>
+    /// Clears the message line. Called on moving to another section, where a message about the
+    /// last one would read as being about this one.
+    /// </summary>
+    public void ClearStatus() => Status = string.Empty;
 
     public StockLevel? SelectedStock
     {
@@ -222,6 +381,7 @@ public sealed class OwnerViewModel : ObservableObject
             // number typed from nothing — and so a mis-click cannot silently write a stale figure.
             NewQuantity = value is null ? string.Empty : value.Quantity.ToString("0.###", CultureInfo.InvariantCulture);
             Raise(nameof(CanAdjust));
+            Raise(nameof(AdjustBlocker));
             Raise(nameof(AdjustTarget));
         }
     }
@@ -231,10 +391,20 @@ public sealed class OwnerViewModel : ObservableObject
         get => _newQuantity;
         set
         {
-            if (Set(ref _newQuantity, value))
-                Raise(nameof(CanAdjust));
+            if (!Set(ref _newQuantity, value))
+                return;
+
+            Raise(nameof(CanAdjust));
+            Raise(nameof(AdjustBlocker));
         }
     }
+
+    /// <summary>Why "Apply" is greyed out, beside it; empty once it can be pressed.</summary>
+    public string AdjustBlocker => CanAdjust
+        ? string.Empty
+        : SelectedStock is null
+            ? "Pick an item in the list first."
+            : "Type the new count: a number, 0 or more.";
 
     public string AdjustReason
     {
@@ -386,9 +556,9 @@ public sealed class OwnerViewModel : ObservableObject
         PeriodNotBanked = (d.Range.Credit, d.Range.PointsRedeemed) switch
         {
             (0m, 0m) => string.Empty,
-            (var credit, 0m) => $"{Money(credit)} owed on store credit - not in the bank",
-            (0m, var points) => $"{Money(points)} paid in points - not in the bank",
-            (var credit, var points) => $"{Money(credit)} owed on store credit, {Money(points)} paid in points - neither in the bank",
+            (var credit, 0m) => $"{Show.Money(credit)} on khata, not yet paid - not in the bank",
+            (0m, var points) => $"{Show.Money(points)} paid in points - not in the bank",
+            (var credit, var points) => $"{Show.Money(credit)} on khata, not yet paid, and {Show.Money(points)} paid in points - neither in the bank",
         };
         PeriodDiscount = Money(d.Range.Discount);
         PeriodAverageBasket = Money(d.Range.AverageBasket);
@@ -399,9 +569,11 @@ public sealed class OwnerViewModel : ObservableObject
         ReadIn = $"read in {d.Elapsed.TotalMilliseconds:N0} ms";
 
         FillMargins(d);
+        FillExpenses(d);
         FillVoids(d);
         FillCustomers(d);
         FillPoints(d);
+        FillCharts(d);
 
         foreach (var name in new[]
                  {
@@ -409,6 +581,7 @@ public sealed class OwnerViewModel : ObservableObject
                      nameof(PeriodDiscount), nameof(PeriodAverageBasket), nameof(TodayNetSales),
                      nameof(TodayBills), nameof(ReadIn),
                      nameof(PeriodProfit), nameof(PeriodMargin), nameof(MarginCoverage), nameof(HasMargins),
+                     nameof(ExpensesLine), nameof(AfterExpensesLine),
                      nameof(VoidLine), nameof(HasVoids),
                      nameof(CustomerLine), nameof(ReturningLine),
                      nameof(PointsLine), nameof(PointsOwed),
@@ -433,11 +606,11 @@ public sealed class OwnerViewModel : ObservableObject
             var day = d.Daily[i];
 
             Daily.Add(new TrendBar(
-                i % every == 0 ? day.Date.ToString("dd MMM", Indian) : string.Empty,
+                i % every == 0 ? day.Date.ToString("d MMM", CultureInfo.InvariantCulture) : string.Empty,
                 day.NetSales,
                 bestDay == 0m ? 0 : (double)(day.NetSales / bestDay),
-                $"{day.Date.ToString("ddd dd MMM", Indian)} — {Money(day.NetSales)} over {day.Bills} bill(s)"
-                + (day.Discount > 0m ? $", {Money(day.Discount)} discounted" : string.Empty)));
+                $"{day.Date.ToString("ddd", CultureInfo.InvariantCulture)} {Show.Date(day.Date)} — {Show.Money(day.NetSales)} over {Plural.Of(day.Bills, "bill")}"
+                + (day.Discount > 0m ? $", {Show.Money(day.Discount)} discounted" : string.Empty)));
         }
 
         Hourly.Clear();
@@ -449,7 +622,7 @@ public sealed class OwnerViewModel : ObservableObject
                 $"{hour.Hour:00}",
                 hour.NetSales,
                 busiest == 0m ? 0 : (double)(hour.NetSales / busiest),
-                $"{hour.Hour:00}:00 — {Money(hour.NetSales)} over {hour.Bills} bill(s)"));
+                $"{hour.Hour:00}:00 — {Show.Money(hour.NetSales)} over {Plural.Of(hour.Bills, "bill")}"));
         }
 
         TopItems.Clear();
@@ -459,7 +632,7 @@ public sealed class OwnerViewModel : ObservableObject
         {
             TopItems.Add(new RankedRow(
                 item.Name,
-                $"{item.Quantity.ToString("0.###", Indian)} {item.Unit.ToLowerInvariant()} over {item.Bills} bill(s)",
+                $"{item.Quantity.ToString("0.###", Indian)} {item.Unit.ToLowerInvariant()} over {Plural.Of(item.Bills, "bill")}",
                 Money(item.NetSales),
                 best == 0m ? 0 : (double)(item.NetSales / best)));
         }
@@ -471,7 +644,7 @@ public sealed class OwnerViewModel : ObservableObject
         {
             Tenders.Add(new RankedRow(
                 tender.Tender,
-                $"{tender.Count} bill(s)",
+                Plural.Of(tender.Count, "bill"),
                 Money(tender.Amount),
                 biggestTender == 0m ? 0 : (double)(tender.Amount / biggestTender)));
         }
@@ -483,7 +656,7 @@ public sealed class OwnerViewModel : ObservableObject
         {
             Categories.Add(new RankedRow(
                 slice.Category,
-                $"{slice.Lines} line(s)",
+                Plural.Of(slice.Lines, "line"),
                 Money(slice.NetSales),
                 biggestCategory == 0m ? 0 : (double)(slice.NetSales / biggestCategory)));
         }
@@ -508,6 +681,26 @@ public sealed class OwnerViewModel : ObservableObject
     /// sentence saying so, not as a profit of zero — a shop reading zero would conclude it earned
     /// nothing rather than that nobody had told the software what anything cost.
     /// </remarks>
+    /// <summary>
+    /// The period's expenses, and what is left of the earnings once they are paid.
+    /// </summary>
+    /// <remarks>
+    /// Profit here is takings less the cost of the goods, over the items that carried a cost. Tea,
+    /// the auto and the electricity bill come out of that too, and an owner comparing a margin with
+    /// the bank balance needs them taken off - said as a sentence, with what it covers.
+    /// </remarks>
+    private void FillExpenses(DashboardData d)
+    {
+        ExpensesLine = d.Expenses.Count == 0
+            ? "No expenses were recorded in this period. Record them at the till with Ctrl+M."
+            : $"{Money(d.ExpensesTotal)} spent on the running of the shop: "
+              + string.Join(", ", d.Expenses.Select(e => $"{e.Category.ToLowerInvariant()} {Money(e.Amount)}")) + ".";
+
+        AfterExpensesLine = HasMargins && d.Expenses.Count > 0
+            ? $"{Money(d.Margins.Priced.Sum(i => i.Profit) - d.ExpensesTotal)} earned after expenses, on the items with a cost price."
+            : string.Empty;
+    }
+
     private void FillMargins(DashboardData d)
     {
         var priced = d.Margins.Priced;
@@ -523,8 +716,8 @@ public sealed class OwnerViewModel : ObservableObject
             PeriodMargin = "—";
             MarginCoverage = d.Margins.UnpricedItems == 0
                 ? "No item sold in this period carried a cost price, so there is nothing to work a margin from."
-                : $"None of the {d.Margins.UnpricedItems} item(s) sold carried a cost price. Add a cost_price "
-                  + "column to the catalogue and import it again to see what the shop earns.";
+                : $"None of the {Plural.Of(d.Margins.UnpricedItems, "item")} sold carried a cost price. Give items their "
+                  + "cost price in the catalogue (Ctrl+3) to see what the shop earns.";
             return;
         }
 
@@ -536,10 +729,13 @@ public sealed class OwnerViewModel : ObservableObject
             ? "—"
             : (profit / pricedSales * 100m).ToString("N1", Indian) + "%";
 
+        // No figure for what is covered when it is everything. "Covers all 873.25" sat under net sales
+        // of 873.00 - item values before the bills' round-off - and an owner who sees two totals for
+        // the same days stops trusting both.
         MarginCoverage = d.Margins.UnpricedItems == 0
-            ? $"Covers all {Money(pricedSales)} of this period's takings."
-            : $"Covers {d.Margins.Coverage.ToString("N1", Indian)}% of takings — {d.Margins.UnpricedItems} item(s) "
-              + $"worth {Money(d.Margins.UnpricedSales)} carry no cost price and are left out.";
+            ? "Covers every item sold in this period."
+            : $"Covers {d.Margins.Coverage.ToString("N1", Indian)}% of takings — {Plural.Of(d.Margins.UnpricedItems, "item")} "
+              + $"worth {Show.Money(d.Margins.UnpricedSales)} carry no cost price and are left out.";
 
         // Ranked by what each item actually earned rather than by its percentage. A 60% margin on
         // something that sells twice a month is a worse use of shelf space than 8% on rice, and a
@@ -582,10 +778,17 @@ public sealed class OwnerViewModel : ObservableObject
 
         VoidLine = d.Voids.Count == 0
             ? "No sale was cancelled in this period."
-            : $"{d.Voids.Count} sale(s) cancelled, {Money(d.Voids.Value)} in all"
+            : $"{Plural.Of(d.Voids.Count, "sale")} cancelled, {Show.Money(d.Voids.Value)} in all"
               + (rungUp == 0
                   ? "."
                   : $" — {((decimal)d.Voids.Count / rungUp * 100m).ToString("N1", Indian)}% of bills rung up.");
+
+        // Returns sit beside the cancellations: both are money rung up that the shop did not keep.
+        if (d.Returns.Count > 0)
+        {
+            HasVoids = true;
+            VoidLine += $" {Plural.Of(d.Returns.Count, "return")} on credit notes, {Show.Money(d.Returns.Value)} refunded.";
+        }
     }
 
     private void FillCustomers(DashboardData d)
@@ -594,15 +797,53 @@ public sealed class OwnerViewModel : ObservableObject
 
         CustomerLine = mix.TotalBills == 0
             ? "No bills in this period."
-            : $"{mix.IdentifiedBills} of {mix.TotalBills} bill(s) went to somebody the shop knows "
-              + $"({Money(mix.IdentifiedSales)}), the rest to walk-ins ({Money(mix.WalkInSales)}).";
+            : $"{mix.IdentifiedBills} of {Plural.Of(mix.TotalBills, "bill")} went to somebody the shop knows "
+              + $"({Show.Money(mix.IdentifiedSales)}), the rest to walk-ins ({Show.Money(mix.WalkInSales)}).";
 
         ReturningLine = mix.DistinctCustomers == 0
             ? "No customer was identified by mobile number, so there is nothing to tell about regulars."
-            : $"{mix.DistinctCustomers} customer(s) seen, {mix.ReturningCustomers} of them more than once"
+            : $"{Plural.Of(mix.DistinctCustomers, "customer")} seen, {mix.ReturningCustomers} of them more than once"
               + (mix.DistinctCustomers == 0
                   ? "."
                   : $" ({((decimal)mix.ReturningCustomers / mix.DistinctCustomers * 100m).ToString("N0", Indian)}% came back).");
+    }
+
+    /// <summary>The same figures again, as charts. Built from the one gather, so they cannot disagree.</summary>
+    private void FillCharts(DashboardData d)
+    {
+        SalesChart = OwnerCharts.SalesTrend(d.Daily);
+        HoursChart = OwnerCharts.Hours(d.Hourly);
+        WeekChart = OwnerCharts.Week(d.WeekdayByHour);
+        TenderChart = OwnerCharts.Tenders(d.Tenders);
+        DepartmentChart = OwnerCharts.Departments(d.Categories);
+        MarginChart = OwnerCharts.Margins(d.Margins);
+        PointsChart = OwnerCharts.Points(d.Points);
+        SalesSpark = OwnerCharts.Spark(d.Daily);
+
+        var best = d.Daily.Where(p => p.NetSales > 0m).MaxBy(p => p.NetSales);
+        BestDayLine = best is null
+            ? string.Empty
+            : $"Best day {best.Date.ToString("ddd d MMM", CultureInfo.InvariantCulture)}, {Show.Money(best.NetSales)}";
+
+        // The departments add up the lines, before each bill's round-off; the net sales above are the
+        // bills as paid. Where the two differ the chart says by how much, rather than leaving an
+        // owner to find a second total for the same days and wonder which one is wrong.
+        var lines = d.Categories.Sum(c => c.NetSales);
+        var roundOff = d.Range.NetSales - lines;
+        DepartmentNote = d.Categories.Count > 0 && roundOff != 0m
+            ? $"Item values, before the bills' round-off of {(roundOff > 0 ? "+" : string.Empty)}{Show.Money(roundOff)}: "
+              + $"the bills came to {Show.Money(d.Range.NetSales)}."
+            : string.Empty;
+
+        foreach (var name in new[]
+                 {
+                     nameof(SalesChart), nameof(HoursChart), nameof(WeekChart), nameof(TenderChart),
+                     nameof(DepartmentChart), nameof(MarginChart), nameof(PointsChart), nameof(SalesSpark),
+                     nameof(BestDayLine), nameof(PeriodText), nameof(DepartmentNote),
+                 })
+        {
+            Raise(name);
+        }
     }
 
     /// <summary>
@@ -640,17 +881,105 @@ public sealed class OwnerViewModel : ObservableObject
             ? "No item is counted yet. Save a stock sheet, fill in the counts, and load it back to start."
             : levels.Count == 0
                 ? $"Nothing is low — nothing is at its reorder level or down to {LowRuleText}."
-                : $"{levels.Count} item(s){(LowOnly ? " to reorder" : " counted")}, {OutCount} of them with none left. Low means at its reorder level, or down to {LowRuleText}.";
+                : $"{Plural.Of(levels.Count, "item")}{(LowOnly ? " to reorder" : " counted")}, {OutCount} of them with none left. Low means at its reorder level, or down to {LowRuleText}.";
+
+        // Said here too, so a delivery going out of date is seen by an owner who only came to reorder.
+        if (LoadExpiring() is var dated and > 0)
+            StockHeadline += dated == 1 ? " 1 delivery is near its date — Alt+X." : $" {dated} deliveries are near their date — Alt+X.";
 
         Raise(nameof(StockHeadline));
+        Raise(nameof(ListHeadline));
         Raise(nameof(LowCount));
         Raise(nameof(OutCount));
+    }
+
+    /// <summary>Reads the deliveries near their date. Returns how many.</summary>
+    private int LoadExpiring()
+    {
+        ExpiryWarnings.Clear();
+
+        if (_expiring is null)
+        {
+            ExpiryHeadline = "This lane does not read use-by dates.";
+            Raise(nameof(ExpiryHeadline));
+            return 0;
+        }
+
+        try
+        {
+            foreach (var warning in _expiring())
+                ExpiryWarnings.Add(warning);
+        }
+        catch (Exception ex)
+        {
+            ExpiryHeadline = $"The dates could not be read: {ex.Message}";
+            Raise(nameof(ExpiryHeadline));
+            return 0;
+        }
+
+        var expired = ExpiryWarnings.Count(w => w.IsExpired);
+
+        ExpiryHeadline = ExpiryWarnings.Count == 0
+            ? $"Nothing on the shelf is within {Expiry.WarnDays} days of its date - as far as the use-by dates on the purchase bills say."
+            : $"{ExpiryWarnings.Count} deliver{(ExpiryWarnings.Count == 1 ? "y" : "ies")} within {Expiry.WarnDays} days of their date and probably on the shelf"
+              + (expired > 0 ? $", {expired} already past it." : ".")
+              + " Worked out from the count: once old stock is off the shelf, correct the count and it drops off.";
+
+        Raise(nameof(ExpiryHeadline));
+        Raise(nameof(ListHeadline));
+        return ExpiryWarnings.Count;
     }
 
     /// <summary>"10% of full", or what the list says when the share-of-full rule is off.</summary>
     private string LowRuleText => LowStockPercent > 0m
         ? $"{Percent(LowStockPercent)}% of full"
         : "(share of full switched off)";
+
+    // ---- The UPI code with the amount ---------------------------------------------------------
+
+    /// <summary>The UPI ID the till's codes are made out to, or null when none is set.</summary>
+    public string? UpiId { get; private set; }
+
+    /// <summary>What is typed in the Settings box, before it is saved.</summary>
+    public string UpiIdText
+    {
+        get => _upiIdText;
+        set => Set(ref _upiIdText, value);
+    }
+
+    public bool CanChangeUpiId => _applyUpiId is not null;
+
+    /// <summary>What the card says about the code now.</summary>
+    public string UpiState => UpiId is { } id
+        ? $"Customers paying by UPI get a code for the exact amount, paid to {id}."
+        : "Not set: UPI is taken against the shop's own printed code, and the customer types the amount.";
+
+    /// <summary>Sets the UPI ID, or takes it out when the box is empty - which turns the code off.</summary>
+    /// <returns>Null when it took, or why not.</returns>
+    public string? SetUpiId()
+    {
+        if (_applyUpiId is null)
+            return Status = "This lane has nowhere to save it.";
+
+        var id = string.IsNullOrWhiteSpace(UpiIdText) ? null : UpiIdText.Trim();
+
+        if (id is not null && UpiPayee.Problem(id) is { } problem)
+            return Status = problem;
+
+        if (_applyUpiId(id) is { } failed)
+            return Status = failed;
+
+        UpiId = id;
+        UpiIdText = id ?? string.Empty;
+        Raise(nameof(UpiId));
+        Raise(nameof(UpiState));
+
+        Status = id is null
+            ? "The UPI code is off. UPI is taken against the shop's own printed code."
+            : $"UPI payments now get a code for the exact amount, paid to {id}. Try one on the till: F12, then UPI.";
+
+        return null;
+    }
 
     // ---- When stock counts as low ------------------------------------------------------------
 
@@ -716,7 +1045,7 @@ public sealed class OwnerViewModel : ObservableObject
             // With a byte-order mark, so Excel opens Tamil item names as Tamil.
             File.WriteAllText(path, StockSheet.Write(items), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-            Status = $"Saved a stock sheet of {items.Count} item(s) to {path}. Fill in new_count for what you counted, save it as CSV, and load it back here.";
+            Status = $"Saved a stock sheet of {Plural.Of(items.Count, "item")} to {path}. Write what you counted in the column headed new_count, save it, and load it back here.";
             return null;
         }
         catch (Exception ex)
@@ -768,7 +1097,7 @@ public sealed class OwnerViewModel : ObservableObject
 
         if (plan.Changes.Count == 0)
         {
-            Status = "Nothing in that sheet changes a count. Fill in new_count for what you counted.";
+            Status = "Nothing in that sheet changes a count. Write what you counted in the column headed new_count.";
             return null;
         }
 
@@ -784,8 +1113,8 @@ public sealed class OwnerViewModel : ObservableObject
         {
             var counted = _stock.ApplySheet(plan.Changes, _laneId, "stock sheet");
 
-            Status = $"{counted} count(s) changed{(plan.FullLevels > 0 ? $" and {plan.FullLevels} full level(s)" : "")} from the stock sheet. "
-                   + $"{plan.Blank} row(s) left blank were left alone.";
+            Status = $"{Plural.Of(counted, "count")} changed{(plan.FullLevels > 0 ? $" and {Plural.Of(plan.FullLevels, "full level")}" : "")} from the stock sheet. "
+                   + $"{Plural.Of(plan.Blank, "row")} left blank {(plan.Blank == 1 ? "was" : "were")} left alone.";
 
             LoadStock();
             return null;
