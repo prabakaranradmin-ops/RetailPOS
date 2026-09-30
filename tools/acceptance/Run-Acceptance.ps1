@@ -226,6 +226,11 @@ $settings = @'
     "includeLaneSegment": false,
     "sequencePadding": 0
   },
+  "openWhatsApp": false,
+  "upi": {
+    "id": "ravi.maligai@okaxis",
+    "name": "Ravi Maligai"
+  },
   "hardware": {
     "printerOutputFile": "__RECEIPTS__",
     "printerPaperWidthChars": 48,
@@ -672,9 +677,9 @@ if (-not $NoUi) {
     Add-Result -Kind Positive -Feature 'Customers' -Name 'The sale is filed under the customer named at the counter' `
         -Expected 'for Lakshmi, 9500012345' -Actual (Short $r.Output 4) -Passed $named
 
-    $linesRight = $r.Output -match '3 line\(s\), 2 payment\(s\)'
+    $linesRight = $r.Output -match '3 lines, 2 payments'
     Add-Result -Kind Positive -Feature 'Invoicing' -Name 'Three lines and both tenders were stored' `
-        -Expected '3 line(s), 2 payment(s)' -Actual (Short $r.Output 3) -Passed $linesRight
+        -Expected '3 lines, 2 payments' -Actual (Short $r.Output 3) -Passed $linesRight
 
     $refusedAfterClose = ($r.ExitCode -ne 0) -and ($r.Output -match 'day-end report')
     Add-Result -Kind Negative -Feature 'Void' -Name 'A sale already on a Z-report cannot be voided' `
@@ -691,18 +696,38 @@ if (-not $NoUi) {
     # showing 0.00, so this asks the same query the screen uses, and checks the number.
     $afterSale = Join-Path $workspace 'dashboard-after-sale.html'
     $r = Invoke-Pos @('dashboard', '--out', $afterSale) -StdIn @('Maligai26')
-    # Two bills: the parked-and-recalled sale (495.00) and the credit sale (189.00). A repayment is
-    # not a sale, so the 100.00 paid back is in neither figure.
-    $countsIt = $r.Output -match 'Bills\s*:\s*2\b'
-    $valuesIt = $r.Output -match 'Net sales\s*:\s*684\.00'
+    # Three bills: the parked-and-recalled sale (495.00), the credit sale (189.00) and the bill to
+    # Kumar Traders (189.00). A repayment is not a sale, so the 100.00 paid back is in no figure.
+    $countsIt = $r.Output -match 'Bills\s*:\s*3\b'
+    $valuesIt = $r.Output -match 'Net sales\s*:\s*873\.00'
+    $spentIt = $r.Output -match 'Expenses\s*:\s*50\.00'
+
+    Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'The owner''s figures count the expense' `
+        -Expected 'Expenses : 50.00, the tea paid from the drawer' -Actual (Short $r.Output 8) -Passed $spentIt
 
     Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The figures count a sale that was parked first' `
-        -Expected 'two bills, 684.00 - the parked sale and the credit sale, and not the repayment' `
+        -Expected 'three bills, 873.00 - the parked sale, the credit sale and the business sale, and not the repayment' `
         -Actual (Short $r.Output 6) -Passed ($countsIt -and $valuesIt) `
         -Detail 'Parking is ordinary at a counter. A sale that spent a minute parked is still a sale.'
 
+    # The dal returned at the till, on the lane's first credit note, against the credit sale.
+    $creditSale = 'RM/{0:D2}-{1:D2}/2' -f ($fyStart % 100), (($fyStart + 1) % 100)
+    $creditNote = 'CN/{0:D2}-{1:D2}/T1-1' -f ($fyStart % 100), (($fyStart + 1) % 100)
+    $r = Invoke-Pos @('credit-note', $creditNote)
+    $noteRight = $r.ExitCode -eq 0 -and $r.Output -match 'CREDIT NOTE' -and $r.Output -match [regex]::Escape($creditSale) `
+        -and $r.Output -match '189\.00' -and $r.Output -match 'wrong item'
+    Add-Result -Kind Positive -Feature 'Returns' -Name "The return was filed as credit note $creditNote" `
+        -Expected "against $creditSale, 189.00 refunded, the reason kept" -Actual (Short $r.Output 12) -Passed $noteRight `
+        -Detail 'Its own document and its own series. The bill it names is not changed.'
+
+    $r = Invoke-Pos @('credit-note', 'CN/00-01/T1-99')
+    Add-Result -Kind Negative -Feature 'Returns' -Name 'A credit note that was never issued is not found' `
+        -Expected 'non-zero exit, saying there is no such credit note' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'no credit note')
+
     # The month's GST return, from the same books. The two bills come to 495.25 and 189.00 before
-    # round-off; the HSN summary covers every line, so its total value has to be exactly 684.25.
+    # round-off, and the dal returned takes 189.00 back off; the HSN summary covers every line, so
+    # its total value has to be exactly 495.25.
     $gstPage = Join-Path $workspace 'gst\return.html'
     $thisMonth = Get-Date -Format 'yyyy-MM'
     $r = Invoke-Pos @('gst-return', '--month', $thisMonth, '--out', $gstPage) -StdIn @('Maligai26')
@@ -720,12 +745,21 @@ if (-not $NoUi) {
     # Wrapped whole: an if-statement unrolls what it returns, and one row would come back as a bare
     # object with no Count - which strict mode treats as an error rather than as 1.
     $docs = @(if (Test-Path $docsCsv) { Import-Csv $docsCsv -Encoding UTF8 })
-    $docsRight = $docs.Count -eq 1 -and $docs[0].'Total Number' -eq '2' -and $docs[0].'Cancelled' -eq '0' `
-        -and $docs[0].'Sr. No. From' -eq $expected
+    $bills = @($docs | Where-Object { $_.'Nature of Document' -eq 'Invoices for outward supply' })
+    $notes = @($docs | Where-Object { $_.'Nature of Document' -eq 'Credit Note' })
+    # Three bills: the counter sale, Lakshmi's on credit, and Kumar Traders' as a business.
+    $docsRight = $bills.Count -eq 1 -and $bills[0].'Total Number' -eq '3' -and $bills[0].'Cancelled' -eq '0' `
+        -and $bills[0].'Sr. No. From' -eq $expected
     Add-Result -Kind Positive -Feature 'GST return' -Name 'The bills issued are counted from the first number' `
-        -Expected "one run from $expected, 2 issued, none cancelled" `
-        -Actual $(if ($docs.Count) { "{0} to {1}, {2} issued, {3} cancelled" -f $docs[0].'Sr. No. From', $docs[0].'Sr. No. To', $docs[0].'Total Number', $docs[0].'Cancelled' } else { 'no documents file' }) `
+        -Expected "one run from $expected, 3 issued, none cancelled" `
+        -Actual $(if ($bills.Count) { "{0} to {1}, {2} issued, {3} cancelled" -f $bills[0].'Sr. No. From', $bills[0].'Sr. No. To', $bills[0].'Total Number', $bills[0].'Cancelled' } else { 'no documents file' }) `
         -Passed $docsRight
+
+    $notesRight = $notes.Count -eq 1 -and $notes[0].'Sr. No. From' -eq $creditNote -and $notes[0].'Total Number' -eq '1'
+    Add-Result -Kind Positive -Feature 'GST return' -Name 'The credit notes issued are listed with the bills' `
+        -Expected "a Credit Note run from $creditNote, 1 issued" `
+        -Actual $(if ($notes.Count) { "{0} to {1}, {2} issued" -f $notes[0].'Sr. No. From', $notes[0].'Sr. No. To', $notes[0].'Total Number' } else { 'no credit note run' }) `
+        -Passed $notesRight
 
     $hsn = @(if (Test-Path $hsnCsv) { Import-Csv $hsnCsv -Encoding UTF8 })
 
@@ -741,25 +775,244 @@ if (-not $NoUi) {
         foreach ($row in $hsn) { $hsnTotal += [decimal]::Parse($row.'Total Value', [Globalization.CultureInfo]::InvariantCulture) }
 
         $codes = @($hsn | ForEach-Object { $_.HSN })
-        $hsnRight = $hsnTotal -eq [decimal]684.25 -and ($codes -contains '0713') -and ($codes -contains '1701') -and ($codes -contains '3305')
-        Add-Result -Kind Positive -Feature 'GST return' -Name 'The HSN summary adds up to the bills, to the paisa' `
-            -Expected 'total value 684.25 across 0713, 1701 and 3305' `
+        $hsnRight = $hsnTotal -eq [decimal]495.25 -and ($codes -contains '0713') -and ($codes -contains '1701') -and ($codes -contains '3305')
+        Add-Result -Kind Positive -Feature 'GST return' -Name 'The HSN summary adds up to the bills less the return, to the paisa' `
+            -Expected 'total value 495.25 across 0713, 1701 and 3305' `
             -Actual ("total value {0} across {1}" -f $hsnTotal, ($codes -join ', ')) -Passed $hsnRight `
-            -Detail 'Every line of every bill, before round-off: 495.25 and 189.00. A return that did not add up to the bills would be a wrong return.'
+            -Detail 'Every line of every bill before round-off, 495.25 and 189.00, less the 189.00 dal that came back on a credit note. A return that did not add up to the bills would be a wrong return.'
+
+        $netted = $r.Output -match 'Returns\s*:\s*1 credit note'
+        Add-Result -Kind Positive -Feature 'GST return' -Name 'The month is filed net of the goods returned' `
+            -Expected 'one credit note of 189.00 taken off the month' -Actual (Short $r.Output 12) -Passed $netted
+
+        # Kumar Traders' bill: listed bill by bill with the GSTIN, supplied into Karnataka, 189.00 at
+        # 5% is 180.00 taxable - and kept out of the B2C HSN summary above, in one of its own.
+        $b2bCsv = Join-Path $gstFolder 'return-b2b.csv'
+        $b2b = @(if (Test-Path $b2bCsv) { Import-Csv $b2bCsv -Encoding UTF8 })
+        $b2bRight = $b2b.Count -eq 1 -and $b2b[0].'GSTIN/UIN of Recipient' -eq '29AABCK1234M1ZG' `
+            -and $b2b[0].'Receiver Name' -eq 'Kumar Traders' -and $b2b[0].'Place Of Supply' -eq '29-Karnataka' `
+            -and $b2b[0].'Taxable Value' -eq '180.00' -and $b2b[0].'Invoice Value' -eq '189.00' `
+            -and (Test-Path (Join-Path $gstFolder 'return-hsn(b2b).csv'))
+        Add-Result -Kind Positive -Feature 'Business bills' -Name 'The bill to a business is filed bill by bill with its GSTIN (B2B)' `
+            -Expected '29AABCK1234M1ZG, Kumar Traders, 29-Karnataka, 189.00, 180.00 taxable; an HSN summary of its own' `
+            -Actual $(if ($b2b.Count) { '{0}, {1}, {2}, {3}, {4}' -f $b2b[0].'GSTIN/UIN of Recipient', $b2b[0].'Receiver Name', $b2b[0].'Place Of Supply', $b2b[0].'Invoice Value', $b2b[0].'Taxable Value' } else { 'no B2B file' }) `
+            -Passed $b2bRight
     }
+
+    # The delivery entered on the owner's screen: in the month's purchase register, from the new
+    # supplier, 1,575.00 with input tax to claim, and on the shelf.
+    $purchasesCsv = Join-Path $gstFolder 'return-purchases.csv'
+    $register = @(if (Test-Path $purchasesCsv) { Import-Csv $purchasesCsv -Encoding UTF8 })
+    $delivery = $register | Where-Object { $_.'Bill No' -eq 'ACC/1' }
+    $deliveryRight = $null -ne $delivery -and $delivery.'Supplier GSTIN' -eq '33AEIPH7795F1Z9' `
+        -and $delivery.'Bill Total' -eq '1575.00' -and $delivery.'Input Tax Claimable' -eq 'Yes'
+    Add-Result -Kind Positive -Feature 'Purchases' -Name 'The delivery is in the books and the purchase register' `
+        -Expected 'bill ACC/1 from GSTIN 33AEIPH7795F1Z9, 1575.00, input tax claimable' `
+        -Actual $(if ($delivery) { "{0} from {1}, {2}, claimable {3}" -f $delivery.'Bill No', $delivery.'Supplier GSTIN', $delivery.'Bill Total', $delivery.'Input Tax Claimable' } else { 'not in the register' }) `
+        -Passed $deliveryRight
+
+    $r = Invoke-Pos @('stock')
+    $shelf = ($r.Output -split "`n") | Where-Object { $_ -match '^\s*DAL001\s' }
+    Add-Result -Kind Positive -Feature 'Purchases' -Name 'The delivery went onto the shelf' `
+        -Expected 'Toor Dal counted at 70: the 60 from the stock sheet and the 10 delivered' `
+        -Actual $(if ($shelf) { $shelf.Trim() } else { 'not listed' }) `
+        -Passed ($null -ne $shelf -and $shelf -match '^\s*DAL001\s+.*?\s70\s')
+
+    # The order list from the command line agrees with the Orders tab: sugar, 1.25 kg sold today
+    # against 12.5 counted, is ten days left and 5 kg to last two weeks. The dal (70 on the shelf)
+    # and the rice (set to 48 by hand above, above its level of 10) will last, and are not on it.
+    $r = Invoke-Pos @('order-list')
+    $ordersRight = $r.ExitCode -eq 0 -and $r.Output -match 'Not bought from anyone yet' `
+        -and $r.Output -match 'Sugar Loose\s+5 kg\s+10 days left' `
+        -and $r.Output -notmatch 'Toor Dal' -and $r.Output -notmatch 'Ponni Rice'
+    Add-Result -Kind Positive -Feature 'Orders' -Name 'The order list is worked out from the rate and the shelf' `
+        -Expected 'sugar 5 kg with 10 days left; nothing for the dal or the rice, which will last' `
+        -Actual (Short $r.Output 10) -Passed $ordersRight
+
+    # The dal delivered on the Purchases tab with a use-by date five days off: its ten are the
+    # newest on the shelf, so all ten are likely still there.
+    $r = Invoke-Pos @('expiring')
+    Add-Result -Kind Positive -Feature 'Expiry' -Name 'A delivery near its use-by date is found on the shelf' `
+        -Expected 'Toor Dal 1kg, 5 days, 10 likely on the shelf, to sell first' -Actual (Short $r.Output 4) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'Toor Dal 1kg\s+\S+\s+5 days\s+10 likely on the shelf\s+sell it first')
+
+    # No pole display on this lane: the check says so and passes nothing off as tested.
+    $r = Invoke-Pos @('test-hardware', '--pole')
+    Add-Result -Kind Positive -Feature 'Customer display' -Name 'A lane with no pole display says so rather than testing nothing' `
+        -Expected 'not configured, and no question asked' -Actual (Short $r.Output 4) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'No pole display is set up')
+
+    # Everything in this shop arrived today, so nothing can have stopped selling yet - not even the
+    # rice, which has never sold.
+    $r = Invoke-Pos @('dead-stock')
+    Add-Result -Kind Positive -Feature 'Dead stock' -Name 'Nothing that arrived today is called dead stock' `
+        -Expected 'everything counted has sold in the last 60 days, or is too new to say' -Actual (Short $r.Output 3) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'has sold in the last 60 days')
+
+    $r = Invoke-Pos @('dead-stock', '--days', '5')
+    Add-Result -Kind Negative -Feature 'Dead stock' -Name 'A window too short to mean anything is refused' `
+        -Expected 'non-zero exit, saying 14 to 365 days' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match '14 to 365')
+
+    # The labels saved as a page on the Catalogue tab are done; nothing has changed a price since.
+    $r = Invoke-Pos @('labels')
+    Add-Result -Kind Positive -Feature 'Prices' -Name 'Labels saved are no longer due' `
+        -Expected 'every shelf label up to date' -Actual (Short $r.Output 3) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'up to date')
+
+    $r = Invoke-Pos @('labels', '--all')
+    Add-Result -Kind Positive -Feature 'Prices' -Name 'The shampoo is labelled at its new price' `
+        -Expected 'Shampoo 340ml at 289.00 among every item''s labels' -Actual (Short $r.Output 8) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'Shampoo 340ml\s+289\.00')
+
+    # A price above its MRP cannot be charged, so a sheet asking for one changes nothing.
+    $badPrices = Join-Path $workspace 'bad-prices.csv'
+    Set-Content -Path $badPrices -Encoding utf8 -Value @(
+        'sku,new_mrp,new_selling_price',
+        'DAL001,,210')
+    $r = Invoke-Pos @('price-sheet', '--load', $badPrices, '--yes')
+    Add-Result -Kind Negative -Feature 'Prices' -Name 'A price above its MRP is refused, and nothing changes' `
+        -Expected 'non-zero exit, the line named, nothing was changed' -Actual (Short $r.Output 4) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'above the MRP' -and $r.Output -match 'Nothing was changed')
+
+    $r = Invoke-Pos @('order-list', '--cover', '0')
+    Add-Result -Kind Negative -Feature 'Orders' -Name 'An order that covers no days is refused' `
+        -Expected 'non-zero exit, saying an order covers 1 to 120 days' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match '1 and 120')
 
     $r = Invoke-Pos @('gst-return', '--month', '2026-13') -StdIn @('Maligai26')
     Add-Result -Kind Negative -Feature 'GST return' -Name 'A month that does not exist is refused' `
         -Expected 'non-zero exit, saying how to write a month' -Actual (Short $r.Output 2) `
         -Passed ($r.ExitCode -ne 0 -and $r.Output -match '2026-09')
 
+    # The UPI request the till's code carries, for this lane's own UPI ID: the exact amount, to the
+    # paisa, with a point.
+    $upiLink = 'upi://pay?pa=ravi.maligai@okaxis&pn=Ravi%20Maligai&am=400.50&cu=INR'
+    $r = Invoke-Pos @('upi', '--amount', '400.50')
+    Add-Result -Kind Positive -Feature 'UPI' -Name 'The UPI code carries the shop and the exact amount' `
+        -Expected $upiLink -Actual (Short $r.Output 4) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match [regex]::Escape($upiLink))
+
+    $r = Invoke-Pos @('upi', '--amount', '0')
+    Add-Result -Kind Negative -Feature 'UPI' -Name 'A UPI code for nothing is refused' `
+        -Expected 'non-zero exit, saying the amount is the rupees to ask for' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'rupees to ask for')
+
+    # Offers: none yet, then a sheet loaded, then a trial bill priced with them. Loaded after the till
+    # has sold everything it sells here, so no figure checked elsewhere moves.
+    $r = Invoke-Pos @('offers')
+    Add-Result -Kind Positive -Feature 'Offers' -Name 'A lane with no offers says how to start' `
+        -Expected 'No offers, and how to save a sheet with examples' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'No offers')
+
+    $offersSheet = Join-Path $workspace 'offers.csv'
+    $r = Invoke-Pos @('offers', '--sheet', $offersSheet)
+    $sheetText = if (Test-Path $offersSheet) { Get-Content $offersSheet -Raw -Encoding UTF8 } else { '' }
+    Add-Result -Kind Positive -Feature 'Offers' -Name 'A fresh offers sheet carries an example of each kind' `
+        -Expected 'the columns, and six example rows marked #' -Actual (Short $r.Output 1) `
+        -Passed ($sheetText -match '^name,kind,sku' -and ([regex]::Matches($sheetText, '(?m)^# ')).Count -eq 6)
+
+    Set-Content -Path $offersSheet -Encoding utf8 -Value @(
+        'name,kind,sku,category,buy,get,percent,amount,price,min_bill,free_qty,from,to,days',
+        'Dal 3 for 500,MultiPrice,DAL001,,3,,,,500,,,,,',
+        '10% off staples,Percent,,Staples,,,10,,,,,,,',
+        'Nothing here,BuyGet,NOPE,,2,1,,,,,,,,')
+    $r = Invoke-Pos @('offers', '--load', $offersSheet, '--yes')
+    Add-Result -Kind Negative -Feature 'Offers' -Name 'An offers sheet with a wrong row changes nothing' `
+        -Expected 'non-zero exit, line 4 named for its SKU, nothing changed' -Actual (Short $r.Output 3) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'Line 4, sku' -and $r.Output -match 'Nothing was changed')
+
+    Set-Content -Path $offersSheet -Encoding utf8 -Value @(
+        'name,kind,sku,category,buy,get,percent,amount,price,min_bill,free_qty,from,to,days',
+        'Dal 3 for 500,MultiPrice,DAL001,,3,,,,500,,,,,',
+        '10% off staples,Percent,,Staples,,,10,,,,,,,')
+    $r = Invoke-Pos @('offers', '--load', $offersSheet, '--yes')
+    Add-Result -Kind Positive -Feature 'Offers' -Name 'The offers sheet is loaded' `
+        -Expected 'Loaded 2 offers' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match 'Loaded 2 offer')
+
+    # 3 dal at 189 is 567: 3 for 500 takes 67 off, beating 10% (56.70). 2 kg of sugar at 45 is 90,
+    # a staple: 9 off. 657 less 76 is 581.
+    # Commas, not spaces: the harness passes each argument unquoted.
+    $r = Invoke-Pos @('offers', '--try', 'DAL001:3,SUG001:2')
+    $priced = $r.Output -match '-67\.00' -and $r.Output -match '-9\.00' -and $r.Output -match 'Offers give 76\.00; the bill comes to 581\.00'
+    Add-Result -Kind Positive -Feature 'Offers' -Name 'A trial bill gets the best offer on each line, as the till would' `
+        -Expected '67.00 off the dal (3 for 500), 9.00 off the sugar (10% off staples), 581.00 to pay' -Actual (Short $r.Output 5) `
+        -Passed ($r.ExitCode -eq 0 -and $priced)
+
+    # The last bill as the customer gets it on WhatsApp, and as a full A4 invoice. The last is
+    # Kumar Traders': a bill to a business in Karnataka, which both have to say.
+    $r = Invoke-Pos @('bill')
+    Add-Result -Kind Positive -Feature 'Digital bills' -Name 'The last bill reads as the customer gets it on WhatsApp' `
+        -Expected '*TAX INVOICE*, the GSTIN, the lines with HSN and GST, and the total' -Actual (Short $r.Output 6) `
+        -Passed ($r.ExitCode -eq 0 -and $r.Output -match '\*TAX INVOICE\*' -and $r.Output -match 'GSTIN 33AEIPH7795F1Z9' -and $r.Output -match '\*Total: Rs ')
+
+    Add-Result -Kind Positive -Feature 'Business bills' -Name 'The bill to a business says who it was to and where' `
+        -Expected 'Bill to: Kumar Traders, Buyer GSTIN 29AABCK1234M1ZG, Place of supply: 29-Karnataka, IGST' -Actual (Short $r.Output 12) `
+        -Passed ($r.Output -match 'Bill to: Kumar Traders' -and $r.Output -match 'Buyer GSTIN 29AABCK1234M1ZG' -and $r.Output -match 'Place of supply: 29-Karnataka' -and $r.Output -match 'IGST 9\.00')
+
+    $billPage = Join-Path $workspace 'bill.html'
+    $r = Invoke-Pos @('bill', '--out', $billPage)
+    $billText = if (Test-Path $billPage) { Get-Content $billPage -Raw -Encoding UTF8 } else { '' }
+    Add-Result -Kind Positive -Feature 'Digital bills' -Name 'A bill is saved as a full A4 tax invoice' `
+        -Expected 'TAX INVOICE, the buyer''s GSTIN, the HSN table, the place of supply and the total in words' -Actual (Short $r.Output 2) `
+        -Passed ($billText -match 'TAX INVOICE' -and $billText -match 'Tax by HSN and rate' -and $billText -match '29-Karnataka' -and $billText -match '29AABCK1234M1ZG' -and $billText -match 'Rupees .+ Only')
+
+    $r = Invoke-Pos @('bill', '--no', 'RM/99-00/1')
+    Add-Result -Kind Negative -Feature 'Digital bills' -Name 'A bill number the lane never issued is refused' `
+        -Expected 'non-zero exit, saying there is no bill with that number' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'No bill numbered')
+
+    # Lakshmi's statement from the command line agrees with the one Ctrl+K printed: 189.00 bought on
+    # credit, 100.00 paid back, 89.00 owed. The dal refunded in cash did not touch her khata.
+    $r = Invoke-Pos @('statement', '--mobile', '9500012345')
+    $statementRight = $r.ExitCode -eq 0 -and $r.Output -match '\+189\.00' -and $r.Output -match '-100\.00' -and $r.Output -match '89\.00'
+    Add-Result -Kind Positive -Feature 'Khata statements' -Name 'A statement adds up to what the customer owes' `
+        -Expected '+189.00 bought on credit, -100.00 paid back, 89.00 owed' -Actual (Short $r.Output 6) -Passed $statementRight
+
+    $statementsPage = Join-Path $workspace 'statements.html'
+    $r = Invoke-Pos @('statement', '--owing', '--out', $statementsPage)
+    $pageText = if (Test-Path $statementsPage) { Get-Content $statementsPage -Raw -Encoding UTF8 } else { '' }
+    $onePage = ([regex]::Matches($pageText, '<section class="statement">')).Count -eq 1 -and $pageText -match 'aria-label="UPI code"'
+    Add-Result -Kind Positive -Feature 'Khata statements' -Name 'Everybody who owes gets a statement page, with the code to pay' `
+        -Expected 'one page - Lakshmi, the only one owing - with a UPI code' -Actual (Short $r.Output 2) -Passed $onePage
+
+    $r = Invoke-Pos @('statement', '--mobile', '9999999999')
+    Add-Result -Kind Negative -Feature 'Khata statements' -Name 'A statement for a number the shop does not know is refused' `
+        -Expected 'non-zero exit, saying no customer has that number' -Actual (Short $r.Output 2) `
+        -Passed ($r.ExitCode -ne 0 -and $r.Output -match 'No customer has the number')
+
+    # The slip Ctrl+Q printed at the till went to the printer, with the shop's UPI ID under the code.
+    $receiptsFile = Join-Path $workspace 'receipts.escpos'
+    $printed = if (Test-Path $receiptsFile) { [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($receiptsFile)) } else { '' }
+    Add-Result -Kind Positive -Feature 'UPI' -Name 'The scan-to-pay slip reached the printer' `
+        -Expected 'ravi.maligai@okaxis printed under a raster code' `
+        -Actual $(if ($printed -match 'ravi\.maligai@okaxis') { 'on the printer' } else { 'not printed' }) `
+        -Passed ($printed -match 'ravi\.maligai@okaxis')
+
     # The repayment on the stored Z-report, read back from the books rather than off a picture.
     $r = Invoke-Pos @('close-day', '--show')
-    $collected = ($r.Output -match 'Credit collected \(1\)') -and ($r.Output -match 'Credit collected in cash')
+    # In the lane's own language: this lane's bills are Tamil, and so is its day-end report.
+    $collected = ($r.Output -match 'Khata collected \(1\)|கடன் வசூல் \(1\)') -and ($r.Output -match 'Khata collected in cash|ரொக்கமாக கடன் வசூல்')
     Add-Result -Kind Positive -Feature 'Credit' -Name 'The day-end report shows the credit collected, apart from sales' `
-        -Expected 'a credit-collected section of one payment, and the cash line added to the drawer' `
+        -Expected 'a khata-collected section of one payment, and the cash line added to the drawer' `
         -Actual $(if ($collected) { 'present' } else { 'missing' }) -Passed $collected `
         -Detail 'Not sales and not taxed - the goods were sold, and taxed, the day they went out on credit.'
+
+    # The return on the same report: its own section, and the cash handed back taken off the drawer.
+    $returnsShown = ($r.Output -match 'Credit notes\s+1|கிரெடிட் நோட்\s+1') -and ($r.Output -match 'Refunded on returns \(1\)|திருப்பியதற்கு கொடுத்த பணம் \(1\)') `
+        -and ($r.Output -match '-189\.00')
+    Add-Result -Kind Positive -Feature 'Returns' -Name 'The day-end report shows the return and the cash refunded' `
+        -Expected 'a Returns section of one credit note, and -189.00 refunded out of the drawer' `
+        -Actual $(if ($returnsShown) { 'present' } else { 'missing' }) -Passed $returnsShown `
+        -Detail 'Beside the sales, not netted into them: the bills were issued as they were.'
+
+    # The float and the tea, each on its own drawer line of the same report.
+    $drawerLines = ($r.Output -match 'Opening float \(1\)\s+2,000\.00|தொடக்க சில்லறை \(1\)\s+2,000\.00') -and ($r.Output -match 'Expenses paid \(1\)\s+-50\.00|செலவுகள் \(1\)\s+-50\.00')
+    Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'The day-end report counts the float and the expense in the drawer' `
+        -Expected 'Opening float (1) 2,000.00 and Expenses paid (1) -50.00 under the drawer figure' `
+        -Actual $(if ($drawerLines) { 'present' } else { 'missing' }) -Passed $drawerLines `
+        -Detail 'The drawer figure now includes the float, so the whole drawer is counted against it.'
 
     $r = Invoke-Pos @('close-day', '--preview')
     $nothingLeft = $r.Output -match 'விற்பனை இல்லை|NO SALES'
@@ -767,6 +1020,14 @@ if (-not $NoUi) {
         -Expected 'a second close finds nothing left to report' -Actual (Short $r.Output 4) `
         -Passed $nothingLeft `
         -Detail 'A sale belongs to exactly one Z-report, so closing twice is harmless and takes nothing.'
+
+    # Lakshmi's WhatsApp order, saved on the till before the close, is still waiting - and is listed
+    # as an order, not as a parked bill to recall or discard.
+    $waiting = ($r.Output -match '1 order waiting|1 ஆர்டர் காத்திருக்கிறது') -and ($r.Output -notmatch 'still parked|நிறுத்தி வைக்கப்பட்டுள்ளது')
+    Add-Result -Kind Positive -Feature 'Customer orders' -Name 'An order waiting outlives the close, listed apart from parked bills' `
+        -Expected '1 order waiting, and no bills still parked' -Actual (Short $r.Output 4) `
+        -Passed $waiting `
+        -Detail 'An order is meant to wait for the customer or the delivery; closing the day leaves it in F6.'
 }
 
 # --------------------------------------------------------------------------------------------

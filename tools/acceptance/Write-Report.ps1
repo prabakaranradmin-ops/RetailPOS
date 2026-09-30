@@ -131,7 +131,7 @@ function Write-AcceptanceReport {
         return $html.ToString()
     }
 
-    $verdict = if ($totalFailed -eq 0) { 'All checks passed' } else { "$totalFailed check(s) failed" }
+    $verdict = if ($totalFailed -eq 0) { 'All checks passed' } elseif ($totalFailed -eq 1) { '1 check failed' } else { "$totalFailed checks failed" }
     $verdictClass = if ($totalFailed -eq 0) { 'ok' } else { 'bad' }
 
     $head = @"

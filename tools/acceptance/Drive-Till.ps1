@@ -225,6 +225,28 @@ function Invoke-TillWalkthrough {
             -Expected 'a billing window with the scan box focused' -Actual 'window captured' `
             -Passed ($shot -ne '') -Shot $shot
 
+        # --- The opening float -----------------------------------------------------------------
+        # Ctrl+M opens on the float when none is recorded since the last close.
+        Send-Keys '^m' 900
+        $shot = Save-Shot 'till-01b-cash-pane'
+        Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'Ctrl+M opens on the opening float in the morning' `
+            -Expected 'the float, an expense, cash in and cash out to choose from, the float picked' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '2000{ENTER}' 1200
+        $shot = Save-Shot 'till-01c-float-recorded'
+        Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'The float is recorded and the drawer opens' `
+            -Expected 'Float of 2,000.00 recorded' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # --- Quick keys ---------------------------------------------------------------------------
+        # Every item in this catalogue has a barcode, so F11 has nothing to put on a key - and says
+        # what would get one rather than opening an empty pane.
+        Send-Keys '{F11}' 900
+        $shot = Save-Shot 'till-01d-no-loose-items'
+        Add-Result -Kind Negative -Feature 'Quick keys' -Name 'With nothing loose, F11 says what gets a key' `
+            -Expected 'no pane, and a line saying an item with no barcode gets a quick key' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
         # --- Search by name ---------------------------------------------------------------
         Send-Keys '{F2}'
         Send-Keys 'sug'
@@ -241,6 +263,16 @@ function Invoke-TillWalkthrough {
             -Expected 'the till says no item matches and adds no line' -Actual 'screen captured' `
             -Passed ($shot -ne '') -Shot $shot `
             -Detail 'Adding an approximate match here would put the wrong price in front of a customer.'
+        Send-Keys '{ESC}'
+
+        # --- A scale label for an item the catalogue does not have -----------------------------
+        # 20 00123 01250 6: an in-store code, item 123, 1.250 kg. No item has SKU 123, so it is
+        # refused with the reason rather than read as an ordinary unknown barcode.
+        Send-Scan '2000123012506'
+        $shot = Save-Shot 'till-03b-scale-label-unknown'
+        Add-Result -Kind Negative -Feature 'Scale labels' -Name 'A scale label for an item the shop does not have is refused, saying why' `
+            -Expected 'a scale label for item 123, but no item has that SKU; nothing added' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
         Send-Keys '{ESC}'
 
         # --- Build a bill ------------------------------------------------------------------
@@ -304,7 +336,7 @@ function Invoke-TillWalkthrough {
         Send-Keys '{F12}' 900
         $shot = Save-Shot 'till-09-tender'
         Add-Result -Kind Positive -Feature 'Payment' -Name 'The payment pane offers every tender' `
-            -Expected 'Cash, Card, UPI, Store credit and Loyalty points' -Actual 'captured' `
+            -Expected 'Cash, Card, UPI, Khata (pay later) and Loyalty points' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
         # Part cash, the rest on UPI — the split-tender path.
@@ -312,7 +344,14 @@ function Invoke-TillWalkthrough {
         Send-Keys '{DOWN}{DOWN}' 500
         $shot = Save-Shot 'till-10-split-tender'
         Add-Result -Kind Positive -Feature 'Payment' -Name 'A bill can be split across two tenders' `
-            -Expected 'cash taken, the balance still owing' -Actual 'captured' `
+            -Expected 'cash taken, the balance still owing, and UPI picked for it with its code' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+
+        # The rest by UPI: the code shows the balance, and Ctrl+Q prints it for the customer.
+        Send-Keys '^q' 1500
+        $shot = Save-Shot 'till-10b-upi-slip'
+        Add-Result -Kind Positive -Feature 'UPI' -Name 'Ctrl+Q prints the UPI code for what is still due' `
+            -Expected 'the code with the balance on screen, and a line saying it printed' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
 
         Send-Keys '{ENTER}' 800
@@ -321,6 +360,18 @@ function Invoke-TillWalkthrough {
         Add-Result -Kind Positive -Feature 'Payment' -Name 'The sale settles and the screen clears' `
             -Expected 'an invoice number and an empty bill' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
+
+        # --- The bill on the customer's phone ------------------------------------------------
+        # This lane is set not to open WhatsApp, so Ctrl+W puts the bill on the clipboard to paste.
+        Set-Clipboard -Value 'nothing copied yet'
+        Send-Keys '^w' 1200
+        $digital = (Get-Clipboard -Raw)
+        $digitalRight = $digital -match '\*TAX INVOICE\*' -and $digital -match 'Toor Dal 1kg' -and $digital -match 'Customer: Lakshmi'
+        $shot = Save-Shot 'till-11b-digital-bill'
+        Add-Result -Kind Positive -Feature 'Digital bills' -Name 'Ctrl+W puts the bill just settled on the clipboard to send' `
+            -Expected '*TAX INVOICE*, the lines, and Lakshmi on it' `
+            -Actual $(if ($digital) { ($digital -split "`r?`n" | Select-Object -First 4) -join ' | ' } else { 'clipboard empty' }) `
+            -Passed $digitalRight -Shot $shot
 
         # --- Reprint --------------------------------------------------------------------------
         Send-Keys '^p' 900
@@ -337,13 +388,28 @@ function Invoke-TillWalkthrough {
         Send-Keys '9500012345{ENTER}' 1000
         Send-Scan '8901234567890'
         Send-Keys '{F12}' 900
+
+        # Taken on her phone, not on paper: Ctrl+W before paying.
+        Send-Keys '^w' 700
+        $shot = Save-Shot 'till-12a-no-paper'
+        Add-Result -Kind Positive -Feature 'Digital bills' -Name 'A bill can be taken on the phone instead of paper' `
+            -Expected 'the payment pane saying no paper: the bill goes to Lakshmi''s WhatsApp' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot
+        Set-Clipboard -Value 'nothing copied yet'
+
         Send-Keys '{DOWN}{DOWN}{DOWN}' 600
         Send-Keys '{ENTER}' 800
         Send-Keys '{ENTER}' 1500
         $shot = Save-Shot 'till-12b-credit-sale'
         Add-Result -Kind Positive -Feature 'Credit' -Name 'A named customer can buy on credit' `
-            -Expected 'the sale settles on store credit and says what she now owes' -Actual 'captured' `
+            -Expected 'the sale settles on the khata and says what she now owes' -Actual 'captured' `
             -Passed ($shot -ne '') -Shot $shot
+
+        $paperless = (Get-Clipboard -Raw)
+        Add-Result -Kind Positive -Feature 'Digital bills' -Name 'The bill taken on the phone went to the clipboard, not the printer' `
+            -Expected 'the khata sale''s bill, Khata 189.00, ready to paste' `
+            -Actual $(if ($paperless) { ($paperless -split "`r?`n" | Select-Object -First 4) -join ' | ' } else { 'clipboard empty' }) `
+            -Passed ($paperless -match '\*TAX INVOICE\*' -and $paperless -match 'Khata 189\.00')
 
         # F8: find her by name, see what she owes, take 100 in cash.
         Send-Keys '{F8}' 900
@@ -360,6 +426,131 @@ function Invoke-TillWalkthrough {
         Add-Result -Kind Positive -Feature 'Credit' -Name 'Part of the khata is paid back in cash' `
             -Expected '100.00 taken, 89.00 still owed, the drawer opened and a slip printed' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # --- Her khata statement, and the UPI code for what she owes -----------------------------
+        Send-Keys '{F8}' 900
+        Send-Keys 'Lak' 900
+        Send-Keys '{DOWN}' 600
+        Send-Keys '{ENTER}' 900
+        Set-Clipboard -Value 'nothing copied yet'
+        Send-Keys '^k' 1500
+        $statementText = (Get-Clipboard -Raw)
+        $statementRight = $statementText -match 'khata for Lakshmi' -and $statementText -match 'Owed now: Rs 89\.00'
+        $shot = Save-Shot 'till-12d2-statement'
+        Add-Result -Kind Positive -Feature 'Khata statements' -Name 'Ctrl+K prints her statement and copies it to send' `
+            -Expected 'statement printed, 89.00 owed; a message saying Owed now: Rs 89.00 on the clipboard' `
+            -Actual $(if ($statementText) { ($statementText -split "`r?`n" | Select-Object -First 5) -join ' | ' } else { 'clipboard empty' }) `
+            -Passed $statementRight -Shot $shot
+
+        Send-Keys '{DOWN}' 800
+        $shot = Save-Shot 'till-12d3-khata-upi'
+        Add-Result -Kind Positive -Feature 'Khata statements' -Name 'Paying the khata by UPI shows a code for what she owes' `
+            -Expected 'UPI picked in F8, and a code for Rs 89.00' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        Send-Keys '{ESC}' 600
+
+        # --- A return: the dal from the credit sale comes back ---------------------------------
+        # F9, Enter for the last bill - Lakshmi's credit sale - and one dal. She now owes 89.00,
+        # so refunding 189.00 off her khata is refused; it goes back in cash instead.
+        Send-Keys '{F9}' 900
+        Send-Keys '{ENTER}' 1000
+        Send-Keys '1{ENTER}' 900
+        $shot = Save-Shot 'till-12e-return-picked'
+        Add-Result -Kind Positive -Feature 'Returns' -Name 'F9 finds the last bill and prices what comes back' `
+            -Expected 'the bill''s lines, one dal picked, refund 189.00 and the tax it takes back' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '{ENTER}' 900
+        Send-Keys '{DOWN}{DOWN}{DOWN}' 600
+        Send-Keys '{ENTER}' 1200
+        $shot = Save-Shot 'till-12f-return-khata-refused'
+        Add-Result -Kind Negative -Feature 'Returns' -Name 'A refund bigger than the khata is not taken off it' `
+            -Expected 'refused: she owes 89.00, less than the 189.00 to refund' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'Taking the khata below nothing would leave the shop holding her money as an advance.'
+
+        Send-Keys '{UP}{UP}{UP}' 600
+        Send-Keys 'wrong item{ENTER}' 1500
+        $shot = Save-Shot 'till-12g-returned'
+        Add-Result -Kind Positive -Feature 'Returns' -Name 'The dal is refunded in cash on a credit note' `
+            -Expected 'a credit note number, 189.00 to hand back, the drawer opened and the note printed' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # --- An expense from the drawer ---------------------------------------------------------
+        # Opens on an expense now the float is in. 50 on tea, the first category.
+        Send-Keys '^m' 900
+        Send-Keys '50{ENTER}' 900
+        $shot = Save-Shot 'till-12h-expense-category'
+        Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'An expense asks what it was for' `
+            -Expected 'the categories listed, tea and snacks picked' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys 'for the staff{ENTER}' 1200
+        $shot = Save-Shot 'till-12i-expense-recorded'
+        Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'The expense is paid from the drawer' `
+            -Expected 'Tea and snacks: 50.00 paid from the drawer' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # --- A WhatsApp order ------------------------------------------------------------------
+        # Typed as a customer writes it, a line each (Shift+Enter), with one thing the shop does not
+        # sell. Enter reads it onto the bill and names what it could not find.
+        Send-Keys '^o' 900
+        Send-Keys 'Hi+{ENTER}1. toor dal 1kg x 2+{ENTER}2. sugar 1/2 kg+{ENTER}3. mangoes 2 kg' 900
+        $shot = Save-Shot 'till-12j-order-typed'
+        Add-Result -Kind Positive -Feature 'Customer orders' -Name 'Ctrl+O takes an order typed as the customer wrote it' `
+            -Expected 'the order pane, the message on four lines' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '{ENTER}' 1200
+        $shot = Save-Shot 'till-12k-order-on-bill'
+        Add-Result -Kind Positive -Feature 'Customer orders' -Name 'The order goes on the bill, and what is not sold here is named' `
+            -Expected 'two dal and half a kilo of sugar on the bill; 2 of 3 lines, not found: mangoes 2 kg' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '^o' 900
+        $shot = Save-Shot 'till-12l-order-needs-customer'
+        Add-Result -Kind Negative -Feature 'Customer orders' -Name 'An order is not saved without the customer' `
+            -Expected 'refused: attach the customer first with F7' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'Somebody has to be told when it is ready, and asked for the money.'
+
+        Send-Keys '{F7}' 800
+        Send-Keys '9500012345{ENTER}' 1000
+        Set-Clipboard -Value 'nothing copied yet'
+        Send-Keys '^o' 900
+        Send-Keys '{DOWN}' 500
+        Send-Keys 'deliver by 6pm{ENTER}' 1500
+        $reply = (Get-Clipboard -Raw)
+        # 2 dal at 189 and half a kilo of sugar at 45 is 400.50; this lane rounds bills to the rupee.
+        $replyRight = $reply -match '^Your order at .+: 2 items, Rs 400\.00\. deliver by 6pm\. .+ Order H\d{3}\.'
+        $shot = Save-Shot 'till-12m-order-saved'
+        Add-Result -Kind Positive -Feature 'Customer orders' -Name 'The order is saved for Lakshmi, with a reply to send her' `
+            -Expected 'the bill clears; Your order at the shop: 2 items, Rs 400.00, the note and the token on the clipboard' `
+            -Actual $(if ($reply) { $reply.Trim() } else { 'clipboard empty' }) -Passed $replyRight -Shot $shot
+
+        Send-Keys '{F6}' 900
+        $shot = Save-Shot 'till-12n-order-waiting'
+        Add-Result -Kind Positive -Feature 'Customer orders' -Name 'The order waits at the top of F6, saying what it is' `
+            -Expected 'Lakshmi''s order listed first, WhatsApp order - deliver by 6pm under her name' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        Send-Keys '{ESC}' 600
+
+        # --- A bill to a business -----------------------------------------------------------------
+        # A new customer at the counter, given a Karnataka GSTIN with Ctrl+G: the dal is then taxed as
+        # an inter-state supply, IGST, and the bill says who it was to and where.
+        Send-Keys '{F7}' 800
+        Send-Keys '9800011122{ENTER}' 900
+        Send-Keys '{ENTER}' 900
+        Send-Keys 'Kumar Traders{ENTER}' 1000
+        Send-Keys '^g' 900
+        Send-Keys '29AABCK1234M1ZG{ENTER}' 900
+        Send-Keys '12 MG Road, Bengaluru{ENTER}' 1200
+        $shot = Save-Shot 'till-12o-business'
+        Add-Result -Kind Positive -Feature 'Business bills' -Name 'Ctrl+G gives the customer a GSTIN and makes the bill a tax invoice to them' `
+            -Expected 'Kumar Traders is a business: GSTIN 29AABCK1234M1ZG, 29-Karnataka' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Scan '8901234567890'
+        Send-Keys '{F12}' 900
+        Send-Keys '{ENTER}' 800
+        Send-Keys '{ENTER}' 1500
+        $shot = Save-Shot 'till-12p-business-bill'
+        Add-Result -Kind Positive -Feature 'Business bills' -Name 'The bill to the business is taken like any other' `
+            -Expected 'the sale settles; the dal taxed as IGST' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
 
         # --- Day close ------------------------------------------------------------------------
         Send-Keys '+{F12}' 1200
@@ -406,7 +597,7 @@ function Invoke-TillWalkthrough {
 
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Page Down scrolls the owner''s screen' `
             -Expected 'the figures move down a page at a time, with no mouse' `
-            -Actual "$($figurePages.Count) further page(s) reached" -Passed ($figurePages.Count -gt 0) `
+            -Actual "$($figurePages.Count) further $(if ($figurePages.Count -eq 1) { 'page' } else { 'pages' }) reached" -Passed ($figurePages.Count -gt 0) `
             -Detail 'Most of this screen is below the fold. Without Page Down it could only be reached with a mouse.'
 
         Send-Keys '^2' 1100
@@ -501,6 +692,57 @@ function Invoke-TillWalkthrough {
             -Expected 'the unit list on Muzham (முழம்), saying the till will take part of one' `
             -Actual 'captured' -Passed ($shot -ne '') -Shot $shot `
             -Detail 'Pcs, Kg, L and m, then seepu, kattu, padi, muzham and the other units customers still ask for by name.'
+
+        # --- Prices and shelf labels ----------------------------------------------------------------
+        # A price revision round trip: Alt+S saves the price sheet, the shampoo is marked down from
+        # 299 to 289 the way it would be in Excel, Alt+L loads it back. The labels due are then the
+        # four items loaded this morning (new, so never labelled) and the shampoo again; Alt+P
+        # saves them as an A4 page, which marks them done. Nothing is sent to the printer.
+        $priceFolder = Join-Path $Workspace 'prices'
+        New-Item -ItemType Directory -Force -Path $priceFolder | Out-Null
+        $priceSheet = Join-Path $priceFolder 'price-sheet.csv'
+
+        Send-Keys '%s' 2000
+        Send-Keys $priceSheet 600
+        Send-Keys '{ENTER}' 2500
+
+        $priceLines = @(if (Test-Path $priceSheet) { Get-Content $priceSheet -Encoding UTF8 })
+        $sheetRight = $priceLines.Count -gt 1 `
+            -and $priceLines[0] -eq 'sku,name,unit,gst_rate,cost_price,mrp,selling_price,new_mrp,new_selling_price' `
+            -and ($priceLines -match '^SHP001,Shampoo 340ml,Pcs,18,240.00,299.00,299.00,,$').Count -eq 1
+        Add-Result -Kind Positive -Feature 'Prices' -Name 'A price sheet of the shop''s own items is saved from the screen' `
+            -Expected 'every item with its cost, MRP and price, and two empty columns for the new ones' `
+            -Actual $(if ($priceLines.Count) { ($priceLines | Select-Object -First 3) -join ' | ' } else { 'not on disk' }) `
+            -Passed $sheetRight
+
+        $filledPrices = Join-Path $priceFolder 'price-sheet-filled.csv'
+        $filled = @($priceLines | ForEach-Object { if ($_ -like 'SHP001,*') { $_ + '289' } else { $_ } })
+        [IO.File]::WriteAllLines($filledPrices, [string[]]$filled, (New-Object Text.UTF8Encoding($true)))
+
+        Send-Keys '%l' 2000
+        Send-Keys $filledPrices 600
+        Send-Keys '{ENTER}' 2500
+        $shot = Save-Shot 'owner-04d-price-confirm' -Foreground
+        Add-Result -Kind Positive -Feature 'Prices' -Name 'Loading a price sheet asks before it changes anything' `
+            -Expected 'one price to change, the blank rows left alone' -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '{ENTER}' 2000
+        $shot = Save-Shot 'owner-04e-labels-due' -Foreground
+        Add-Result -Kind Positive -Feature 'Prices' -Name 'The changed price puts its shelf label on the list due' `
+            -Expected 'the shampoo at 289.00 among the labels due, with the items that have never had one' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        $labelsPage = Join-Path $priceFolder 'shelf-labels.html'
+        Send-Keys '%p' 2000
+        Send-Keys $labelsPage 600
+        Send-Keys '{ENTER}' 2500
+        $page = if (Test-Path $labelsPage) { Get-Content $labelsPage -Raw -Encoding UTF8 } else { '' }
+        $pageRight = $page -match '4 labels' -and $page -match 'Shampoo 340ml' -and $page -match 'Rs 289\.00' -and $page -match '<svg'
+        $shot = Save-Shot 'owner-04f-labels-saved' -Foreground
+        Add-Result -Kind Positive -Feature 'Prices' -Name 'The shelf labels are saved as an A4 page with barcodes' `
+            -Expected 'four labels, the shampoo at 289.00, the barcoded items drawn as bars' `
+            -Actual $(if ($page) { "page of {0} characters" -f $page.Length } else { 'not on disk' }) `
+            -Passed $pageRight -Shot $shot
 
         # Alt+B on this tab composes the sample bill. Nothing here touches the printer or the
         # drawer: firing either from an unattended run would put paper and noise into whatever room
@@ -599,7 +841,7 @@ function Invoke-TillWalkthrough {
         $shot = Save-Shot 'owner-08-backup' -Foreground
         Add-Result -Kind Positive -Feature 'Maintenance' -Name 'A backup can be taken from the screen' `
             -Expected "a new verified snapshot in $backups" `
-            -Actual "$before snapshot(s) before, $after after" `
+            -Actual "$before before, $after after" `
             -Passed ($after -gt $before) -Shot $shot `
             -Detail 'Checked on disk, not from the screen: a message saying a backup was taken is not a backup.'
 
@@ -664,6 +906,87 @@ function Invoke-TillWalkthrough {
             -Actual $(if ($gstSaved) { "written to $(Split-Path $gstScreenPage -Parent)" } else { 'not on disk' }) `
             -Passed $gstSaved -Shot $shot
 
+        # --- Purchases ---------------------------------------------------------------------------
+        # A delivery, entered the way an owner reads it off the wholesaler's paper: the supplier
+        # once, then the bill number, each line, and save. Proved later from the books, by the
+        # purchase register the GST return writes.
+        Send-Keys '^9' 1500
+        $shot = Save-Shot 'owner-14-purchases' -Foreground
+        Add-Result -Kind Positive -Feature 'Purchases' -Name 'The Purchases section opens on the suppliers' `
+            -Expected 'the supplier list, their account, adding a supplier, and a bill to enter' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '%w' 600
+        Send-Keys 'Sri Murugan Wholesale' 400
+        Send-Keys '{TAB}' 300
+        Send-Keys '33AEIPH7795F1Z9' 600
+        Send-Keys '%a' 1500
+
+        Send-Keys '%n' 600
+        Send-Keys 'ACC/1' 400
+        Send-Keys '%i' 600
+        Send-Keys 'DAL001' 900
+        Send-Keys '{ENTER}' 600
+        # Quantity, rate, past the GST and discount already filled in, the batch, and a use-by date
+        # five days off - which the expiry checks later find on the shelf.
+        $useBy = (Get-Date).AddDays(5).ToString('dd-MM-yyyy')
+        Send-Keys '10{TAB}' 400
+        Send-Keys '150{TAB}' 400
+        Send-Keys '{TAB}{TAB}' 400
+        Send-Keys 'B7{TAB}' 400
+        Send-Keys "$useBy{ENTER}" 1200
+        $shot = Save-Shot 'owner-14b-purchase-bill' -Foreground
+        Add-Result -Kind Positive -Feature 'Purchases' -Name 'A delivery is typed in off the supplier''s bill' `
+            -Expected 'the new supplier picked, bill ACC/1, ten Toor Dal at 150 before tax with 5% GST on top - 1,575.00, batch B7 used by in five days' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Send-Keys '%s' 1500
+        $shot = Save-Shot 'owner-14c-purchase-confirm' -Foreground
+        Send-Keys '{ENTER}' 2000
+        $shot2 = Save-Shot 'owner-14d-purchase-saved' -Foreground
+        Add-Result -Kind Positive -Feature 'Purchases' -Name 'Saving the bill says what it did' `
+            -Expected 'asked first; then the shelf count up, the cost price updated, and 1,575.00 owed to the supplier' `
+            -Actual 'captured' -Passed ($shot -ne '' -and $shot2 -ne '') -Shot $shot2
+
+        # --- Near its date ---------------------------------------------------------------------------
+        # The dal just delivered is used by in five days, and the ten of it are the newest on the
+        # shelf, so the Stock tab's Alt+X lists them.
+        Send-Keys '^2' 1200
+        Send-Keys '%x' 1200
+        $shot = Save-Shot 'owner-14e-near-its-date' -Foreground
+        Add-Result -Kind Positive -Feature 'Expiry' -Name 'The Stock tab lists what is near its use-by date' `
+            -Expected 'Toor Dal, batch B7, five days left, ten likely on the shelf' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        # Alt+D: what has stopped selling. Everything here came in today, so the list says so.
+        Send-Keys '%d' 1200
+        $shot = Save-Shot 'owner-14f-not-selling' -Foreground
+        Add-Result -Kind Positive -Feature 'Dead stock' -Name 'The Stock tab lists what has stopped selling' `
+            -Expected 'the not-selling list, empty on a shop that opened today, and saying why' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+        Send-Keys '%n' 800
+
+        # --- Orders -------------------------------------------------------------------------------
+        # By now sugar is counted at 12.5 and sold 1.25 kg today: ten days left, 5 kg to last two
+        # weeks. It was never bought on a purchase bill, so it is under "not bought from anyone".
+        # The dal (70) and the rice (set to 48 earlier) will last. Copy puts the order on the
+        # clipboard, read back here as the owner would paste it.
+        Send-Keys '^0' 1500
+        $shot = Save-Shot 'owner-15-orders' -Foreground
+        Add-Result -Kind Positive -Feature 'Orders' -Name 'The Orders section says what to order and from whom' `
+            -Expected 'sugar to order, with ten days left, 1.25 a day and 5 kg' `
+            -Actual 'captured' -Passed ($shot -ne '') -Shot $shot
+
+        Set-Clipboard -Value 'nothing copied yet'
+        Send-Keys '%c' 1200
+        $copied = (Get-Clipboard -Raw)
+        $copiedRight = $copied -match '^Order from ' -and $copied -match 'Sugar Loose - 5 kg' -and $copied -notmatch 'Toor Dal'
+        $shot = Save-Shot 'owner-15b-order-copied' -Foreground
+        Add-Result -Kind Positive -Feature 'Orders' -Name 'An order is copied as a message to send the supplier' `
+            -Expected 'Order from the shop, then Sugar Loose - 5 kg, and nothing that will last' `
+            -Actual $(if ($copied) { ($copied -split "`r?`n" | Select-Object -First 3) -join ' | ' } else { 'clipboard empty' }) `
+            -Passed $copiedRight -Shot $shot
+
         Send-Keys '{ESC}' 1200
         $shot = Save-Shot 'owner-10-back-to-billing'
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Escape goes back to billing' `
@@ -679,7 +1002,7 @@ function Invoke-TillWalkthrough {
         $tabs = @(
             'owner-02-figures.png', 'owner-03-stock.png', 'owner-04-catalogue.png',
             'owner-05-hardware.png', 'owner-06-settings.png', 'owner-07-maintenance.png',
-            'owner-11-customers.png', 'owner-13-gst.png')
+            'owner-11-customers.png', 'owner-13-gst.png', 'owner-14-purchases.png', 'owner-15-orders.png')
 
         $seen = @{}
         $repeats = @()
@@ -699,8 +1022,8 @@ function Invoke-TillWalkthrough {
         }
 
         Add-Result -Kind Positive -Feature 'Owner screen' -Name 'Each tab shows a different screen' `
-            -Expected 'eight tabs, eight distinct screens' `
-            -Actual $(if ($repeats.Count -eq 0) { 'all eight differ' } else { $repeats -join '; ' }) `
+            -Expected 'ten sections, ten distinct screens' `
+            -Actual $(if ($repeats.Count -eq 0) { 'all ten differ' } else { $repeats -join '; ' }) `
             -Passed ($repeats.Count -eq 0) `
             -Detail 'Two identical captures mean a Ctrl+N did not reach its tab, whatever the other checks say.'
 
