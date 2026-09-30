@@ -78,12 +78,21 @@ OutputBaseFilename={#AppName}{#VariantSuffix}-Setup-{#AppVersion}
 UninstallDisplayIcon={app}\{#TillExe}
 UninstallDisplayName={#AppName}{#VariantLabel} {#AppVersion}
 
-; The payload is two 174MB executables that compress well. Solid compression across both of them
-; takes the setup from roughly 350MB to something that fits on a memory stick and copies in a
+; The payload is two 178MB executables that compress well. Solid compression across both of them
+; takes the setup from roughly 356MB to something that fits on a memory stick and copies in a
 ; minute rather than ten.
-Compression=lzma2/max
+;
+; Each executable carries its own copy of the .NET runtime, and the two copies are nearly the same
+; bytes. The dictionary is what lets the second be written as "the same as before": at lzma2/max's
+; size it reached back far less than one executable, so the second runtime was compressed all over
+; again, and at 1.13.0 the setup came to 100.6MB - over GitHub's 100MB limit on a file. A 256MB
+; dictionary reaches across the whole first executable, and the same payload comes to 62.6MB.
+; Compressing needs a few GB of memory, hence the 64-bit helper process; installing needs the
+; dictionary's 256MB, which any till has.
+Compression=lzma2/ultra64
 SolidCompression=yes
-LZMANumBlockThreads=4
+LZMAUseSeparateProcess=yes
+LZMADictionarySize=262144
 
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
