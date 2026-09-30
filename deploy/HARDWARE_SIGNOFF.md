@@ -202,9 +202,57 @@ With all four passing, ring one up on the till itself:
 
 ---
 
+## The shop's own words (with the owner)
+
+The words below were chosen without the shop. Go through them **with the owner** - on the bill and
+the day-end report from the sale above, and on the screen - and tick each one the shop uses. Where
+the shop says it differently, write its word in the last column. The words are part of the program,
+so a change goes into the next build: send this page back with the rest of the sheet.
+
+**Money a customer owes and pays later** - every lane:
+
+| Where | The till says | Agreed | The shop's word |
+|---|---|---|---|
+| Payment pane, `F12` | Khata (pay later) | ☐ | |
+| The bill's payment line | Khata | ☐ | |
+| `F8`, taking money back | Khata payment | ☐ | |
+| Day-end report | Khata collected | ☐ | |
+| Owner's figures | on khata, not yet paid | ☐ | |
+| `F5` / `F6` | Hold / Held bills | ☐ | |
+
+**On a Tamil lane** - the bill, the day-end report, the `F8` slip and the customer's screen:
+
+| Where | The till says | In English | Agreed | The shop's word |
+|---|---|---|---|---|
+| The bill's payment line | கடன் | khata | ☐ | |
+| Day-end report | கடன் வசூல் | khata collected | ☐ | |
+| `Ctrl+K` statement | கடன் கணக்கு அறிக்கை | khata statement | ☐ | |
+| Day-end report | தொடக்க சில்லறை | opening float | ☐ | |
+| Day-end report | செலவுகள் | expenses paid | ☐ | |
+| Day-end report | பெட்டியில் வைத்த பணம் | cash put in | ☐ | |
+| Day-end report | பெட்டியிலிருந்து எடுத்த பணம் | cash taken out | ☐ | |
+| Day-end report | திருப்பியதற்கு கொடுத்த பணம் | refunded on returns | ☐ | |
+| Day-end report | பில் நிறுத்தி வைக்கப்பட்டுள்ளது | bill still held | ☐ | |
+| Day-end report | ஆர்டர் காத்திருக்கிறது | order waiting | ☐ | |
+| Day-end report | தேதி சரிபார்க்கவும் (காலாவதி) | check the dates | ☐ | |
+| Customer's screen | வணக்கம் | welcome | ☐ | |
+| Customer's screen | நன்றி — மீண்டும் வருக | thank you, please visit again | ☐ | |
+| Customer's screen | உங்கள் மீதம் | your change | ☐ | |
+| Customer's screen | செலுத்த வேண்டியது | still to pay | ☐ | |
+| Customer's screen | புள்ளிகள் பெற்றீர்கள் / மொத்த புள்ளிகள் | points earned / in all | ☐ | |
+
+**Kept in English on purpose**, on every lane - not for changing: TAX INVOICE, BILL OF SUPPLY and
+CREDIT NOTE (the documents' names in GST law), CGST, SGST and IGST, `** REPRINT **` (a mark that
+must be read at a glance, by anyone), and Cash, Card and UPI (what the shops call them).
+
+**Result:** ALL AGREED / CHANGES WANTED  Owner: ____________________  Notes: ________________
+
+---
+
 ## Sign-off
 
-All four peripherals PASS, and the sale above completed end to end:
+All four peripherals PASS, the sale above completed end to end, and the owner has gone through the
+words:
 
 Lane id: ______________  Machine: ______________________
 

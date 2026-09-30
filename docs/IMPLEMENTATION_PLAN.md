@@ -420,7 +420,8 @@ The 25 findings left open or partly fixed, all done.
 - **Paper and the customer's screen:**
   - The standard bill prints its total in double height.
   - A Tamil lane's Z report and customer display are in Tamil; the new words are to be checked
-    with the pilot shop.
+    with the pilot shop, on the sign-off sheet (`deploy/HARDWARE_SIGNOFF.md`, "The shop's own
+    words").
   - The customer display shows a first name only, and points only when a sale changed them.
 
 **Gate:** 734 app tests and 1,505 core tests pass. New tests cover:
@@ -451,6 +452,12 @@ Four things left after the review, all small:
   in the label instead of in the figure font.
 - **The labels due come into view** once a price sheet is loaded, since printing them is the next
   thing to do.
+
+What cannot be settled here is settled at the pilot shop. The hardware sign-off sheet now ends with
+**the shop's own words**: every word chosen without the shop - khata, hold, and the Tamil of the day-end
+report, the slips and the customer's screen - with where it appears, a box to tick, and room for the
+shop's word, and the words kept in English on purpose with the reason. The customer's display and
+the UPI code were already on the sheet (sections 5 and 6); both need the real equipment.
 
 **Gate:** 736 app tests and 1,506 core tests pass. New tests cover the khata pane's size from cash
 to UPI, the close-day returns row, and "park" anywhere in the source. The acceptance run passed all
