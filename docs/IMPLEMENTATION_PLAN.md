@@ -349,6 +349,556 @@ to collect it from. On the owner's screen it was counted as money on its way to 
 - The Tamil report and slip keep these labels in English, like the tender names already were,
   rather than print Tamil composed here that no shopkeeper has checked.
 
+## The UI/UX review, a richer look, and charts for the owner — **complete** *(added 2026-09-30, approved: "give me rich look GUI and also plotly kind of charts for owner")*
+
+A review of every screen against usability and WCAG 2.1 AA found 36 problems: 4 critical, 13 major
+and 19 minor. It is published as a report with a screenshot and a fix for each. This work fixed or
+partly fixed 24 of them. It also gave both screens a new look, and gave the owner interactive charts.
+The report now carries the status of each finding. The 12 still open are mostly wording and the
+owner's forms. They are listed there rather than here.
+
+- **Theme** (`Theme.xaml`): one set of tokens, gradients, icons and control styles for every window,
+  with a focus ring on every control. Dark scrollbars, title bars (`DarkChrome`) and dialogs
+  (`ConfirmDialog`) replace every system message box.
+- **Till**:
+  - The scan box selects a code that matched nothing, and the till sounds.
+  - The message bar wraps, and shows each message's kind by colour and icon. It is drawn above the
+    panes, and `PaneScrim` keeps each pane clear of it.
+  - The keys along the foot can be clicked.
+  - HSN and barcode drop out of a narrow grid.
+  - The payment pane puts the UPI code beside the totals, and held bills no longer scroll sideways.
+  - The messages name the confirm key from the keymap.
+- **Owner**: `Pos.App.Charts`, drawn in `OnRender`, with no browser or package (ARCHITECTURE §6d).
+  - Takings with a 7-day average, and hours on two axes.
+  - The week as a heatmap, tenders and departments as donuts.
+  - A margin map, a points chart, and each customer's months.
+  - Every chart has a tooltip, legend toggles, zoom, a full keyboard path, a table view and PNG export.
+
+**Gate:** 689 app tests and 1,494 core tests pass. The 92 new tests cover:
+- message kinds, the unknown-scan event and the confirm key's name;
+- axes and figure formats, and each owner chart's data;
+- the chart's zoom, navigation, series toggles, description and table;
+- WCAG contrast for fields, message bars, cards, chart series and the pay button;
+- the payment pane staying clear of the message bar, the bill's columns filling the grid, and
+  clickable keys.
+
+The acceptance run passed 193 of 193 checks, with screenshots reviewed.
+
+### The rest of the review — **complete** *(2026-09-30, approved: "fix open and partly fixed issues")*
+
+The 25 findings left open or partly fixed, all done.
+
+- **Till:**
+  - A warning about the last sale stays above the message bar until the next bill starts, or
+    until the customer it says owes money pays some of it back.
+  - The khata payment pane puts its UPI code beside the tenders, so the card fits above the note
+    and the bar.
+  - The grid keeps its line total on a 1024 × 768 screen, and the layout tests now lay out at the
+    size they name (`Wpf.LayOutAt`) rather than at the test PC's screen size.
+  - `F1` lists every key, and every pane has a footer of its own keys.
+  - An order's unmatched lines stay under the bill until it is saved or Esc is pressed.
+  - Closing the day shows its figures in a pane.
+  - The side panel hides empty sections.
+  - The rate column is headed "Before GST".
+  - Tenders move with ← → too, and the loyalty hint appears only for points.
+  - "Close day" is marked as dangerous.
+  - The cash pane's title follows its step.
+- **Words:**
+  - One name for money owed, "khata", on screens, bills and reports.
+  - `Plural.Of` replaces every "(s)", and the verb after a count agrees with it ("1 row is
+    blank").
+  - One money, date and time format on screen (`Show`, `ShowConverter`, windows in `en-IN`).
+  - Shorter owner copy without file or column names.
+- **Owner's screen:**
+  - Names for every box, list and table.
+  - Red only for problems.
+  - Greyed buttons say what they are waiting for.
+  - Figures right-aligned and text trimmed in every table.
+  - An empty state on Maintenance, units as chips, and shelf labels on a card of their own.
+  - The department chart explains its round-off rather than showing a second total.
+  - The Tamil text preview says it is approximate.
+- **Paper and the customer's screen:**
+  - The standard bill prints its total in double height.
+  - A Tamil lane's Z report and customer display are in Tamil; the new words are to be checked
+    with the pilot shop.
+  - The customer display shows a first name only, and points only when a sale changed them.
+
+**Gate:** 734 app tests and 1,505 core tests pass. New tests cover:
+- the standing note (and its going once the customer pays), the close-day pane, the key sheet,
+  ← → on the tenders and the danger pill;
+- the khata payment pane with its UPI code clear of the note and the bar;
+- the side panel's sections, and screen-reader names on every till and owner input;
+- the grid at 1024 wide, and "(s)" anywhere in the source;
+- Tamil labels, the double-height total, the customer display's words and names, and the date
+  formatter;
+- the greyed buttons' explanations, the department note, and what a price sheet leaves alone.
+
+The acceptance run passed all 194 of its checks. Its screenshots found the khata pane running
+under the bar, which the layout test had not checked; that test now checks the whole card.
+
+## The shop-owner programme *(added 2026-09-29, approved: "I want to do all one by one")*
+
+Sixteen improvements, taken in dependency order so each builds on the last. Purchases comes first
+because expiry, reordering by supplier and paying suppliers from the drawer all need it.
+
+| # | What | State |
+|---|---|---|
+| 1 | Purchases and suppliers — bills, supplier khata, cost prices, input tax | **complete** |
+| 2 | Returns and credit notes | **complete** |
+| 3 | Days of stock left, and order lists by supplier | **complete** |
+| 4 | Expenses, the opening float, and cash in and out of the drawer | **complete** |
+| 5 | Price revisions in bulk, and shelf labels | **complete** |
+| 6 | Expiry alerts | **complete** |
+| 7 | Dead stock | **complete** |
+| 8 | Quick keys for loose produce | **complete** |
+| 9 | Scale barcodes (price or weight in the barcode) | **complete** |
+| 10 | Customer display | **complete** |
+| 11 | Phone and WhatsApp orders | **complete** |
+| 12 | UPI QR with the exact amount | **complete** |
+| 13 | Khata statements | **complete** |
+| 14 | Digital bills | **complete** |
+| 15 | Offers and schemes | **complete** |
+| 16 | B2B bills with the customer's GSTIN | **complete** |
+
+Every one keeps billing offline. Anything that touches the internet does so after the bill and
+outside it.
+
+## Purchases and suppliers — **complete** *(programme item 1, 2026-09-29)*
+
+The till knew what went out and nothing about what came in. Stock only rose when somebody corrected
+a count, cost prices were whatever the catalogue file last said, and what the shop owed its
+wholesalers was kept on paper.
+
+- **Suppliers** (migration 013) have a name, phone, GSTIN and state:
+  - A GSTIN is checked, check character included (`Gstin`), and decides the state.
+  - The state decides CGST and SGST, or IGST.
+  - A supplier with no GSTIN, or a composition dealer, charges no GST.
+- **A purchase bill** is typed off the supplier's paper: the rate before tax, with GST on top. It
+  goes through the same `TaxEngine` as a sale, so a purchase is rounded exactly as a sale is.
+  - The printed total is checked against the lines. Up to a rupee is a round-off; more is a line
+    typed wrong, and the bill will not save.
+  - Saving is one transaction: the bill, its lines, the shelf count of every counted item (a new
+    `Purchase` reason, and a restock for full levels), and each item's cost price, tax inclusive
+    like the selling price it is compared with. An item that now costs more than it sells for is
+    named.
+  - An uncounted item is not given a count by a delivery.
+  - The same bill number twice from one supplier is refused.
+  - A bill entered wrongly is cancelled, not deleted: it takes back exactly what its receipt put on
+    the shelf (`stock_moved`, per line), stops being owed, and can then be entered again.
+- **The supplier khata** mirrors the customer one. What is owed is never stored: it is the bills
+  not cancelled, less the payments, in exact paise. Payments are by cash from the till, other cash,
+  UPI, bank or cheque, and never more than is owed.
+- **Cash moved through the drawer.** A new `cash_movements` table holds cash in or out of the
+  drawer other than through a sale. Each row is claimed by the close that reports it, like invoices
+  and credit repayments. A supplier paid from the till is the first kind:
+  - The day-end report takes it off *cash in drawer should be* and prints it on its own line.
+  - A reprint still works out change given correctly.
+  - A day with no sales but a supplier paid still reports the drawer.
+
+  The expenses and float in item 4 will add further kinds to the same table.
+- **Input tax.** The GST export adds the month's purchase bills by bill date:
+  - input tax by rate, from GST-registered suppliers, for GSTR-3B;
+  - a purchase register CSV for matching against GSTR-2B;
+  - a note on bills that carry no GST.
+- **The owner's screen** lists its sections down the left now. Nine did not fit across a
+  1366-wide screen on one row, and more are coming. **Purchases** is `Ctrl+9`, with a keyboard path
+  through a whole delivery.
+
+## Bills to businesses with their GSTIN — **complete** *(programme item 16, 2026-09-29)*
+
+A business buyer could not get a bill it could claim tax on: nothing on the till knew a GSTIN, and
+every sale went into the return as B2CS.
+
+- **Customers can be businesses** (migration 019: `customers.gstin`, unique, and `address`).
+  `ICustomerStore.SetBusiness` checks the GSTIN (`Gstin.Problem`, check character included) and
+  refuses one another customer has. **The GSTIN sets the customer's state**, so the existing
+  inter-state rule taxes them: another state is IGST. `FindByGstin`; F7 finds a business by its
+  GSTIN too.
+- **The bill keeps the buyer as it was** (`invoices.buyer_gstin`, `buyer_name`, `buyer_address`;
+  `SaleDraft.Buyer`, a `BusinessBuyer`). This is copied at checkout like an item's name and HSN, so a
+  business that moves or is forgotten does not change a bill already issued.
+- **On paper** — both layouts, the WhatsApp bill and the A4 invoice — the buyer prints as *Bill
+  to*: name, GSTIN, address and the place of supply (`GstStates`: the GSTIN's state). Labels come in
+  English and Tamil.
+- **At the till** `Ctrl+G` takes the GSTIN, then the address, for the customer on the bill. It
+  re-taxes the bill at once and says whether it is now IGST. With the box emptied it takes the
+  GSTIN off. The owner's Customers tab does the same (`Alt+D`).
+- **The return** splits on the snapshot, not the customer:
+  - **B2B**: bill by bill and rate by rate, with the GSTIN, name, value and place of supply;
+  - **CDNR**: credit notes against those bills, note by note, netted out of nothing else;
+  - **HSN (B2B)**: its own summary, beside the existing `hsn(b2c)`;
+  - **the nil table's registered rows**, from 0% supplies to businesses.
+
+  B2CS, B2CL, CDNUR, the unregistered nil rows and the B2C HSN summary now hold only bills without
+  a GSTIN, so a large bill to a business is B2B, never B2CL. The files gain `b2b.csv`, `cdnr.csv`
+  and `hsn(b2b).csv`. Warnings name any GSTIN on a bill that does not check out, and say to file B2B
+  on time, because the buyer's credit depends on it.
+
+**The programme is complete.** All sixteen items are built, each with its tests and its acceptance
+steps, keeping billing offline throughout.
+
+## Offers and schemes — **complete** *(programme item 15, 2026-09-29)*
+
+Schemes were run from memory and a calculator, one F4 at a time, and nobody could say afterwards
+what an offer had cost.
+
+- **`Offer`** has six kinds:
+  - buy N get M;
+  - a percentage off an item or a department;
+  - N for a price;
+  - money off, or a percentage off, a bill of a given sum;
+  - a free item with a bill of a given sum.
+
+  Each can have dates and days of the week, and `Problem()` says why a row cannot run.
+- **`OfferEngine.Work`** is a pure function of the lines, the offers and the day. **Every offer
+  comes out as a line discount**, so the GST engine's `gross = qty × price − discount` taxes what
+  was actually charged: no new tax path, nothing approximated. The rules:
+  - a line discounted by hand is never touched (`InvoiceLine.IsDiscountedByHand`; `F4` to `0` gives
+    it back);
+  - each item gets the one item offer that gives most. Buy-get and multi-price are for whole
+    pieces, and buy-get fills from the last line, so the third soap scanned is the free one;
+  - a free item needs the rest of the bill to reach its sum;
+  - then comes the one bill offer the bill qualifies for **after** its item offers. It is spread
+    across the open lines in proportion to what is left on each: rounded half-to-even to the
+    paisa, with the remainder on the line with most room, so the shares add up exactly.
+- **At the till** the engine runs at the start of every `RefreshTotals`, so every change re-prices
+  the bill — but never while taking payment. A newly applied offer is said on the status line. The
+  line carries `OfferName` (migration 018: `invoice_lines` and `held_bill_lines.offer_name`). The
+  receipt, the WhatsApp bill and the A4 invoice name it under the line.
+- **The offers sheet** (`OfferSheet`) is the whole list. It is loaded from the Catalogue tab (`Alt+O`
+  / `Alt+D`), all or nothing, with a line and column for every problem and examples marked `#`.
+  The till is handed the new list at once. The card shows each offer's state today and what it gave
+  in 30 days (`IOfferStore.Given`, from the stored lines).
+- `pos offers [--sheet] [--load --yes] [--try "SKU:qty ..."]`.
+
+## Digital bills — **complete** *(programme item 14, 2026-09-29)*
+
+Customers asked for the bill on their phone, and the shop had only paper to give.
+
+- **`DigitalBill.Text`** is the settled bill as a WhatsApp message. It carries what the paper
+  carries: the shop and GSTIN, tax invoice or bill of supply (with the declaration), the number and
+  time, each line with quantity, rate, HSN and GST, the taxable value and the tax by rate, the
+  round-off, the total, how it was paid, the saving and points. It is read from the stored lines.
+- **`DigitalBill.WhatsAppLink`** builds `whatsapp://send?phone=91…&text=…`, turning a ten-digit
+  mobile into its country code. **The till sends nothing**: WhatsApp on the same computer opens at
+  the customer's chat with the bill typed in, and the cashier sends it.
+  - `ShellLinks` first asks Windows whether anything handles the scheme (`AssocQueryString`).
+    Windows otherwise answers an unhandled link with a Store dialog and reports success.
+  - With no WhatsApp, `openWhatsApp: false`, or no number, the bill goes on the clipboard.
+- **`Ctrl+W`** works in three places:
+  - in the payment pane, *no paper* for this bill. `CheckoutService.Complete(printReceipt: false)`
+    stores and numbers the invoice exactly as before, prints nothing, and it is sent at once;
+  - after a sale, the bill just settled;
+  - in `Ctrl+P`, the bill found.
+
+  Abandoning the payment forgets the choice.
+- **`InvoicePage`** is the same bill as a full A4 tax invoice or bill of supply:
+  - each line with HSN, rate, discount, taxable value, GST rate, and CGST/SGST or IGST;
+  - totals, a tax table by HSN and rate, and the place of supply (`GstStates`);
+  - the total in words, the Indian way (`AmountInWords`: crore, lakh, thousand).
+
+  It is saved from the owner's Customers tab (a customer's recent bill, `Alt+B`) and by
+  `pos bill --out`. Item 16 builds on it.
+- `pos bill [--no N] [--out file.html]`.
+
+## Khata statements — **complete** *(programme item 13, 2026-09-29)*
+
+A customer who asks what they owe, and why, was shown a number. Now the shop can hand them, or send
+them, the whole account.
+
+- **`KhataStatement`** is built from `ICreditStore.Ledger` — store credit on bills not voided,
+  repayments, and credit notes refunded to the khata. These are the same three sources as the
+  balance, so a statement always closes on what the till says they owe. Nothing is stored.
+  - It gives the opening balance, each line with the balance after it, totals by kind, the last
+    payment, and **ageing**. Payments clear the oldest bills first, so what is owed is the newest
+    bills. They are bucketed 0–30, 31–60, 61–90 and over 90 days, and the oldest unpaid bill says
+    how long the customer has been behind.
+  - `SinceLastClear` is the counter's statement: everything since the balance last came down to
+    nothing, so it adds up from zero.
+    - It is cut to the newest 60 lines, the rest folded into the opening balance.
+    - A khata that is clear gives an empty statement, even if it was bought and paid off earlier
+      the same day.
+- **On paper** (`ComposeKhataStatement`), in English or Tamil: the ledger with running balances, the
+  totals, the ageing, and a UPI code for the whole balance when the shop has an ID. It says it is not
+  a bill.
+- **At the till**, `Ctrl+K` does it for the customer picked in `F8` or attached to the bill. It
+  prints the statement and copies a message of it to the clipboard for WhatsApp; nothing changes.
+- **Paying back by UPI.** In `F8`, picking UPI shows a code for what is owed, or for the amount
+  typed. It carries a `Khata <mobile>` note, so the shop can tell in its own app whose money it was.
+  The customer's screen shows it only while they are paying; what a customer owes is otherwise never
+  put on a screen the queue can read.
+- **The owner's Customers tab** saves a statement as an A4 page (`KhataStatementPage`, with an SVG
+  code) and copies the message. It also saves one page for everybody who owes, for the month-end
+  round.
+- `pos statement --mobile N [--from --to] [--print] [--out]` and `pos statement --owing`.
+
+## UPI QR with the exact amount — **complete** *(programme item 12, 2026-09-29)*
+
+A shop's printed QR stand makes the customer type the amount, and 40 for 400 is a conversation at
+the counter. The till now shows a code with the amount already in it.
+
+- **`QrCode`** (Pos.Core.Hardware) is written from ISO/IEC 18004, not taken from a library or the
+  printer:
+  - byte mode, level M, versions 1 to 20 (666 bytes);
+  - Reed-Solomon over GF(256), block interleaving, the zig-zag placement, and all eight masks,
+    chosen by the standard's penalty rules.
+
+  One symbol serves the paper, the preview and the screen.
+- **How it is checked.** The tests hold the parts to the standard:
+  - the Reed-Solomon bytes against the standard's worked example;
+  - the format bits against its table for every mask;
+  - the block table against the symbol's geometry.
+
+  Then an independent decoder (ZXing.Net, in the test project only) must read back exactly what
+  went in: at every size, under every mask, from the printer's dots and from a whole drawn slip.
+- **`UpiLink`** builds `upi://pay?pa=…&pn=…&am=…&cu=INR` with the amount to the paisa and a decimal
+  point whatever the machine's language. A merchant UPI ID (`merchantCode`) also gets `mc`, and a
+  `tr` reference fixed for the whole payment; a personal one gets neither, since some apps refuse it.
+- **At the till.** Picking UPI in the payment pane shows the code:
+  - for everything still due, or for the amount typed;
+  - never for more than is due;
+  - with a line saying why when there is none.
+
+  The customer's screen shows it large in place of the lines. `Ctrl+Q` prints it on a slip that
+  says it is not a bill. The cashier still takes the payment with `Enter` once the customer's app
+  shows it paid: the till cannot see the bank and does not pretend to.
+- **Settings.** A `upi` section:
+  - `id` is set from the owner's Settings tab (`Alt+U`), and an empty box turns the code off;
+  - `name` defaults to the store's name;
+  - `merchantCode` is optional.
+
+  An id that cannot be a UPI ID stops the lane starting.
+- `pos upi --amount N [--print] [--png]`, to check the ID with a real phone before a customer does.
+
+## Phone and WhatsApp orders — **complete** *(programme item 11, 2026-09-29)*
+
+Orders came in on WhatsApp and the phone and were written on paper, then rung up item by item when
+the customer came. Nothing on the till knew an order was waiting.
+
+- **`OrderText`** reads a message into lines: one item a line, or a list split at commas and
+  semicolons. It skips greetings, bullets and numbering. The count comes from a multiplier
+  (`x 2`), then from a number with a unit beside it (`2 kg`, `500g`, `1/2 kg`, `1 ltr`), then from
+  a bare number at either end. `Resolve` looks each line up with the till's own search:
+  - a weight against something sold by the kilo or litre is the quantity (500 g is 0.5);
+  - a weight against a packet is its size, and is looked up again with the size in it, counted as
+    one;
+  - a count against a packet is rounded to a whole one.
+- **`Ctrl+O`**, with the bill empty, takes the pasted or typed order onto the bill and says which
+  lines it could not find. With a bill on screen and a customer attached, it saves the bill as an
+  order.
+- **An order is a held bill that is meant to wait.** Migration 017 gives `held_bills` an
+  `order_kind` (phone or WhatsApp) and an `order_note`:
+  - `F6` lists orders first, the oldest at the top, then parked bills, the newest first as before.
+  - A recalled order says what it was, and parking it again keeps it an order.
+  - Paying for it is an ordinary checkout, so no sale, invoice number, stock or tax exists until
+    then.
+- **A reply to send.** Saving copies a short confirmation (shop, items, total, the note, the token)
+  to the clipboard for the cashier to paste into WhatsApp. Nothing is sent from the till.
+- **The day end** counts orders apart from parked bills: *N order(s) waiting*, without the advice
+  to recall or discard them. Closing the day leaves them in place.
+
+## Customer display — **complete** *(programme item 10, 2026-09-29)*
+
+The customer could not see what was being rung up. A second screen or a pole display facing them is
+the cheapest check on a mistake at the counter there is.
+
+- **`CustomerDisplayViewModel`** follows the till - it watches, never drives - through four states:
+  *Welcome* (empty), *Bill* (each item as it goes on, the latest last, the total and the saving),
+  *Paying* (total, paid, balance, then change) and *Thanks* (the change, until the next bill starts).
+- **A second monitor** (`customerScreen`): `CustomerDisplayWindow`, shown without activation on
+  whichever monitor is not the primary, filling it, never focusable - it cannot take a keystroke
+  meant for the till. One monitor: nothing, and a line in the log.
+- **A pole display** (`polePort`, `SerialPoleDisplay`): the common two-line, twenty-column serial
+  display - form feed to clear, `US $` to move to the second line, text reduced to ASCII and padded.
+  Written only when its two lines change. Unplugged is reported, never thrown.
+- `pos test-hardware --pole`, and a section in the hardware sign-off sheet.
+
+## Scale barcodes — **complete** *(programme item 9, 2026-09-29)*
+
+A label-printing scale puts the item and its weight or price in an EAN-13, and the till read it as
+an unknown barcode.
+
+- **`ScaleBarcodeFormat`** reads an in-store code (GS1 keeps 20-29 for use inside a shop, so no
+  product barcode is one): prefix, item code, value, check digit. The layout is the shop's setting
+  (`scaleBarcode`), defaulting to 2 + 5 + 5 with a weight in grams, and checked at startup to make
+  an EAN-13. A check digit that disagrees is a misread and is not guessed at.
+- **Weight** is the quantity. **Price** is divided by the item's price and rounded up to a gram, and
+  the part of a paisa-worth that adds comes off as a line discount, so the line comes to the label
+  to the paisa through the ordinary tax engine.
+- **At the till**, read before the ordinary barcode lookup, scanned or typed. The item is its SKU,
+  with or without the scale's leading zeros. A code the catalogue lacks, a weight for something sold
+  by the piece, or a price that is not a whole number of pieces, is refused with why.
+
+## Quick keys for loose produce — **complete** *(programme item 8, 2026-09-29)*
+
+Loose produce has nothing to scan, so every kilo of onions was a typed search and an F3.
+
+- **`F11`** (`PosAction.QuickKeys`) opens the loose items - active, no barcode - on keys `1`-`9`,
+  `0`, `A`-`N` (`ItemRepository.LooseItems`).
+- **Chosen from the sales, not set up**: the most bills in the last four weeks first, so the keys
+  follow the season with no setting to keep up.
+- **One keystroke picks** (the box reacts to the key as it is typed), then a quantity and `Enter`,
+  or `Enter` for one. A whole-unit item refuses a fraction. The arrows and `Enter` pick as well, and
+  a click. `Esc` steps back. It adds to the open bill like a scan.
+- `F1` is now the key the keymap test proves unbound; `F11` was.
+
+## Dead stock — **complete** *(programme item 7, 2026-09-29)*
+
+The reorder list said what was running out. Nothing said what was not running out at all, and a
+shelf of something nobody buys is money the shop cannot spend.
+
+- **Dead** (`DeadStock`, `DeadStockRepository`) is counted, more than nothing on the shelf, and not
+  sold on a bill that stands for 60 days. Never sold counts once the item has been in the shop longer
+  than that: its first purchase bill, or its first price (recorded when it was added, migration 016).
+- **Most money first**: what is tied up at cost, from the latest purchase bill or the catalogue. An
+  item without a cost goes last, longest unsold first.
+- **What to do** is said per row: never sold - return it or stop ordering; over 120 days - put it on
+  offer; otherwise move it to the front or stop ordering it.
+- **Where**: the Stock tab's fourth list, *Not selling* (`Alt+D`), and `pos dead-stock [--days]`.
+  The order list already leaves out anything not selling unless it is low.
+
+## Expiry alerts — **complete** *(programme item 6, 2026-09-29)*
+
+Purchase bills recorded a batch and a use-by date per line since item 1, and nothing read them.
+
+- **What is on the shelf is worked out, not tracked** (`Expiry.For`). The till counts stock, not
+  batches. A shop sells oldest first, so the units on the shelf now are the most recent deliveries:
+  the count is laid against the deliveries newest first, dated or not, and a delivery gets what is
+  left of the count when it is reached. A delivery the count does not reach has been sold, as far
+  as the books can tell. It is said as an estimate; correcting the count after old stock is taken
+  off the shelf is what takes it off the list.
+- **An uncounted item** has no count to lay out, so its dated deliveries are listed while the date
+  is recent (up to 30 days past), with *not counted* in place of a quantity.
+- **Where it is said** (`ExpiryRepository`, `Expiry.WarnDays` = 30):
+  - the Stock tab's third list, *Near its date* (`Alt+X`), with batch, supplier, days left, likely
+    on the shelf and what to do; the reorder list's line counts them;
+  - the day-end report's foot, *CHECK THE DATES*, for what is past or within a week, on the
+    original only, like the reorder list;
+  - the till, on scanning an item with a delivery at or past its date: *Check the date* appended to
+    the status line. Never a refusal, and a failed read costs the note, not the scan;
+  - `pos expiring`.
+- **Found on the way:** an access key used twice does nothing but move focus. The price sheet had
+  Alt+P beside the header's *Save as a web page*, and *Test the printer* had it too. A test now
+  walks every owner tab for clashes; the header is Alt+V.
+
+## Price revisions in bulk, and shelf labels — **complete** *(programme item 5, 2026-09-29)*
+
+A price revision meant re-importing the whole catalogue with every column. And a price changed in
+the till was not changed on the shelf, which is what the customer reads.
+
+- **The price sheet** (`PriceSheet`, Catalogue tab `Alt+S` / `Alt+L`, `pos price-sheet`) is the
+  stock sheet's twin: the shop's own items with cost, MRP and price, and two empty columns. Loading
+  it changes only prices, all or nothing:
+  - above the MRP, not a price, or finer than a paisa is refused, as is an MRP lowered beneath the
+    current price without the price;
+  - below cost, or a move of more than half, is named before loading as a likely typo, and allowed;
+  - a price changed since the sheet was checked is not written over (compared in whole paise).
+- **Every price change is recorded by the database** (migration 016: `price_changes`, filled by
+  triggers on `items`). The sheet, a catalogue re-import and a new item all land there without any
+  of them having to remember to; the same price written as `45` and `45.00` is not a change.
+- **Labels due** are items with a change not yet labelled. Printing or saving marks them done; a
+  print that failed leaves them due.
+- **On the till's printer** (`ShelfLabelComposer`): one label per cut with the name, MRP, the
+  saving, the price double size, and a barcode the printer draws itself (`ReceiptBuilder.Barcode`,
+  ESC/POS `GS k`): EAN-13 for a valid retail code, Code 128 for a SKU. Tamil on a Tamil lane.
+- **On A4** (`ShelfLabelPage`): three across, to cut out, with EAN-13 drawn as SVG bars from the
+  published symbology (`Ean13`), so a label printed on any printer scans.
+
+## Expenses, the opening float, and cash in and out — **complete** *(programme item 4, 2026-09-29)*
+
+The drawer figure on the day-end report was cash taken less change, and the runbook told the
+cashier to take their float off the count by hand. Tea, the auto and the electricity bill were
+nowhere, so the owner's profit was before every running cost.
+
+- **At the till, `Ctrl+M`** (`PosAction.CashDrawer`, *M for money*): the opening float, an expense
+  paid from the drawer, an expense paid from outside it (bank, UPI, own cash), cash put in, cash
+  taken out. Pick with the arrows, type the amount, `Enter`; an expense then picks its category,
+  and cash taken out must say where it went. The drawer opens for anything that moves cash.
+  Refused while a bill is on screen. It opens on the float when none is recorded since the close.
+- **Stored** (`CashDrawerRepository`, migration 015): anything that moves cash is a row in
+  `cash_movements` (kinds `Float`, `Expense`, `CashIn`, `CashOut`, beside `SupplierPayment` and
+  `Refund`), so the day-end report, its reprint and the cashier split already account for it. Every
+  expense is also a row in `expenses`, with where it was paid from; one paid from the drawer is
+  linked to its movement, written in one transaction.
+- **The day-end report** prints each kind on its own drawer line, and *cash in drawer should be*
+  now includes the float, so the whole drawer is counted against it.
+- **The owner's figures** show the period's expenses by category, wherever paid from, and — where
+  items carry a cost — what the shop earned after them. The dashboard page has them too.
+- **Categories** are a fixed list in the words a shop uses (`ExpenseCategories`), with *Other*.
+
+## Days of stock left, and order lists by supplier — **complete** *(programme item 3, 2026-09-29)*
+
+The Stock tab said what was low. It did not say how long anything would last, or what to order,
+and an owner writing the order out had to remember who they last bought each thing from.
+
+- **The rate** (`Reorder`, `SalesRateSql`) is what went out over the last 28 days on bills that
+  stand, less what came back on credit notes, per day. Four weeks takes in each weekday four times.
+  A lane selling for fewer days is measured over the days it has, not diluted over 28. Every lane's
+  sales in the database count: they empty the same shelf.
+- **Days left** is the shelf over the rate, to a tenth of a day, and is on the Stock tab. Something
+  that has not sold has none, rather than infinity.
+- **What to order** covers the owner's days (14 unless changed, `orderCoverDays`, 1 to 120):
+  - `rate × days − shelf`, and never less than what gets back to a reorder level;
+  - something not selling is ordered only when the low rule says so, back up to full;
+  - rounded up to whole units, because a wholesaler sells a kilo, not 0.7 of one.
+- **From whom** (`OrderListQuery`): the supplier on the item's latest purchase bill that stands,
+  with the rate paid then for an estimate before tax. Items never bought on a bill are listed
+  together at the end, rather than left off.
+- **The Orders tab** (`Ctrl+0`, the tenth section) lists the suppliers most urgent first and each
+  one's items soonest to run out first. **Copy** puts one supplier's order on the clipboard as a
+  message to paste to them; **Save** writes the whole list as a CSV. Sending is the owner's, from
+  their own phone: nothing leaves the till. `pos order-list [--cover] [--out]` does the same.
+
+## Returns and credit notes — **complete** *(programme item 2, 2026-09-29)*
+
+Returns were out of scope for the pilot (see Phase 6), and a void stops working once the day is
+closed. A customer bringing a packet back had no answer in the software at all.
+
+- **A credit note is its own document** (migration 014: `credit_notes`, `credit_note_lines`). The
+  bill is never touched. Each note names the bill and its date, reverses the tax at the split the
+  sale charged, and says how the money went back.
+  - Numbered in a series of its own per lane and financial year, `CN/26-27/L1-1`, from the same
+    gapless sequence table as bills under the key `CN:` and the lane. Short enough for GSTR-1's
+    sixteen characters.
+  - Each line records which line of the bill it returns, so nothing comes back twice. The issue
+    re-reads what is left inside its own transaction and refuses a return worked out before another
+    one landed.
+- **The tax comes back exactly** (`CreditNoteLine.Price`):
+  - A part return goes through `TaxEngine` like the sale, with the line's discount shared in
+    proportion, banker's rounding to the paisa.
+  - The return that brings a line back to nothing is not priced at all: it is the figures stored
+    with the sale less everything already credited. Priced afresh, three returns of one from a line
+    of three (₹100 at 5%) would credit 7.14 of SGST against 7.15 charged.
+  - A lane that settles to the rupee refunds to the rupee.
+- **What a return changes**, in one transaction with the note:
+  - The shelf: a `Return` movement, unless the line was marked damaged.
+  - The drawer: a cash refund is a `Refund` row in `cash_movements`, so the day-end report and a
+    reprint already account for it.
+  - The khata: a refund *off the khata* reduces what the customer owes, never below nothing. What
+    is owed is still read from the books — the one definition in `CreditRepository` subtracts it —
+    and the khata lists it as *Goods returned*.
+  - Points: earned points come back off in proportion to the money, worked cumulatively so part
+    returns add up to exactly what the sale earned.
+- **A bill with a credit note against it cannot be voided**, or the refund would come off twice.
+- **The day-end report** gains *Returns*: count, value refunded, tax reversed and net after
+  returns, beside the sales rather than netted into them, so the reconciliation lines still hold.
+  Each note is stamped by the close that reports it.
+- **The GST return** is net of the month's credit notes, by the date of the note: B2CS rates, nil
+  rated and the HSN summary. Notes against a large inter-state bill are listed on their own
+  (CDNUR). The credit note run is listed under *Documents issued*. A rate whose returns exceed its
+  sales is flagged, since the portal may refuse a negative B2CS row.
+- **At the till**, `F9` (`PosAction.ReturnGoods`): bill number or `Enter` for the last bill; a
+  quantity per line, `d` for damaged, `a` for all of a line, `*` for the whole bill, `Delete` to
+  undo a line; then the refund and an optional reason. `Esc` backs out a stage at a time. Refused
+  while a bill is on screen.
+- `pos credit-note <number> [--reprint]` reads one back.
+
+Found on the way:
+- **Points were floored a point short.** 6 × (100 / 300) in decimal is 1.999…, which floors to 1.
+  Multiplied first it is 2. A test caught it.
+- **The return list scrolled sideways** with a long item name; the layout test added for the pane
+  caught it before a screenshot did.
+
 ## Low stock as a share of full, and the stock sheet — **complete** *(added 2026-09-28, approved)*
 
 An item warned only at a reorder level the shop had typed for it, so a catalogue without two
@@ -569,6 +1119,7 @@ Decisions taken:
   reported loudly, because the day's books are exactly what a lost file costs.
 - **Returns and refunds are out of scope for pilot V1**, by decision. They carry real GST
   consequences (credit notes, reversing tax on a settled invoice) and will be specified separately.
+  *(Since done: see Returns and credit notes, programme item 2.)*
 - Added `IItemStore` and moved catalogue import into the domain layer, so it can apply domain rules
   — GST slabs, barcode check digits, MRP — without the data layer depending on the hardware layer
   where the barcode rules live.
@@ -588,7 +1139,7 @@ Four things a pilot would have exposed, none of them in the SRS.
 Decisions taken:
 - **A void may only happen before the day is closed.** Once an invoice has appeared on a Z-report
   its figures have been printed and filed, and changing them alters a number somebody has already
-  acted on. That correction is a credit note, which is out of scope. Enforced in the repository
+  acted on. That correction is a credit note (programme item 2). Enforced in the repository
   inside the same transaction as the check, so a close cannot land in between.
 - **The invoice stays and the number stays used.** A number that vanished is harder to explain than
   one that is visibly void, and a GST run has to be unbroken.

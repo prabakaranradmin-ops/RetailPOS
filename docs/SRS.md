@@ -20,6 +20,7 @@
 
 ### 2.2 Invoice line grid
 - Columns: item, HSN, barcode/batch, qty, unit, MRP, unit rate (tax-exclusive), discount, CGST%, SGST%, IGST%, tax amount, line total (tax-inclusive).
+  - *As built:* the per-line tax columns are on the printed invoice and the day-end report rather than the till screen. The unit rate is headed "Before GST" ("Price" on a composition lane). On a narrow screen the grid drops, in order, HSN and barcode (under 1,000 units wide) and then the unit rate (under 720 units, a 1024 × 768 till) so the line total is never cut off; all of them stay on the printed bill.
 - Full keyboard navigation across rows and editable cells (qty, discount).
 - Quick increment/decrement of quantity on the selected line via a keypress.
 
@@ -31,7 +32,7 @@
 - Internal precision: 4 decimal places. Presentation: 2 decimal places, banker's rounding (round-half-to-even) — this matches standard accounting practice for GST invoices and avoids systematic rounding bias across many transactions.
 
 ### 2.4 Multi-tender payment
-- Tender types: cash, card, UPI/QR, store credit account.
+- Tender types: cash, card, UPI/QR, store credit account (shown and printed as "Khata", the shop's word for it).
 - Split tender across multiple types in one transaction.
 - Cash: compute change due, validate tendered ≥ total due.
 - Cash drawer kick triggers on cash tender confirmation.

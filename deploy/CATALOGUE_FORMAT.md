@@ -258,3 +258,47 @@ plain text, which is faster.
 With `printerRasterMode` set to `Never`, a Tamil name prints as question marks. Check a catalogue
 with Tamil names by running `pos receipt-preview --png receipt.png`, or **Ctrl+4** then **Alt+W** on
 the owner's screen, and looking at the image.
+
+## Changing prices only: the price sheet
+
+For a price revision you do not need the whole catalogue file. On the owner's screen, **Ctrl+3**,
+`Alt+S` saves a price sheet of your own items — `sku`, `name`, `unit`, `gst_rate`, `cost_price`,
+`mrp`, `selling_price` — with two empty columns, `new_mrp` and `new_selling_price`. Fill in only the
+prices that change and load it back with `Alt+L`. Only `sku`, `new_mrp` and `new_selling_price` are
+read; everything else about the items stays as it is. A price above its MRP is refused, and a sheet
+with any mistake in it changes nothing.
+
+## Offers and schemes: the offers sheet
+
+On the owner's screen, **Ctrl+3**, `Alt+O` saves the offers sheet: the shop's offers, one a row,
+or — with none yet — one example of each kind, each named starting with `#` so it is skipped. Copy
+an example row, take the `#` off, change it, save as CSV, and load it back with `Alt+D`. **The sheet
+is the whole list**: loading it replaces every offer, so a row taken out ends that offer. A sheet
+with any mistake in it changes nothing and says which line and column.
+
+| Column | For |
+|---|---|
+| `name` | What it is called — on the screen, on the bill, in the figures. Each offer its own name. |
+| `kind` | `BuyGet`, `Percent`, `MultiPrice`, `BillAmount`, `BillPercent` or `FreeItem` |
+| `sku` | The item it is on (every kind but a department `Percent` and the bill offers) |
+| `category` | The department a `Percent` offer is on, instead of an item |
+| `buy`, `get` | `BuyGet`: buy 2 get 1. `MultiPrice`: how many for the price |
+| `percent` | `Percent`, `BillPercent`: `10` for 10% |
+| `amount` | `BillAmount`: money off |
+| `price` | `MultiPrice`: what all of them come to — 3 for `100` |
+| `min_bill` | `BillAmount`, `BillPercent`, `FreeItem`: the smallest bill it is for |
+| `free_qty` | `FreeItem`: how much of the item is free |
+| `from`, `to` | The dates it runs, `2026-10-01` or `01-10-2026`; empty for always |
+| `days` | Days of the week it runs, `Wed` or `Sat Sun`; empty for every day |
+
+How the till works them out, on every bill as it is rung up:
+
+- Each is a **discount on the lines it applies to**, so the GST is on what the customer paid — the
+  same rule as a discount given with `F4`. The bill shows it under the line, with the offer's name.
+- Each item gets the **one** item offer that gives the customer most. Buy-get and so-many-for-a-
+  price are for items counted in pieces, not weights. A buy-get free item is the last one scanned.
+- Then the **one** bill offer the bill is big enough for — after its item offers — that gives most,
+  spread across the lines in proportion to what each comes to, to the paisa. A free item needs the
+  rest of the bill to reach its sum; the gift does not count towards itself.
+- A line discounted by hand with `F4` is **never touched** by an offer. `F4` back to `0` gives it back
+  to the offers.

@@ -160,6 +160,26 @@ Weight used: ______ kg   Weight shown: ______ kg   Settles in: ______ seconds
 
 **Result:** PASS / FAIL  Notes: ________________________________________
 
+## 5. The customer's display (if the lane has one)
+
+- [ ] Pole display: `pos test-hardware --pole` shows `DISPLAY TEST` and `TOTAL 1,234.50` on its two lines
+- [ ] Second screen: with `customerScreen` on, starting the till puts *Welcome* on the second
+      monitor, and the till keeps the keyboard
+
+**Result:** PASS / FAIL / NOT FITTED  Notes: ________________________________________
+
+## 6. The UPI code (if the shop's UPI ID is set)
+
+- [ ] `pos upi --amount 1 --print` prints a slip headed **SCAN TO PAY BY UPI**, with Rs 1.00 above
+      the code
+- [ ] A phone's UPI app scans the printed code and shows **the shop's own name and ₹1.00** —
+      then back out. **Do not pay it.**
+- [ ] On the till, `F12` on a bill, `↓` to UPI: the code shows with the amount due. On a lane with
+      a customer's screen, it shows there too, large, and a phone scans it from the customer's side
+      of the counter
+
+**Result:** PASS / FAIL / NOT SET  Notes: ________________________________________
+
 ---
 
 ## A real sale

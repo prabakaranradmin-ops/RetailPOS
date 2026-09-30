@@ -1011,7 +1011,7 @@ function renderStock() {
   const none = low.filter(r => r.have === 0).length;
 
   $('stockHead').textContent = low.length
-    ? low.length + ' item(s) to reorder, ' + none + ' of them with none left.'
+    ? low.length + (low.length === 1 ? ' item' : ' items') + ' to reorder, ' + none + ' of them with none left.'
     : 'Nothing needs reordering.';
 
   const show = (state.stockFilter === 'low' ? low : rows)

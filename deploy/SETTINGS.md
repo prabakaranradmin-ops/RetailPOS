@@ -61,6 +61,77 @@ stops the lane starting with a reason.
 The owner changes it on the owner's screen: **Ctrl+D**, **Ctrl+5**, **Alt+W**, type the share,
 **Enter**. The reorder list, the day-end report and the till's *"Only 3 left"* all follow it at once.
 
+## Labels from the shop's own scale
+
+A weighing scale that prints labels puts the item and its weight — or its price — into the barcode.
+`scaleBarcode` says how this shop's scale lays it out:
+
+```json
+"scaleBarcode": {
+  "prefixes": ["20", "21", "22", "23", "24", "25", "26", "27", "28", "29"],
+  "itemDigits": 5,
+  "valueDigits": 5,
+  "value": "Weight",
+  "decimals": 3
+}
+```
+
+That is the default, and the commonest layout: `20 00123 01250 7` is item `123` (its SKU in the
+catalogue, with or without the leading zeros), 1.250 kg. A scale that prints the price instead
+sets `"value": "Price"` and `"decimals": 2` — `04500` is ₹45.00, and the till works out the weight
+that comes to it, to the paisa. The prefix, item and value digits must add up to twelve; the
+thirteenth is the check digit. Codes starting 20–29 are kept by GS1 for use inside a shop, so no
+product's own barcode is ever mistaken for one. `"prefixes": []` turns scale labels off.
+
+## UPI with the amount
+
+With the shop's UPI ID set, a customer who pays by UPI is shown a QR code with the exact amount
+already in it — on the payment screen, on the customer's screen if the lane has one, and on a slip
+with **Ctrl+Q**. Their app shows the shop's name and the amount; they approve it; the cashier takes
+the payment once their app says it is paid. Nothing is sent from the till: the code is drawn on the
+till, and the payment is between the customer's phone and the bank.
+
+```json
+"upi": {
+  "id": "murugan.stores@okaxis",
+  "name": "Sri Murugan Stores",
+  "merchantCode": "5411"
+}
+```
+
+- `id` is the UPI ID (VPA) payments go to, exactly as the bank or the UPI app gives it. Leave the
+  section out, or the id empty, and there is no code: UPI is taken against the shop's own printed
+  QR stand, as before.
+- `name` is what the customer's app shows. The store's name when left out.
+- `merchantCode` is only for a **merchant** UPI ID from the bank or a payments company — the
+  four-digit merchant category code they give you (5411 for a grocery). With it, each payment also
+  carries a reference (the lane and the time) that shows on the bank statement. Leave it out for a
+  personal UPI ID: some apps refuse a personal payment that carries one.
+
+An id that is not a UPI ID — no `@`, spaces in it — stops the lane starting, and says why.
+
+The owner sets the id from the owner's screen: **Ctrl+D**, **Ctrl+5**, **Alt+U**, type it,
+**Enter**. Emptying the box and saving turns the code off. To check it with a real phone before a
+customer does, `pos upi --amount 1 --print` prints the slip: scan it, see the shop's name and ₹1.00,
+and do not pay it.
+
+## Bills on WhatsApp
+
+`openWhatsApp` is `true` unless you say otherwise. `Ctrl+W` then opens WhatsApp on the till's
+computer at the customer's chat with their bill typed in, for the cashier to send. Without WhatsApp
+installed nothing changes except that the bill goes on the clipboard, so leaving it on is harmless.
+Set it to `false` for a shop that uses WhatsApp in a web browser: the bill always goes on the
+clipboard, to paste into the chat there.
+
+## How long an order lasts
+
+`orderCoverDays` is `14` unless you say otherwise. The order list suggests enough of each counted
+item to sell for that many days at the rate it sold over the last four weeks, less what is on the
+shelf. Anything from `1` to `120`; outside that the lane will not start, and says why.
+
+The owner changes it on the Orders tab: **Ctrl+D**, **Ctrl+0**, **Alt+D**, type the days,
+**Enter**.
+
 ## Bill layout
 
 `receiptLayout` is `Standard` or `Compact`. The owner changes it from the owner's screen —
@@ -209,6 +280,9 @@ Leave a peripheral blank and the lane simply does not have one — it still bill
 | `scannerPort` | Leave blank for the usual keyboard-wedge scanner. Only set it for a scanner in serial mode. |
 | `scalePort` | e.g. `COM3`. Blank means no scale. Find it with `pos list-ports`. |
 | `scaleProtocol` | `Auto` works it out from the stream. Set `StxEtx` for Toledo/CAS or `Line` for Essae/Contech only if auto-detection has a problem. |
+| `customerScreen` | `true` shows the bill on a second monitor facing the customer: each item as it is scanned, the total, what is paid and the change. Off by default. With only one monitor it does nothing. |
+| `polePort` | e.g. `COM4`, for a two-line pole display facing the customer. Blank means none. `pos test-hardware --pole` puts a test message on it. |
+| `poleBaudRate` / `poleWidth` | `9600` and `20` suit nearly every pole display. |
 
 ## Loyalty
 

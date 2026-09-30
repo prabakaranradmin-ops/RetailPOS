@@ -102,6 +102,14 @@ should be.
 The same two things from a command line: `pos receipt-preview` and `pos receipt-preview --png
 receipt.png`.
 
+### 6. The shop's UPI ID, if it takes UPI
+
+**Ctrl+D**, **Ctrl+5** for Settings, **Alt+U**, type the shop's UPI ID as the bank or the UPI app
+gives it (`murugan.stores@okaxis`), **Enter**. From then on a customer paying by UPI is shown a code
+with the exact amount in it. Check it with a real phone before a customer does:
+`pos upi --amount 1 --print`, scan the slip, see the shop's name and ₹1.00 — **and do not pay it**.
+Details, and the merchant code for a merchant UPI ID, in `SETTINGS.md`.
+
 ---
 
 ## Every morning — opening
@@ -111,8 +119,9 @@ receipt.png`.
 2. **Say who is on the till.** `Ctrl+U`, type your name. Every sale is recorded against it, and at
    close the report splits takings by cashier — which is what makes a drawer difference answerable
    rather than just noted. Do it again whenever the shift changes.
-3. **Check the float.** Count what is in the drawer and write it down. The software does not track
-   the opening float — the Z-report tells you what was *taken*, and you add your float to it.
+3. **Record the float.** Count what is in the drawer, then `Ctrl+M`, type the amount, `Enter`. It
+   opens on the float when none has been recorded since the last close. From then on the day-end
+   report's *cash in drawer should be* includes it, so at night you count the whole drawer.
 4. **Scan one item and cancel it** (`Escape`). Confirms the scanner and the catalogue are both
    alive before a customer is waiting.
 
@@ -134,6 +143,14 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 | `Delete` | Remove the selected line |
 | `F7` | Attach a customer by mobile or name (needed for loyalty points and credit) |
 | `F8` | Take a payment against what a customer owes on credit |
+| `F9` | **Take goods back** against a past bill, on a credit note |
+| `Ctrl+M` | **Cash in and out** — the float, an expense, cash put in or taken out |
+| `F11` | **Loose items** — onions, coriander, flowers: a key each, then the weight |
+| `Ctrl+O` | **Orders** — paste a WhatsApp order onto the bill, or save the bill as an order |
+| `Ctrl+Q` | While taking UPI: **print the code** with the amount, for the customer to scan |
+| `Ctrl+K` | **Khata statement** — for the customer picked in `F8` or on the bill: printed, and copied to send |
+| `Ctrl+W` | **The bill on WhatsApp** — instead of paper while paying, or the last bill afterwards |
+| `Ctrl+G` | **A bill to a business** — the customer's GSTIN and address |
 | `F5` | Park the bill |
 | `F6` | Bring a parked bill back |
 | `F12` | **Take payment** |
@@ -147,6 +164,68 @@ dead printer — the invoice is saved either way — but the customer leaves wit
 Taking payment: `F12`, choose the tender with `↑`/`↓`, type the amount, `Enter`. Leave the amount
 blank to take the whole balance. Commit again when it is fully paid. Loyalty points are entered as
 **points, not rupees** — blank redeems the maximum allowed.
+
+**Paying by UPI.** Pick **UPI** with the arrows and a QR code appears with the amount already in it —
+everything still due, or what you type for part of it. It shows on the customer's screen too, if
+the lane has one; `Ctrl+Q` prints it on a slip for a counter that does not. The customer scans it,
+their app shows the shop's name and the amount, and they approve it. **Press `Enter` only once their
+app shows it paid** — the till cannot see the bank, and a payment still spinning on their phone is
+not a payment. A shop without its UPI ID set simply takes UPI as before, against its own printed code.
+
+### Bills to businesses
+
+A shop, a hotel or an office that wants the bill with its **GSTIN** on it — so it can claim the tax
+— is a business customer. Attach them with `F7` (their mobile, or their GSTIN if they are already on
+file), then **`Ctrl+G`**: type their GSTIN, `Enter`, then their address as it should print, `Enter`.
+The GSTIN is checked as it is saved; a mistyped one is refused, and says so.
+
+From then on every bill to them is a tax invoice to a registered buyer: it prints **Bill to**, their
+name, GSTIN, address and the **place of supply** — the state their GSTIN is in. A business in another
+state is charged **IGST** instead of CGST and SGST, and the till says so the moment the GSTIN is
+saved. Their bills go in the month's return one by one (B2B) for them to claim; the owner's GST tab
+lists them apart.
+
+`Ctrl+G` again with the box emptied takes the GSTIN off. The owner can also set it on the Customers
+tab (**Ctrl+7**, pick them, **Alt+D**).
+
+### Offers and schemes
+
+The shop's offers — buy two get one, 10% off a department, three for a hundred, money off a big
+bill, a free item with one — are worked out by the till as items go on the bill. Nothing to press:
+the third soap goes on and the status line says *Offer: Buy 2 soaps get 1 — 20.00 off*; the
+**Disc** column shows it, and the printed bill names the offer under the line. Take the third soap
+off and the free one goes with it.
+
+A discount you give by hand with `F4` always wins: that line gets no offer on top. `F4` then `0`
+gives the line back to the offers.
+
+The owner sets the offers with the offers sheet on the Catalogue tab (**Ctrl+D**, **Ctrl+3**,
+**Alt+O** to save it, **Alt+D** to load it back) — the format, with an example of each kind, is in
+`CATALOGUE_FORMAT.md`. The card there lists each offer, whether it is on today, and what it has
+given over the last 30 days. `pos offers --try "DAL001:3 SUG001:2"` shows what a bill would come to
+with them, without selling anything.
+
+### Bills on WhatsApp
+
+A customer who would rather have the bill on their phone: attach them with `F7` (their number is
+where it goes), `F12`, then **`Ctrl+W`** — the pane says *No paper* — and take the payment as usual.
+Nothing prints. WhatsApp opens on this computer at their chat with the whole bill typed in: the shop,
+the GSTIN, every line with its HSN and GST, the tax, the total and how it was paid. **Press Enter in
+WhatsApp to send it**, then click back on the till. `Ctrl+W` again before paying prints it after all.
+
+**After the sale**, `Ctrl+W` with the bill empty does the same for the bill just settled — for a
+customer who wants the paper *and* the message. In `Ctrl+P`, type an older bill's number (or their
+mobile) and `Ctrl+W` sends that one.
+
+Without WhatsApp on this computer — or with `openWhatsApp` set to `false` in `settings.json`, for a
+shop that uses WhatsApp in a browser — the bill goes on the clipboard instead: paste it into the
+message. A walk-in with no number gets the clipboard too. The till itself sends nothing; the message
+leaves from WhatsApp, after the sale.
+
+It is the same tax invoice, numbered and kept the same way. For a customer who needs it on A4 —
+a business, an office claim — the owner's screen saves any bill as a full A4 invoice: **Customers**
+(**Ctrl+7**), pick the customer and the bill, **Alt+B**. `pos bill --no <number> --out bill.html`
+does the same.
 
 ### Customers
 
@@ -165,20 +244,130 @@ number it was given for, so correcting a mistype cannot add the correction unche
 
 ### Credit (khata)
 
-**Selling on credit** — attach the customer with `F7` first, then `F12`, `↓` down to **Store credit**,
-and `Enter`. A walk-in bill cannot go on credit: somebody has to owe it. The till says what they now
-owe, and the side panel shows it every time they are attached to a bill.
+**Selling on the khata** — attach the customer with `F7` first, then `F12`, `→` or `↓` along to
+**Khata (pay later)**, and `Enter`. A walk-in bill cannot go on the khata: somebody has to owe it. The
+till says what they now owe, and keeps it above the message bar until the next bill starts; the side
+panel shows it every time they are attached to a bill. The screens, the bills and the day-end report
+all call it the khata (கடன் on a Tamil lane) — it used to be "Store credit" in places, which in
+Indian retail usually means money the shop owes a customer. Check the word with the shop.
 
-**Taking it back** — with the bill empty, `F8`. Type their number or part of their name, `↓` to pick
+**Taking it back** — with the bill empty, `F8` (**Khata payment** on the key strip). Type their number or part of their name, `↓` to pick
 them, `Enter`. The till says what they owe. Type what they are paying — or just `Enter` for all of
 it — choose **cash, UPI or card** with `↑`/`↓`, and `Enter`. The drawer opens for cash, and a slip
 prints for the customer headed **PAYMENT RECEIVED** — it is not a tax invoice, because nothing was
 sold. More than they owe is refused; so is taking it in credit or points.
 
+**Their statement** — `Ctrl+K`, with them picked in `F8` or attached to the bill. It prints
+everything since they last owed nothing: each bill on credit, each payment and return, what they owe
+after each, what they owe now and how old it is. With the shop's UPI ID set it ends with a code for
+the whole amount. A message of it is put on the clipboard too — paste it into WhatsApp for a customer
+who is not at the counter. Printing it changes nothing.
+
+**Paying it back by UPI** — in `F8`, `↓` to **UPI**: a code appears for everything they owe, or for
+what you type. It shows on the customer's screen as well, and only while they are paying — what a
+customer owes is not put on a screen the queue can read otherwise. `Ctrl+Q` prints it.
+
+**The month-end round** — on the owner's screen, **Customers** (**Ctrl+D**, **Ctrl+7**): pick a
+customer, then **Alt+S** saves their statement as a page to print or send, and **Alt+W** copies the
+message. **Alt+E** saves a statement for everybody who owes, one to a page, to print in one go.
+
 **At closing**, money paid back is **not a sale** — the goods and the tax were on the bill they
 bought on credit. The Z-report lists it apart as **Credit collected**, and the cash part is added to
 *cash in drawer should be*, so the drawer still counts out. A day with repayments and no sales still
 needs closing: the till says how much was collected.
+
+### Loose items: the quick keys
+
+Anything with no barcode — onions by the kilo, coriander by the bunch, jasmine by the muzham — is on
+a quick key. `F11` shows them, a key each (`1` to `9`, `0`, then `A` to `N`), the ones sold most in
+the last four weeks first, so the keys follow the season without anybody setting them. Press the
+item's key, type the weight or how many (`1.25`), `Enter` — or just `Enter` for one. The arrows and
+`Enter` pick too. `Esc` goes back a step. It adds to whatever bill is open.
+
+### The customer's display
+
+A lane with a second monitor facing the customer (`customerScreen` in `settings.json`) or a pole
+display (`polePort`) shows the customer what the till is doing: *Welcome*, then each item as it is
+scanned with its price and the total, then what is paid and what is left, and the change and
+thanks once it is paid. Nothing on it can be pressed, and it never takes the keyboard from the till.
+A display that is unplugged simply shows nothing; billing carries on.
+
+### Labels from the scale
+
+If the shop's weighing scale prints barcode labels, scan them like any packet: the item and its
+weight (or its price) are in the code, and the line goes on the bill at exactly what the label
+says. The scale's item codes must be the items' SKUs in the catalogue. How the scale lays out its
+codes is set once in `settings.json` — see `SETTINGS.md`. A label for a code the catalogue does not
+have, or a weight label for something sold by the piece, is refused with the reason.
+
+### Phone and WhatsApp orders
+
+**Putting the order on the bill** — with the bill empty, `Ctrl+O`. Copy the customer's WhatsApp
+message and paste it into the box (`Ctrl+V`), or type what they said on the phone, one item a line
+(`Shift+Enter` starts a new line). Write it however they did — `2 kg sugar`, `sugar 2kg`,
+`toor dal 1kg x 2`, `ghee 1/2 kg`, a number or a dash in front. `Enter` reads it and puts each item
+it recognises on the bill. The till says how many lines it found and names the ones it did not:
+add those by hand. **Check each line against the message** — the till reads what was written, and a
+customer who writes "oil" may mean either oil.
+
+A weight written against a packet is the packet's size: `bath soap 100g` is one 100 g soap, not a
+hundred soaps.
+
+**Saving it as an order** — `F7` for the customer (an order needs somebody to tell when it is
+ready), then `Ctrl+O` again. `↑`/`↓` picks **Phone** or **WhatsApp**, type where it is going or
+when they will collect it if you like, `Enter`. The bill leaves the screen and waits in `F6`, at the
+top with the other orders, oldest first. A short reply is copied for you — paste it into WhatsApp to
+tell them it is taken.
+
+**When they collect, or the delivery goes** — `F6`, pick the order, `Enter`. It comes back saying
+what it was. Add or change anything, then `F12` as usual. That is when it becomes a sale: an order
+waiting is not a bill, has no number, and takes no stock. `F5` parks it again as an order.
+
+### Cash in and out, and expenses
+
+With the bill empty, `Ctrl+M`. `↑`/`↓` picks what it is, type the amount, `Enter`:
+
+| | What happens |
+|---|---|
+| **Opening float** | Added to what the drawer should hold. |
+| **Expense, paid from the drawer** | Pick what it was for — tea and snacks, transport, wages, electricity, rent, repairs, packing, cleaning, other — type a note if you like, `Enter`. Comes off what the drawer should hold. |
+| **Expense, paid by bank, UPI or own cash** | The same, but the drawer is not touched. Recorded so the owner's figures count it. |
+| **Put cash in** | More change from the bank, the owner topping it up. |
+| **Take cash out** | To the bank, to the owner. Say where it is going — it will not record without. |
+
+The drawer opens for anything that moves cash. `Esc` goes back a step; nothing is recorded until the
+last `Enter`. Each shows on the day-end report on its own line, and the owner's figures (**Ctrl+D**,
+**Ctrl+1**) show what was spent on the running of the shop, and what the shop earned after it.
+
+### Returns
+
+A customer brings something back. With the bill empty, `F9`:
+
+1. **The bill.** `Enter` for this lane's last bill, or type the number printed on theirs and
+   `Enter`. The till lists what was on it, and anything already returned from it.
+2. **The goods.** `↑`/`↓` to the line, type how many are coming back and `Enter` — the till moves to
+   the next line. Add **`d`** if it is damaged (`1d`): it is refunded but **not** put back on the
+   shelf. `a` takes the whole of the line, and **`*`** the whole bill. `Delete` takes a line back
+   off. The refund and the tax it takes back show as you go. `Enter` on an empty box when done.
+3. **The refund.** `↑`/`↓` for **cash, UPI or card** — or, when the bill had a customer on it, **off
+   their khata**. Type a reason if there is one, and `Enter`.
+
+A **credit note** prints — its own numbered document (`CN/26-27/L1-1`), naming the bill the goods
+were sold on and the tax taken back — and the drawer opens for cash. `Esc` goes back one step at a
+time; nothing is refunded until the last `Enter`.
+
+- **The bill is never changed.** It was issued as it was; the credit note is the second document
+  that says part of it came back.
+- **Nothing comes back twice.** The till knows what earlier returns took from each line, so the
+  same packet cannot be refunded on two credit notes, even from two tills.
+- **The tax comes back exactly.** A part return is priced the way the sale was, the line's discount
+  shared in proportion; the return that brings the last of a line back takes exactly what is left,
+  so three returns of one add up to the three that were sold, to the paisa.
+- **Points** earned on the goods come back off the customer's balance, in proportion.
+- **Off the khata** takes the refund off what they owe — never below nothing. If they owe less than
+  the refund, refund it in money.
+- **A bill with goods returned against it cannot be voided** as well; return the rest of it instead.
+- A duplicate: `pos credit-note CN/26-27/L1-1 --reprint`.
 
 ### Things that will happen
 
@@ -194,7 +383,7 @@ needs closing: the till says how much was collected.
   or type the invoice number. It shows what will go; press `Enter` again to do it. The bill stays
   in the books marked cancelled, its number stays used, loyalty points go back, and the drawer
   opens if there is cash to return. **Only works before the day is closed** — after that the
-  correction is a credit note, which this version does not do.
+  correction is a credit note: `F9`, the whole bill with `*`.
 
 ---
 
@@ -235,6 +424,10 @@ screen, because that bill has not been paid for.
 `F6` shows anything still parked. Settle them or discard them. The Z-report will tell you if any
 are left, but sorting it out now is easier than explaining it tomorrow.
 
+**Orders are the exception.** A phone or WhatsApp order waiting to be collected or delivered stays
+where it is; closing the day does not touch it, and the Z-report lists it apart as *order(s)
+waiting*.
+
 ### 3. Close
 
 Press `Shift+F12`. It shows what it is about to close — invoice count, net sales, and what should
@@ -247,12 +440,15 @@ appear on two reports and closing twice by accident is harmless.
 
 ### 4. Count the drawer
 
-The report leads with **CASH IN DRAWER SHOULD BE**. That is cash taken less change given, and it
-does **not** include your opening float.
+The report leads with **CASH IN DRAWER SHOULD BE**: the float recorded with `Ctrl+M`, plus cash
+taken, less change given, less expenses and cash taken out, plus cash put in — each on its own
+line beneath it.
 
 ```
-count the drawer  −  opening float  =  the figure on the report
+count the whole drawer  =  the figure on the report
 ```
+
+If nobody recorded the float this morning, it is not in the figure: take it off what you count.
 
 If they match, you are done. If they do not:
 
@@ -262,6 +458,7 @@ If they match, you are done. If they do not:
 | Matches one bill exactly | A sale rung up as cash and paid by card, or the reverse |
 | Small and odd | Miscounted coins — recount before investigating |
 | Report says 0.00, drawer has money | The day was already closed. Check for two reports today. |
+| Short by exactly a refund | A return refunded in cash that was not handed over, or refunded by UPI but taken from the drawer. The report lists *Refunded on returns* on its own line. |
 
 Write the difference down, whatever it is. A pattern across the pilot is worth more than any
 single night.
@@ -288,6 +485,11 @@ On the **GST build** the report also breaks tax down by slab, which is the shape
 On the **no-tax build** there is no slab section, because no tax was charged — the report is takings,
 tenders and the drawer count.
 
+**Returns** are on the report too, under their own heading: how many credit notes, what they
+refunded, the tax they took back, and *net after returns*. The sales figures above them are the
+bills as issued and do not change. Cash handed back is taken off *cash in drawer should be* and
+printed as *Refunded on returns*, so the drawer still counts out.
+
 **If a sheet goes missing, or the printer jammed at closing**, the report itself is not lost — every
 close is stored. **Ctrl+D**, then **Ctrl+6** for Maintenance: the reports this lane has taken are
 listed with the date, the number of bills and the net. Pick one, then
@@ -309,15 +511,85 @@ than falling through to closing the day, so reading a report back can never acci
 | Section | | |
 |---|---|---|
 | **The figures** | `Ctrl+1` | Takings for the period and for today, the average basket, **what the shop earned** (profit and margin), day by day, when the shop is busy, what sells, what earns most and least, who is buying, what was cancelled, the loyalty points still owed, and which departments earn. Pick 7, 30 or 90 days at the top. On the GST build there is a GST-by-slab section as well; the no-tax build has nothing to put in it. |
-| **Stock** | `Ctrl+2` | What needs reordering, most depleted first, with the count, full, what is left as a share of full, and how many to order to fill it. An item is low at its own reorder level, or with none set at 10% of full (changed under Settings). Correct one count after a delivery, a breakage or a recount — or count in bulk: `Alt+S` saves a stock sheet of your items, fill in `new_count` in Excel, and `Alt+L` loads it back. |
-| **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first; `Alt+U` picks what it is sold in, from Pcs and Kg to seepu, kattu, padi and muzham. Load a price list or a whole item master from a CSV on the right (`Alt+T` saves a blank template to start from): check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. |
+| **Stock** | `Ctrl+2` | What needs reordering, most depleted first, with the count, full, what is left as a share of full, **how many days it will last** at the rate it sells, and how many to order to fill it. An item is low at its own reorder level, or with none set at 10% of full (changed under Settings). Correct one count after a delivery, a breakage or a recount — or count in bulk: `Alt+S` saves a stock sheet of your items, fill in `new_count` in Excel, and `Alt+L` loads it back. |
+| **Catalogue** | `Ctrl+3` | Add one product by hand on the left — type the name and it suggests an HSN code and slab, your own catalogue first; `Alt+U` picks what it is sold in, from Pcs and Kg to seepu, kattu, padi and muzham. Load a price list or a whole item master from a CSV on the right (`Alt+T` saves a blank template to start from): check the file, which writes nothing and lists every problem by line, then import. Either way what lands is sellable at the counter immediately. Below the one-item form: **prices in bulk** and **shelf labels** — see below. |
 | **Hardware** | `Ctrl+4` | Test the printer, drawer, scanner and scale, list the serial ports, and see the bill this lane would print — including drawn as the printer will actually burn it, which is the only way to check Tamil without paper. |
 | **Settings** | `Ctrl+5` | The PIN in front of this screen; when stock counts as low — `Alt+W`, the share of full, `Enter`; which bill layout the lane prints — `Alt+S` for the standard bill, `Alt+C` for the compact counter bill; and — on the GST build only — whether this lane issues a tax invoice or a bill of supply. |
 | **Maintenance** | `Ctrl+6` | Back up now, check the database for damage and compact it, read or reprint any day-end report this lane has taken, and put a snapshot back if the database is damaged. |
 | **Customers** | `Ctrl+7` | Find a customer by name or number — or see who spends most, or tick **Only customers who owe** for the list of who owes what, most first, with the total the shop is owed. For the one you pick: what they owe and their **khata** (every credit purchase and payment, with the balance after each), visits, total spend, the average basket, first and last visit, a month-by-month chart, what they buy most, and their recent bills. Give them a name or correct it, or forget them if they ask — not while they owe anything. |
 | **GST** | `Ctrl+8` | The month's figures for the GST return, opening on last month: sales by rate and place of supply, what was sold at 0%, the HSN summary in the unit each thing was sold in, and the bill numbers issued with the cancelled ones counted. `Alt+E` and `Alt+L` move a month back or forward; `Alt+S` saves a page and the CSV files for the accountant. |
+| **Purchases** | `Ctrl+9` | The wholesalers you buy from, the bill that comes with each delivery, what you owe each one, and paying them. Entering a bill puts the delivery on the shelf, makes each item's cost price what you just paid, and puts the total on the supplier's account. |
+| **Orders** | `Ctrl+0` | What to order, from whom. Each counted item that will not last until the next delivery, grouped by the supplier it was last bought from, with how many to order and what that cost last time. Copy one supplier's order to send them, or save the whole list. |
 
-`F5` re-reads the figures. `Esc` goes back to billing.
+The sections are listed down the left of the screen. `F5` re-reads the figures. `Esc` goes back to billing.
+
+**Entering a delivery.** **Ctrl+9**, find the supplier (or add them once: `Alt+W`, the name, the
+GSTIN, `Alt+A`). Then, reading off the supplier's paper:
+1. `Alt+N` for the bill number, and the date if it isn't today.
+2. `Alt+I` for the item. Type part of the name, a SKU, or scan the barcode. `Down` and `Enter` pick
+   it.
+3. Type the quantity, `Tab`, the rate **before tax** as the bill prints it, then `Enter`. The GST
+   rate comes from the item; change it if the bill says otherwise.
+4. Repeat for every line. `Delete` takes a wrong line back out.
+5. Type the **total printed on the bill**. A round-off of up to a rupee is accepted; anything more
+   means a line was typed wrong, and the bill will not save until it is found.
+6. `Alt+S` saves it, after saying what it will do.
+
+A bill number already entered for that supplier is refused; that is the commonest mistake in a
+purchase book. A bill entered wrongly is cancelled from **Bills already entered** (`Alt+C`, with a
+reason). The shelf gives back what it put on, the amount stops being owed, and it can then be
+entered properly.
+
+**Use-by dates.** Type the use-by date on a purchase bill's line (the last box, `31-12-2026`) and
+the till keeps an eye on it. **Ctrl+2**, `Alt+X` lists every delivery within a month of its date
+that is probably still on the shelf, soonest first, with what to do: put it at the front, sell it
+first or return it, take it off the shelf. "Probably" because the till does not count stock batch by
+batch — it lays the count against the deliveries newest first, the way a shop sells oldest first. Once
+old stock is off the shelf, correct the count and it drops off the list. The reorder list's line
+says how many deliveries are near their date, the day-end report prints what is past it or within a
+week, and a cashier scanning an item with a delivery past its date is told to check the packet — the
+sale still goes through. *(`pos expiring` from a command line.)*
+
+**What has stopped selling.** **Ctrl+2**, `Alt+D`: every counted item with something on the shelf
+that has not sold for two months, the most money tied up in it (at cost) first, with when it last
+sold and what to do — move it to the front, put it on offer, return it, or stop ordering it. Something
+never sold is listed once it has been in the shop longer than that. *(`pos dead-stock [--days 90]`
+from a command line.)*
+
+**A price revision.** **Ctrl+3**, then `Alt+S` saves a price sheet: every item with its cost, MRP
+and price, and two empty columns, `new_mrp` and `new_selling_price`. Fill in only the prices that
+change — Excel's own formulas do a percentage rise — save it as CSV, and `Alt+L` loads it back. It
+says what it will change first, and names any price below what the item costs and any that moves by
+more than half (usually a digit too many or too few). Only prices change. A price above its MRP is
+refused, and one mistake anywhere changes nothing.
+
+**Shelf labels.** Every item whose price changed — by the price sheet, a catalogue re-import, or
+because it is new — is listed under the price sheet until its label is printed. **Print the
+labels** (`Alt+N`) sends them to the till's printer, one label per cut: the name, the MRP, what the
+customer saves, the price large, and a barcode — the item's own, or its SKU for something sold
+loose, so the label itself can be scanned. **Save as an A4 page** (`Alt+P`) writes them three
+across to print on any printer and cut out, with real EAN-13 bars. Either marks them done. Tick
+**A label for every item** (`Alt+E`) for a whole new set. *(`pos price-sheet` and `pos labels` from
+a command line.)*
+
+**What to order.** **Ctrl+0**. The rate each item sells at is what went out over the last four
+weeks, less what came back. An order is enough to sell at that rate for two weeks, less what is on
+the shelf — change the two weeks with `Alt+D`, type the days, `Enter`; it is kept. Each item is
+listed under the wholesaler you last bought it from on a purchase bill; anything never entered on
+one is listed together at the end. `↑`/`↓` picks a supplier, **Copy this order** (`Alt+C`) puts
+their order on the clipboard as a message — the shop, the date, each item and how many — to paste
+to them from your own phone or computer, and **Save the whole list** (`Alt+S`) writes every
+supplier's list as a spreadsheet. The till sends nothing itself. *(`pos order-list` from a command
+line.)*
+
+**Paying a supplier.** Pick them, type the amount and how you paid, and press `Alt+R`. Paid as
+**Cash from the till**, the day-end report takes it off what the drawer should hold and prints it
+on its own line (*Paid to suppliers*). More than you owe them is refused; enter the bill first.
+
+**Input tax.** Bills from GST-registered suppliers are the input tax you claim in GSTR-3B. The GST
+tab (**Ctrl+8**) now shows it by rate, and saves a purchase register for the accountant to match
+against GSTR-2B. A supplier with no GSTIN, or a composition dealer, charges no GST, and nothing on
+their bills can be claimed.
 
 **Margins need cost prices.** Profit, margin and the best/worst earner lists are worked from the
 cost recorded on each line at the moment it was sold, so they cover only items whose catalogue row
@@ -349,7 +621,9 @@ unit — `3 Pcs`, `2.75 Kg`, and on a Tamil lane `2 சீப்பு`, `1.5 �
 files the return: a page to read, and CSV files for GSTR-1 (sales by rate, nil rated, the HSN
 summary and the documents issued) with the column headings of the GST offline tool. Every figure
 comes from the bills as issued, cancelled bills left out, so the return cannot disagree with the
-bills. Read the **Before filing** notes on the screen first. In particular:
+bills. Goods returned in the month come off it — a credit note is reported in the month it was
+issued, whenever the goods were sold — and the credit notes are listed with the bills issued. Read
+the **Before filing** notes on the screen first. In particular:
 - Everything sold at 0% is put under *nil rated*. Goods exempt by notification (fresh vegetables,
   fruit, flowers, milk, eggs) belong under *exempted*, and the accountant moves them.
 - A shop with two tills files one return, so add each lane's figures together.
@@ -474,12 +748,11 @@ Two things this does not do, and it is worth knowing which:
 
 Known and deliberate, so nobody wastes time looking:
 
-- **No returns or refunds.** Handle them in the store's own records for now. A proper GST credit
-  note flow is a separate piece of work. Voiding is not a refund — it cancels a sale that has not
-  yet been reported on a Z-report, and it stops working once the day is closed.
-- **No opening float tracking.** Count it and write it down.
-- **Stock is a count, not an inventory system.** It tells you what is left and what to reorder. It
-  does not handle purchase orders, suppliers, batches or expiry, and it never stops a sale.
+- **No exchanges in one step.** An exchange is a return (`F9`) and then a new sale. The credit note
+  and the new bill are two documents, as they have to be for GST.
+- **Stock is a count, not a full inventory system.** It tells you what is left, how long it will
+  last and what to order from whom, and deliveries entered on the Purchases tab add to it. It does
+  not send orders to suppliers or track stock batch by batch, and it never stops a sale.
 - **No printed report other than the Z-report.** Day-range and item-wise figures are on the owner's
   screen (**Ctrl+D**) for 7, 30 or 90 days, and can be saved as a web page, but not printed on the
   till's paper.
