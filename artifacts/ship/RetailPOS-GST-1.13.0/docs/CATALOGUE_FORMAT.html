@@ -1,0 +1,600 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalogue file format â€” RetailPOS</title>
+<style>
+:root{--paper:#F7F6F3;--card:#FFF;--ink:#17181A;--soft:#575A5F;--faint:#8A8D93;
+--rule:#E3E0DA;--rule-hard:#CBC6BD;--accent:#2B4C7E;--accent-soft:#E9EEF6;--warn:#A63D2F}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}}
+:root[data-theme=dark]{--paper:#15161A;--card:#1C1E23;--ink:#ECEDEF;--soft:#A2A7AF;--faint:#7E838B;
+--rule:#2A2D34;--rule-hard:#3A3F48;--accent:#7EA9DE;--accent-soft:#1A2433;--warn:#E58B79}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);margin:0;font-size:17px;line-height:1.65;
+font-family:"Segoe UI",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 110px}
+.doc-head{border-bottom:2px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+.doc-head .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+color:var(--accent);margin:0 0 8px}
+.doc-head .meta{font-family:Consolas,monospace;font-size:12.5px;color:var(--faint);margin:10px 0 0}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;margin:0;letter-spacing:-.02em;font-weight:700}
+h2{font-size:26px;margin:44px 0 10px;letter-spacing:-.01em;border-top:1px solid var(--rule);
+padding-top:30px}
+h3{font-size:19px;margin:28px 0 6px}
+h4{font-size:16.5px;margin:20px 0 4px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+/* A section heading draws its own rule, so a --- written just above one in the
+   source would print two rules a few pixels apart. */
+hr+h2{border-top:0;padding-top:0;margin-top:34px}
+code{font-family:Consolas,monospace;font-size:.87em;background:var(--accent-soft);
+color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 17px;
+overflow-x:auto;margin:16px 0;font-family:Consolas,monospace;font-size:13px;line-height:1.6}
+pre code{background:none;padding:0;color:var(--ink)}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+li.check{list-style:none;margin-left:-22px;margin-bottom:9px}
+.box{display:inline-block;width:15px;height:15px;border:1.5px solid var(--rule-hard);
+border-radius:3px;margin-right:10px;vertical-align:-2px}
+.box.done{border-color:var(--accent);color:var(--accent);font-size:11px;line-height:11px;
+text-align:center}
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0;min-width:420px}
+th,td{text-align:left;padding:8px 14px 8px 0;vertical-align:top;border-bottom:1px solid var(--rule)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
+border-bottom:1px solid var(--rule-hard)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--card);border-left:3px solid var(--warn);
+border-radius:0 8px 8px 0;color:var(--soft)}
+blockquote p:last-child{margin:0}
+@media print{body{background:#fff;color:#000;font-size:11pt}.wrap{padding:0;max-width:none}
+h2{page-break-after:avoid}pre,table,blockquote{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="doc-head">
+  <p class="eyebrow">RetailPOS 1.13.0</p>
+  <h1>Catalogue file format</h1>
+  <p class="meta">Offline point of sale for Indian retail. Nothing on this lane leaves the machine.</p>
+</div>
+<p>The importer reads a CSV. Give this page to whoever produces the store's item export.</p>
+<p>Columns may be in <strong>any order</strong> and <strong>any case</strong>. The first nine must be present; the last two are optional and may be left out altogether.</p>
+<div class="scroller"><table><thead><tr>
+<th>Column</th>
+<th>Required</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td><code>sku</code></td>
+<td>yes</td>
+<td>Your own item code. Must be unique. Case-insensitive, so <code>DAL001</code> and <code>dal001</code> are the same item.</td>
+</tr>
+<tr>
+<td><code>barcode</code></td>
+<td>column yes, value no</td>
+<td>Leave blank for loose goods with no printed barcode. Must be unique where present.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>yes</td>
+<td>What prints on the receipt and what the cashier searches.</td>
+</tr>
+<tr>
+<td><code>hsn_code</code></td>
+<td>yes</td>
+<td>Required on a GST invoice for every line.</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>yes</td>
+<td><code>Pcs</code>, <code>Kg</code>, <code>L</code> or <code>m</code> — or a traditional Tamil unit such as <code>Seepu</code>, <code>Kattu</code>, <code>Padi</code> or <code>Muzham</code>, in English letters or in Tamil. See <strong>Units</strong> below for the full list.</td>
+</tr>
+<tr>
+<td><code>mrp</code></td>
+<td>yes</td>
+<td>Printed maximum retail price.</td>
+</tr>
+<tr>
+<td><code>selling_price</code></td>
+<td>yes</td>
+<td>What you actually charge. May not exceed <code>mrp</code>.</td>
+</tr>
+<tr>
+<td><code>gst_rate</code></td>
+<td>yes</td>
+<td>One of <code>0</code>, <code>5</code>, <code>12</code>, <code>18</code>, <code>28</code>, <code>40</code>. A trailing <code>%</code> is fine. Since 22 September 2025 most goods are at <code>5</code> or <code>18</code>, and aerated and sugared drinks at <code>40</code>; <code>12</code> and <code>28</code> are still accepted for the few goods left at them.</td>
+</tr>
+<tr>
+<td><code>is_weighed</code></td>
+<td>yes</td>
+<td><code>true</code>/<code>false</code>, <code>yes</code>/<code>no</code>, <code>1</code>/<code>0</code>. Means <em>the till may sell part of one</em> (1.5, 0.25), and must agree with <code>unit</code> — see the <strong>Part of one?</strong> column below.</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>no</td>
+<td>Which part of the shop it belongs to — <code>Staples</code>, <code>Dairy</code>, <code>Household</code>. Free text; whatever you type becomes a slice of the dashboard's department chart.</td>
+</tr>
+<tr>
+<td><code>cost_price</code></td>
+<td>no</td>
+<td>What you pay for one, tax inclusive like <code>selling_price</code>. Must be between <code>0</code> and <code>selling_price</code>.</td>
+</tr>
+<tr>
+<td><code>stock_qty</code></td>
+<td>no</td>
+<td>How many are on the shelf now. Leave blank for anything you do not count.</td>
+</tr>
+<tr>
+<td><code>reorder_level</code></td>
+<td>no</td>
+<td>Warn when the shelf reaches this. Needs a <code>stock_qty</code> beside it. Leave it blank to warn at a share of full instead — see <strong>Counting stock</strong>.</td>
+</tr>
+<tr>
+<td><code>full_level</code></td>
+<td>no</td>
+<td>What "full" is for this item. Leave it blank and the counts decide: the most the shelf has been stocked to.</td>
+</tr>
+</tbody></table></div>
+<h2 id="units">Units</h2>
+<p>Every item is sold in one unit, and the price in the file is the price of <strong>one</strong> of it — per kilo, per comb of bananas, per muzham of jasmine. The bill prints the quantity with the unit beside it: <code>3 Pcs</code>, <code>2.75 Kg</code>, <code>2 Seepu</code> on an English bill, <code>2 சீப்பு</code> on a Tamil one.</p>
+<p>A traditional unit is a unit of sale, not a conversion. Nothing turns a padi into kilograms — what a padi holds changes from district to district and from grain to grain, so the shop prices the padi and the bill charges for padis.</p>
+<p>The <code>unit</code> cell may use the spelling in the first column, the Tamil, or any of the other spellings. Case and spaces do not matter.</p>
+<p><strong>Part of one?</strong> decides whether the till takes a fraction, and <code>is_weighed</code> must say the same: <code>yes</code> for a unit that can be sold in part, <code>no</code> for one that is sold whole. Half a padi of rice and a muzham and a half of jasmine are ordinary sales; half a comb of bananas is not, and the till refuses 1.5 of anything sold whole rather than letting a mistyped quantity through.</p>
+<div class="scroller"><table><thead><tr>
+<th>Unit</th>
+<th>Tamil</th>
+<th>Part of one?</th>
+<th>What it is</th>
+<th>Other spellings</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Pcs</code></td>
+<td>Pcs</td>
+<td>no</td>
+<td>counted, one at a time</td>
+<td>pc, piece, each, nos, no</td>
+</tr>
+<tr>
+<td><code>Kg</code></td>
+<td>Kg</td>
+<td>yes</td>
+<td>weighed</td>
+<td>kgs, kilo, kilogram, கிலோ</td>
+</tr>
+<tr>
+<td><code>L</code></td>
+<td>L</td>
+<td>yes</td>
+<td>by volume</td>
+<td>ltr, litre, liter, லிட்டர்</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>m</td>
+<td>yes</td>
+<td>by length</td>
+<td>mtr, metre, meter, மீட்டர்</td>
+</tr>
+<tr>
+<td><strong>Bunches and bundles</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Seepu</code></td>
+<td>சீப்பு</td>
+<td>no</td>
+<td>one comb of bananas</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Thaar</code></td>
+<td>தார்</td>
+<td>no</td>
+<td>a whole bunch of bananas, many combs</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Kothu</code></td>
+<td>கொத்து</td>
+<td>no</td>
+<td>a cluster on one sprig — grapes, curry leaves</td>
+<td>kotthu</td>
+</tr>
+<tr>
+<td><code>Kulai</code></td>
+<td>குலை</td>
+<td>no</td>
+<td>a heavy natural bunch — coconuts, palm fruit, areca</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Kattu</code></td>
+<td>கட்டு</td>
+<td>no</td>
+<td>a tied bundle — greens, coriander, mint, sugarcane</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Pidi</code></td>
+<td>பிடி</td>
+<td>no</td>
+<td>a fistful — curry leaves, greens</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Mattai</code></td>
+<td>மட்டை</td>
+<td>no</td>
+<td>a coconut in its husk</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Heaps, counts and pieces</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Kooru</code></td>
+<td>கூறு</td>
+<td>no</td>
+<td>a sorted heap at a fixed price</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Koodai</code></td>
+<td>கூடை</td>
+<td>no</td>
+<td>a basketful</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Sulai</code></td>
+<td>சுளை</td>
+<td>no</td>
+<td>a pod or segment — jackfruit</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Pal</code></td>
+<td>பல்</td>
+<td>no</td>
+<td>a single clove of garlic</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Muzhu</code></td>
+<td>முழு</td>
+<td>no</td>
+<td>a whole one — pumpkin, lemon</td>
+<td>muzhusu, முழுசு</td>
+</tr>
+<tr>
+<td><code>Keetru</code></td>
+<td>கீற்று</td>
+<td>no</td>
+<td>a slice or wedge — watermelon, pumpkin, coconut</td>
+<td>pathai, பத்தை</td>
+</tr>
+<tr>
+<td><code>Jodi</code></td>
+<td>ஜோடி</td>
+<td>no</td>
+<td>a pair</td>
+<td>pair</td>
+</tr>
+<tr>
+<td><code>Kavuli</code></td>
+<td>கவுளி</td>
+<td>no</td>
+<td>100 betel leaves</td>
+<td>kavali</td>
+</tr>
+<tr>
+<td><code>Suvadu</code></td>
+<td>சுவடு</td>
+<td>no</td>
+<td>50 betel leaves</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Adukku</code></td>
+<td>அடுக்கு</td>
+<td>no</td>
+<td>a layered stack — betel leaves</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Packets, strips and pinches</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Saram</code></td>
+<td>சரம்</td>
+<td>no</td>
+<td>a tear-off strip of sachets</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Attai</code></td>
+<td>அட்டை</td>
+<td>no</td>
+<td>a card of pinned sachets or tablets</td>
+<td>card</td>
+</tr>
+<tr>
+<td><code>Pottalam</code></td>
+<td>பொட்டலம்</td>
+<td>no</td>
+<td>a paper packet tied with twine — spices</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Sittigai</code></td>
+<td>சிட்டிகை</td>
+<td>no</td>
+<td>a pinch — asafoetida, salt</td>
+<td>chittigai, pinch</td>
+</tr>
+<tr>
+<td><code>Thuli</code></td>
+<td>துளி</td>
+<td>no</td>
+<td>a drop — ghee, honey, essence</td>
+<td>sottu, சொட்டு, drop</td>
+</tr>
+<tr>
+<td><strong>Grain and weight measures</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Aazhakku</code></td>
+<td>ஆழாக்கு</td>
+<td>yes</td>
+<td>the smallest grain measure, about 200 ml</td>
+<td>azhakku, alakku</td>
+</tr>
+<tr>
+<td><code>Uzhakku</code></td>
+<td>உழக்கு</td>
+<td>yes</td>
+<td>2 aazhakku</td>
+<td>ulakku</td>
+</tr>
+<tr>
+<td><code>Padi</code></td>
+<td>படி</td>
+<td>yes</td>
+<td>8 aazhakku — rice, pulses</td>
+<td></td>
+</tr>
+<tr>
+<td><code>AraiPadi</code></td>
+<td>அரைப்படி</td>
+<td>yes</td>
+<td>half a padi</td>
+<td>arai padi, araippadi, seru, ser, சேர்</td>
+</tr>
+<tr>
+<td><code>Marakkaal</code></td>
+<td>மரக்கால்</td>
+<td>yes</td>
+<td>8 padi — paddy, millets at harvest</td>
+<td>marakkal, kuruni, குறுணி</td>
+</tr>
+<tr>
+<td><code>Kalam</code></td>
+<td>கலம்</td>
+<td>yes</td>
+<td>12 marakkaal — bulk grain</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Moottai</code></td>
+<td>மூட்டை</td>
+<td>no</td>
+<td>a sack — 25, 50 or 75 kg</td>
+<td>mootai, sack, bag</td>
+</tr>
+<tr>
+<td><code>Veesai</code></td>
+<td>வீசை</td>
+<td>yes</td>
+<td>about 1.4 kg</td>
+<td>visai</td>
+</tr>
+<tr>
+<td><code>Thulaam</code></td>
+<td>துலாம்</td>
+<td>yes</td>
+<td>about 20 veesai — jaggery, tamarind</td>
+<td>thulam</td>
+</tr>
+<tr>
+<td><strong>Strung flowers</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Muzham</code></td>
+<td>முழம்</td>
+<td>yes</td>
+<td>elbow to fingertip — jasmine</td>
+<td>mulam</td>
+</tr>
+<tr>
+<td><code>Saan</code></td>
+<td>சாண்</td>
+<td>yes</td>
+<td>a handspan, about half a muzham</td>
+<td>chaan</td>
+</tr>
+<tr>
+<td><code>Maaru</code></td>
+<td>மாறு</td>
+<td>yes</td>
+<td>an arm span, about 4 muzham</td>
+<td>maru</td>
+</tr>
+<tr>
+<td><code>Panthu</code></td>
+<td>பந்து</td>
+<td>no</td>
+<td>a rolled ball of strung flowers</td>
+<td>pandhu</td>
+</tr>
+</tbody></table></div>
+<p>For example, jasmine at ₹30 a muzham and bananas at ₹60 a comb:</p>
+<pre><code>sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed
+MAL001,,Malligai Poo,0603,Muzham,30,30,0,yes
+BAN001,,Poovan Banana,0803,சீப்பு,60,60,0,no</code></pre>
+<p>A price of "₹30 a muzham" has no printed MRP, so <code>mrp</code> is the price the shop charges.</p>
+<h2 id="the-optional-columns">The optional columns</h2>
+<p><code>category</code>, <code>cost_price</code>, <code>stock_qty</code>, <code>reorder_level</code> and <code>full_level</code> may be left out of the file entirely, and a catalogue written before they existed imports unchanged. Individual cells may be blank too — a blank means <em>you have not said</em>, which is not the same as zero and is treated differently everywhere it matters.</p>
+<p>The first two exist for the dashboard. Without <code>category</code> every sale lands in one bucket called <strong>Uncategorised</strong>; without <code>cost_price</code> there is no margin, so the shop can be told what it sold but not what it earned. Neither affects billing, a receipt, or a GST return.</p>
+<h3 id="counting-stock">Counting stock</h3>
+<p><code>stock_qty</code> starts a count. From then on every sale takes off it, every void puts back, and the Stock tab (<strong>Ctrl+D</strong>, <strong>Ctrl+2</strong>) says what to order.</p>
+<p><strong>When an item counts as low.</strong> An item with a <code>reorder_level</code> warns at that level. Every other counted item warns when it is down to <strong>10% of full</strong>, where full is the most its shelf has been stocked to:</p>
+<ul>
+<li>A first count, a delivery, a stock sheet or a catalogue load that takes the shelf higher than it has been raises full.</li>
+<li>Sales, voids and counts going down never lower it.</li>
+<li><code>full_level</code> in this file, or on the stock sheet, sets it outright.</li>
+</ul>
+<p>The 10% is the owner's to change: <strong>Ctrl+D</strong>, <strong>Ctrl+5</strong>, <em>When stock counts as low</em>. 0 switches the share off and leaves only the reorder levels.</p>
+<p>When an item is low, the cashier sees <em>"Only 3 left"</em> as it is scanned, and it goes on the Stock tab (with what is left as a share of full, and how many to order to fill it), the day-end report and the dashboard.</p>
+<h3 id="counting-in-bulk-the-stock-sheet">Counting in bulk: the stock sheet</h3>
+<p>A delivery or a stocktake is dozens of counts, and this file needs all nine columns on every row to change one. The stock sheet needs only the count:</p>
+<ol>
+<li>On the Stock tab, <strong>Alt+S</strong> saves a sheet of the shop's own items: <code>sku</code>, <code>name</code>, <code>unit</code>, <code>have</code>, <code>full_level</code> and an empty <code>new_count</code>.</li>
+<li>Open it in Excel and fill in <code>new_count</code> for what you counted. Leave the rest blank. Change <code>full_level</code> if you want a different full for an item.</li>
+<li>Save it as CSV UTF-8, and load it back with <strong>Alt+L</strong>.</li>
+</ol>
+<p>The screen says how many counts will change before it writes anything. Only counts and full levels change; prices and everything else stay as they are. A blank row is left alone, and a count on an item nobody counted yet starts counting it. Like a catalogue, it is all or nothing: one mistake (an unknown SKU, a negative count, half a comb of bananas) and nothing changes, with every problem listed by line.</p>
+<p>If your SKUs are all digits, format that column as text in Excel before saving, or it drops leading zeros and <code>00123</code> no longer matches anything.</p>
+<p><strong>Leave <code>stock_qty</code> blank for anything you do not count.</strong> Loose rice out of a sack, vegetables sold by weight — a blank means the item is not counted, and it never appears in a stock list or produces a warning. That is different from <code>0</code>, which means you counted and there are none.</p>
+<p><strong>A count is never a barrier.</strong> If the till says none are left and the customer is holding one, the sale goes through and the count goes negative. The shelf is the authority; a negative figure is the software telling you the count and the shelf have parted company.</p>
+<p><strong>Re-importing does not reset your counts.</strong> A blank <code>stock_qty</code> on a re-import leaves the live figure alone, so changing prices with the same file you first loaded will not quietly restore every count to what it was weeks ago. To restate a count deliberately, put the new figure in the cell, use the stock sheet, or correct one item on the Stock tab — or from a command line:</p>
+<pre><code>pos stock --set --sku DAL001 --qty 24 --reason "delivery"</code></pre>
+<p><strong>Both are recorded onto the bill at the moment of sale.</strong> Move an item to another department or renegotiate its cost tomorrow, and last month's figures stay as they were — the same rule the price and the tax already follow. The practical consequence is that adding them fills the charts in <em>from that day forward</em>, not backwards. Nobody knew an item's cost last March, and the software will not pretend it did.</p>
+<p>Adding them to a catalogue that is already loaded is an ordinary re-import:</p>
+<pre><code>pos import-items --file catalogue.csv --update</code></pre>
+<h2 id="what-gets-rejected">What gets rejected</h2>
+<p>The import is <strong>all or nothing</strong>. If anything is wrong, nothing is written and you get the full list of problems with line numbers — fix the file and run it again.</p>
+<ul>
+<li>A <code>gst_rate</code> that is not one of the slabs above. Almost always a typo, and a typo here misprices every sale of that item until somebody notices.</li>
+<li>A <code>selling_price</code> above <code>mrp</code>. Selling above the printed price is not allowed.</li>
+<li>A <code>barcode</code> whose check digit does not add up. This catches a mistyped or transposed digit — which would otherwise match a completely different product. Only applies to 8, 12 and 13 digit numeric codes; your own internal codes are accepted as-is.</li>
+<li>The same <code>sku</code> or <code>barcode</code> on two rows, or a <code>barcode</code> already belonging to a different item.</li>
+<li><code>unit</code> and <code>is_weighed</code> contradicting each other. They say the same thing, so if they disagree one of them is wrong and there is no way to tell which. The message says which way round it should be — <code>Muzham</code> with <code>is_weighed</code> <code>no</code> is told it should be <code>yes</code>.</li>
+<li>A <code>unit</code> that is not in the table above.</li>
+<li>A negative <code>stock_qty</code> or <code>reorder_level</code>. A count below zero is something the till records after a sale, not something a spreadsheet declares.</li>
+<li>A <code>reorder_level</code> with no <code>stock_qty</code> beside it — there is nothing to compare it against, so it would never fire, and a half-filled row is nearly always a mistake rather than a choice.</li>
+<li>A <code>cost_price</code> above the <code>selling_price</code>. Either it is a typo, or the shop is losing money on every scan of that item — and both are worth stopping the import over rather than finding in a margin report months later. A negative cost is refused for the same reason.</li>
+</ul>
+<h2 id="things-that-are-handled-for-you">Things that are handled for you</h2>
+<ul>
+<li>Commas inside a quoted field: <code>"Basmati Rice, Premium, 5kg"</code> stays one name.</li>
+<li>Thousands separators and currency prefixes: <code>"1,299.00"</code> and <code>Rs.1299</code> both work.</li>
+<li>A byte order mark, which Excel adds when you "Save as CSV UTF-8".</li>
+</ul>
+<h2 id="one-item-at-a-time">One item at a time</h2>
+<p>A file is for loading a shop. For a single product the shop has just started stocking, use the left half of the Catalogue screen (<strong>Ctrl+D</strong>, then <strong>Ctrl+3</strong>): type the name and it offers an HSN code and its slab, taking what the shop already sells in preference to the built-in list of common grocery codes. Nothing is filled in without being shown, and every suggestion says where it came from — the code is the shop's responsibility and its accountant's call.</p>
+<p><strong>Alt+U</strong> goes to the unit list. Arrow keys move through it, and typing a unit's spelling jumps to it — <code>muzha</code> for Muzham. The form works out <code>is_weighed</code> from the unit, so it is never asked twice.</p>
+<p>That form goes through the same checks as a file. Nothing gets in by the shorter route that would be refused by the longer one.</p>
+<h2 id="loading-a-whole-file">Loading a whole file</h2>
+<p>To start a file from scratch, <strong>Alt+T</strong> on the Catalogue tab saves a template with every column and a few example rows. It is the same <code>catalog_template.csv</code> that sits in the install folder.</p>
+<p>At the till: <strong>Ctrl+D</strong> for the owner's screen, then <strong>Ctrl+3</strong> for Catalogue. Pick the file, choose whether items already in the catalogue may be changed, and press <strong>Check the file</strong>. It reads the file and says what would happen without writing anything; <strong>Import</strong> only wakes up once that check comes back clean, and the problems are listed by line and column so the fix happens in the spreadsheet. Nothing is written until you press Import, and what lands is sellable at the counter straight away — no restart.</p>
+<p>The check belongs to the file and the mode it was run against. Pick a different file, or switch between adding and updating, and it has to be checked again — a clean check of one file is not permission to write another.</p>
+<p>The same thing from a command line, for support and for a scripted rollout:</p>
+<pre><code>pos import-items --file catalogue.csv --dry-run    check it without writing anything
+pos import-items --file catalogue.csv              first load
+pos import-items --file catalogue.csv --update     later price revisions</code></pre>
+<p><code>--update</code> changes items already in the catalogue. Without it, an existing SKU is reported as an error — which is what you want on a first load, and not what you want on a price change.</p>
+<h2 id="a-note-on-product-names">A note on product names</h2>
+<p>A thermal printer has no font for Tamil, so a line carrying Tamil — a label, a unit, or an item name like <code>ஹிமாலயா சாம்பு</code> — is <strong>drawn as dots</strong> and sent as an image. That is what <code>hardware.printerRasterMode</code> set to <code>Auto</code> does, and it is the default. Everything else prints as plain text, which is faster.</p>
+<p>With <code>printerRasterMode</code> set to <code>Never</code>, a Tamil name prints as question marks. Check a catalogue with Tamil names by running <code>pos receipt-preview --png receipt.png</code>, or <strong>Ctrl+4</strong> then <strong>Alt+W</strong> on the owner's screen, and looking at the image.</p>
+<h2 id="changing-prices-only-the-price-sheet">Changing prices only: the price sheet</h2>
+<p>For a price revision you do not need the whole catalogue file. On the owner's screen, <strong>Ctrl+3</strong>, <code>Alt+S</code> saves a price sheet of your own items — <code>sku</code>, <code>name</code>, <code>unit</code>, <code>gst_rate</code>, <code>cost_price</code>, <code>mrp</code>, <code>selling_price</code> — with two empty columns, <code>new_mrp</code> and <code>new_selling_price</code>. Fill in only the prices that change and load it back with <code>Alt+L</code>. Only <code>sku</code>, <code>new_mrp</code> and <code>new_selling_price</code> are read; everything else about the items stays as it is. A price above its MRP is refused, and a sheet with any mistake in it changes nothing.</p>
+<h2 id="offers-and-schemes-the-offers-sheet">Offers and schemes: the offers sheet</h2>
+<p>On the owner's screen, <strong>Ctrl+3</strong>, <code>Alt+O</code> saves the offers sheet: the shop's offers, one a row, or — with none yet — one example of each kind, each named starting with <code>#</code> so it is skipped. Copy an example row, take the <code>#</code> off, change it, save as CSV, and load it back with <code>Alt+D</code>. <strong>The sheet is the whole list</strong>: loading it replaces every offer, so a row taken out ends that offer. A sheet with any mistake in it changes nothing and says which line and column.</p>
+<div class="scroller"><table><thead><tr>
+<th>Column</th>
+<th>For</th>
+</tr></thead><tbody>
+<tr>
+<td><code>name</code></td>
+<td>What it is called — on the screen, on the bill, in the figures. Each offer its own name.</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td><code>BuyGet</code>, <code>Percent</code>, <code>MultiPrice</code>, <code>BillAmount</code>, <code>BillPercent</code> or <code>FreeItem</code></td>
+</tr>
+<tr>
+<td><code>sku</code></td>
+<td>The item it is on (every kind but a department <code>Percent</code> and the bill offers)</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>The department a <code>Percent</code> offer is on, instead of an item</td>
+</tr>
+<tr>
+<td><code>buy</code>, <code>get</code></td>
+<td><code>BuyGet</code>: buy 2 get 1. <code>MultiPrice</code>: how many for the price</td>
+</tr>
+<tr>
+<td><code>percent</code></td>
+<td><code>Percent</code>, <code>BillPercent</code>: <code>10</code> for 10%</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td><code>BillAmount</code>: money off</td>
+</tr>
+<tr>
+<td><code>price</code></td>
+<td><code>MultiPrice</code>: what all of them come to — 3 for <code>100</code></td>
+</tr>
+<tr>
+<td><code>min_bill</code></td>
+<td><code>BillAmount</code>, <code>BillPercent</code>, <code>FreeItem</code>: the smallest bill it is for</td>
+</tr>
+<tr>
+<td><code>free_qty</code></td>
+<td><code>FreeItem</code>: how much of the item is free</td>
+</tr>
+<tr>
+<td><code>from</code>, <code>to</code></td>
+<td>The dates it runs, <code>2026-10-01</code> or <code>01-10-2026</code>; empty for always</td>
+</tr>
+<tr>
+<td><code>days</code></td>
+<td>Days of the week it runs, <code>Wed</code> or <code>Sat Sun</code>; empty for every day</td>
+</tr>
+</tbody></table></div>
+<p>How the till works them out, on every bill as it is rung up:</p>
+<ul>
+<li>Each is a <strong>discount on the lines it applies to</strong>, so the GST is on what the customer paid — the same rule as a discount given with <code>F4</code>. The bill shows it under the line, with the offer's name.</li>
+<li>Each item gets the <strong>one</strong> item offer that gives the customer most. Buy-get and so-many-for-a- price are for items counted in pieces, not weights. A buy-get free item is the last one scanned.</li>
+<li>Then the <strong>one</strong> bill offer the bill is big enough for — after its item offers — that gives most, spread across the lines in proportion to what each comes to, to the paisa. A free item needs the rest of the bill to reach its sum; the gift does not count towards itself.</li>
+<li>A line discounted by hand with <code>F4</code> is <strong>never touched</strong> by an offer. <code>F4</code> back to <code>0</code> gives it back to the offers.</li>
+</ul>
+
+</div>
+</body>
+</html>

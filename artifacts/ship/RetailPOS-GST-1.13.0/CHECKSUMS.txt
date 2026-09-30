@@ -1,0 +1,15 @@
+RetailPOS 1.13.0
+Variant: GST - issues tax invoices
+Built 2026-09-30 20:23
+
+SHA-256:
+9b046c10cc13f36a511e4f41ac70e83b5efaac17e9eebc562ac10b94d7b4eaf4  docs\CATALOGUE_FORMAT.html
+dfb74f9b2597d435ddee13e0a2d0ef1caeb3fd735454871107c950803b15fd55  docs\FEATURES.html
+dbf273c3ccf6158648c1c6d78ac4e748e4f37e3fe28139197cefe74992fbb51a  docs\HARDWARE_SIGNOFF.html
+6ede504b7374fe372874226fccd6d22507d0c1f95a878055516c068267a407bf  docs\PILOT_RUNBOOK.html
+a731c4f8c2b15b1a57792ca8b05ed8041aefead8c4ed8f4dc21c8b0992227b6c  docs\SETTINGS.html
+446b174fd22332d506959170377707e494c9901b6a6093643d201eee9248df7b  RetailPOS-GST-Setup-1.13.0.exe
+87c4bf43e6a74542141d5d95b1ed93ddf685ea0e70a51c6e0c3bef1aadea85de  START-HERE.txt
+ecdae13c5bea040f1cde3a69afc3d55a9057092d4944595eae9b72f8530a311f  templates\catalog_template.csv
+dad090ac443168bfa0bea41e1c26cb9f4ea61ebc161505d967c7d3e5ac1994fe  templates\settings.json
+ad6bfb8ca984952712f73f673944c06b14d91fb77adb68e5d288e040db77111f  templates\settings.pilot-tamil.json
