@@ -142,7 +142,7 @@ switch (command)
             // Every problem at once. A shopkeeper fixing a spreadsheet wants the whole list, not
             // the first line that failed.
             Console.WriteLine();
-            Console.WriteLine($"  {result.Problems.Count:N0} problem(s) — nothing was imported:");
+            Console.WriteLine($"  {Plural.Of(result.Problems.Count, "problem")} — nothing was imported:");
             Console.WriteLine();
 
             const int shown = 50;
@@ -197,9 +197,9 @@ switch (command)
         Console.WriteLine($"  {result.Bytes / 1024:N0} KB, verified.");
 
         if (result.Pruned.Count > 0)
-            Console.WriteLine($"  Removed {result.Pruned.Count} older snapshot(s), keeping {keep}.");
+            Console.WriteLine($"  Removed {Plural.Of(result.Pruned.Count, "older snapshot")}, keeping {keep}.");
 
-        Console.WriteLine($"  {backup.Existing().Count} snapshot(s) on hand.");
+        Console.WriteLine($"  {Plural.Of(backup.Existing().Count, "snapshot")} on hand.");
         return 0;
     }
 
@@ -302,7 +302,7 @@ switch (command)
 
         // Credit paid back is money to report even on a day with no sales, so it does not need
         // --force: that flag is for closing a day with nothing in it at all.
-        if (preview.TookNothing && !preview.CollectedCredit && !flags.Contains("--force"))
+        if (preview.TookNothing && !preview.MovedMoneyWithoutSales && !flags.Contains("--force"))
         {
             Console.WriteLine("Nothing has been sold since the last close. Pass --force to close anyway.");
             return 0;
@@ -321,11 +321,12 @@ switch (command)
         }
 
         var closed = closes.Close(settings.LaneId, DateTimeOffset.Now);
-        Console.WriteLine($"Closed. Report no {closed.Id}, {closed.InvoiceCount} invoice(s), net {closed.NetSales:N2}.");
+        Console.WriteLine($"Closed. Report no {closed.Id}, {Plural.Of(closed.InvoiceCount, "invoice")}, net {closed.NetSales:N2}.");
 
         // What to reorder, gathered now and printed at the foot of this report only. A reprint
         // months later must not carry today's shelves under last spring's takings.
         var lowStock = new StockRepository(database, () => settings.LowStockPercent).ListLow(50);
+        var dates = new ExpiryRepository(database).Expiring(DateOnly.FromDateTime(DateTime.Today)).Where(w => w.DaysLeft <= 7).ToList();
 
         // The day's books are worth a snapshot before anyone goes home.
         var backup = new DatabaseBackup(database, Path.Combine(dataDirectory, "backups")).Create(DateTimeOffset.Now);
@@ -338,7 +339,7 @@ switch (command)
 
         if (printer.IsConfigured)
         {
-            var outcome = printer.Print(composer.Compose(closed, isReprint: false, lowStock).ToEscPos());
+            var outcome = printer.Print(composer.Compose(closed, isReprint: false, lowStock, dates).ToEscPos());
             Console.WriteLine(outcome.Succeeded ? "Report printed." : $"Report did not print: {outcome.Detail}");
         }
 
@@ -426,7 +427,7 @@ switch (command)
 
         Console.WriteLine();
         Console.WriteLine($"  {existing.InvoiceNo}  {existing.Sale.CreatedAt:dd MMM yyyy HH:mm}  {existing.GrandTotal:N2}");
-        Console.WriteLine($"  {existing.Sale.Lines.Count} line(s), {existing.Sale.Payments.Count} payment(s)");
+        Console.WriteLine($"  {Plural.Of(existing.Sale.Lines.Count, "line")}, {Plural.Of(existing.Sale.Payments.Count, "payment")}");
 
         // Whose sale it was, so a void is confirmed against the right customer and a bill that has
         // loyalty points on it is recognised as one before the points are taken back.
@@ -571,6 +572,13 @@ switch (command)
         Console.WriteLine($"  Window        : {days} days to {to.ToString("dd MMM yyyy", indian)}");
         Console.WriteLine($"  Bills         : {data.Range.Bills.ToString("N0", indian)}");
         Console.WriteLine($"  Net sales     : {data.Range.NetSales.ToString("N2", indian)}");
+
+        if (data.Returns.Count > 0)
+            Console.WriteLine($"  Returns       : {Plural.Of(data.Returns.Count, "credit note")}, {data.Returns.Value.ToString("N2", indian)} refunded");
+
+        if (data.Expenses.Count > 0)
+            Console.WriteLine($"  Expenses      : {data.ExpensesTotal.ToString("N2", indian)}");
+
         Console.WriteLine($"  Read in       : {data.Elapsed.TotalMilliseconds.ToString("N0", indian)} ms");
         Console.WriteLine();
         Console.WriteLine($"Saved to {outPath}");
@@ -642,8 +650,15 @@ switch (command)
         Console.WriteLine($"  Nil rated      : {data.NilRated.ToString("N2", indian)}");
         Console.WriteLine($"  HSN codes      : {data.Hsn.Count}");
 
+        if (data.CreditNotes > 0)
+            Console.WriteLine($"  Returns        : {Plural.Of(data.CreditNotes, "credit note")}, {data.CreditNotesValue.ToString("N2", indian)}, netted out");
+
         foreach (var run in data.Documents)
-            Console.WriteLine($"  Bills          : {run.From} to {run.To}, {run.Total} issued, {run.Cancelled} cancelled");
+        {
+            Console.WriteLine(run.Nature == GstDocumentSeries.CreditNotes
+                ? $"  Credit notes   : {run.From} to {run.To}, {run.Total} issued"
+                : $"  Bills          : {run.From} to {run.To}, {run.Total} issued, {run.Cancelled} cancelled");
+        }
 
         foreach (var warning in data.Warnings)
         {
@@ -659,6 +674,650 @@ switch (command)
         log.Info("tool", $"GST return for {month:yyyy-MM}: {data.TaxInvoices} invoices, taxable {data.TaxableValue:0.00}, {files.Count} files");
 
         return 0;
+    }
+
+    case "dead-stock":
+    {
+        // Counted items on the shelf that have stopped selling: the Stock tab's "Not selling".
+        var days = ParseIntOption(args, "--days") ?? DeadStock.Days;
+
+        if (!DeadStock.IsValidDays(days))
+        {
+            Console.Error.WriteLine($"Dead stock is not sold for 14 to 365 days, not {days}.");
+            return 2;
+        }
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var items = new DeadStockRepository(database).NotSelling(DateOnly.FromDateTime(DateTime.Today), days);
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        Console.WriteLine();
+
+        if (items.Count == 0)
+        {
+            Console.WriteLine($"  Everything counted on the shelf has sold in the last {days} days.");
+            return 0;
+        }
+
+        foreach (var item in items)
+        {
+            var name = item.Name.Length > 30 ? item.Name[..29] + "…" : item.Name;
+            var sold = item.LastSold is { } last ? last.ToString("dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture) : "never";
+            var tied = item.TiedUp?.ToString("N2", indian) ?? "—";
+
+            Console.WriteLine($"  {name,-32}{item.Have.ToString("0.###", indian),8}  {sold,-11}{tied,12}  {item.Advice}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {Plural.Of(items.Count, "item")} not sold in {days} days, {items.Sum(i => i.TiedUp ?? 0m).ToString("N2", indian)} tied up at cost.");
+        return 0;
+    }
+
+    case "offers":
+    {
+        // The shop's offers: what runs and what it gave, the sheet that sets them, and a trial bill.
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var offerStore = new OfferRepository(database);
+        var items = new ItemRepository(database);
+        var now = DateTimeOffset.Now;
+        var today = DateOnly.FromDateTime(now.DateTime);
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        if (ParseStringOption(args, "--sheet") is { } sheetPath)
+        {
+            File.WriteAllText(sheetPath, OfferSheet.Write(offerStore.All()), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Console.WriteLine($"Saved the offers sheet to {sheetPath}.");
+            return 0;
+        }
+
+        if (ParseStringOption(args, "--load") is { } loadPath)
+        {
+            OfferSheetPlan plan;
+
+            using (var reader = ItemCsvParser.OpenText(loadPath))
+                plan = OfferSheet.Read(reader, items.Skus(), items.Categories());
+
+            if (!plan.IsClean)
+            {
+                foreach (var problem in plan.Problems)
+                    Console.Error.WriteLine($"  Line {problem.Line}, {problem.Column}: {problem.Problem}");
+
+                Console.Error.WriteLine("Nothing was changed.");
+                return 1;
+            }
+
+            foreach (var warning in plan.Warnings)
+                Console.WriteLine($"  NOTE: {warning}");
+
+            if (!flags.Contains("--yes"))
+            {
+                Console.WriteLine($"The sheet lists {Plural.Of(plan.Offers.Count, "offer")}, replacing the {offerStore.All().Count} there are now. Add --yes to load it.");
+                return 0;
+            }
+
+            offerStore.ReplaceAll(plan.Offers, now);
+            log.Info("tool", $"{Plural.Of(plan.Offers.Count, "offer")} loaded from {loadPath}");
+            Console.WriteLine($"Loaded {Plural.Of(plan.Offers.Count, "offer")}. The till uses them from its next start, or at once when loaded on the owner's screen.");
+            return 0;
+        }
+
+        var offers = offerStore.All();
+
+        if (ParseStringOption(args, "--try") is { } basket)
+        {
+            // "DAL001:3 SUG001:1.25": a bill of these, priced with the offers as the till would.
+            var bill = new InvoiceEngine(settings.OutletStateCode, settings.TaxMode, settings.RoundOffToRupee);
+
+            foreach (var part in basket.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries))
+            {
+                var pieces = part.Split(':');
+
+                if (items.FindBySku(pieces[0]) is not { } item)
+                {
+                    Console.Error.WriteLine($"No item has SKU {pieces[0]}.");
+                    return 1;
+                }
+
+                var quantity = pieces.Length > 1 && decimal.TryParse(pieces[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 1m;
+                bill.AddItem(item, quantity);
+            }
+
+            foreach (var given in OfferEngine.Work(bill.Lines, offers, today))
+                bill.ApplyOffer(given.Index, given.Discount, given.OfferName);
+
+            Console.WriteLine();
+
+            foreach (var line in bill.Lines)
+            {
+                var name = line.NameSnapshot.Length > 26 ? line.NameSnapshot[..25] + "…" : line.NameSnapshot;
+                var off = line.Discount > 0m ? "-" + line.Discount.ToString("N2", indian) : string.Empty;
+                Console.WriteLine($"  {name,-27}{line.Quantity.ToString("0.###", indian),7}{line.Gross.ToString("N2", indian),11}{off,11}{line.LineTotal.ToString("N2", indian),11}  {line.OfferName}");
+            }
+
+            var totals = bill.Totals;
+            Console.WriteLine();
+            Console.WriteLine($"  Offers give {totals.TotalDiscount.ToString("N2", indian)}; the bill comes to {totals.AmountPayable.ToString("N2", indian)}.");
+            return 0;
+        }
+
+        Console.WriteLine();
+
+        if (offers.Count == 0)
+        {
+            Console.WriteLine("  No offers. `pos offers --sheet offers.csv` saves a sheet with an example of each kind.");
+            return 0;
+        }
+
+        var givenByOffer = offerStore.Given(now.AddDays(-30), now.AddMinutes(1));
+
+        foreach (var offer in offers)
+        {
+            var state = offer.Sku is not null && offer.ItemId is null ? $"gives nothing: no item has SKU {offer.Sku}"
+                : offer.IsOn(today) ? "on today" : "not today";
+            var uses = givenByOffer.Where(u => u.OfferName.Split(" + ").Contains(offer.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+
+            Console.WriteLine($"  {offer.Name}");
+            Console.WriteLine($"      {offer.Describe()}; {offer.When()}; {state}");
+
+            if (uses.Count > 0)
+                Console.WriteLine($"      gave {uses.Sum(u => u.Given).ToString("N2", indian)} on {Plural.Of(uses.Sum(u => u.Bills), "bill")} in 30 days");
+        }
+
+        return 0;
+    }
+
+    case "bill":
+    {
+        // A bill as the customer gets it on WhatsApp, and - with --out - as a full A4 invoice.
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var invoices = new InvoiceRepository(database, settings.InvoiceNumber.ToFormat());
+        var number = ParseStringOption(args, "--no");
+        var invoice = number is null ? invoices.FindLatest(settings.LaneId) : invoices.FindByInvoiceNo(number.Trim());
+
+        if (invoice is null)
+        {
+            Console.Error.WriteLine(number is null ? "This lane has not billed anything yet." : $"No bill numbered {number.Trim()}.");
+            return 1;
+        }
+
+        var store = settings.Store.ToProfile();
+
+        Console.WriteLine();
+        Console.WriteLine(DigitalBill.Text(invoice, store));
+        Console.WriteLine();
+
+        if (ParseStringOption(args, "--out") is { } outPath)
+        {
+            File.WriteAllText(outPath, InvoicePage.Render(invoice, store, settings.OutletStateCode, isCopy: true), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Console.WriteLine($"Saved {invoice.InvoiceNo} as an A4 invoice to {outPath}.");
+        }
+
+        return 0;
+    }
+
+    case "statement":
+    {
+        // A customer's khata statement - since they last owed nothing, or between two days - as the
+        // till prints it with Ctrl+K; or, with --owing, one for everybody who owes, as a page.
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var credit = new CreditRepository(database);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var upi = settings.Upi.ToPayee(settings.Store.Name);
+
+        DateOnly? ParseDay(string option)
+        {
+            var text = ParseStringOption(args, option);
+
+            if (text is null)
+                return null;
+
+            if (DateOnly.TryParseExact(text, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day))
+                return day;
+
+            throw new FormatException($"{option} is a day written 2026-09-01, not '{text}'.");
+        }
+
+        DateOnly? from, to;
+
+        try
+        {
+            from = ParseDay("--from");
+            to = ParseDay("--to");
+        }
+        catch (FormatException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 2;
+        }
+
+        if (from is { } f && to is { } t && t < f)
+        {
+            Console.Error.WriteLine($"--to ({t:yyyy-MM-dd}) is before --from ({f:yyyy-MM-dd}).");
+            return 2;
+        }
+
+        KhataStatement For(Customer customer)
+        {
+            var ledger = credit.Ledger(customer.Id);
+
+            return from is null && to is null
+                ? KhataStatement.SinceLastClear(customer, ledger, today)
+                : KhataStatement.Build(customer, ledger, from ?? DateOnly.MinValue, to ?? today);
+        }
+
+        var statements = new List<KhataStatement>();
+
+        if (flags.Contains("--owing"))
+        {
+            foreach (var owing in credit.Owing(10_000))
+                statements.Add(For(new Customer { Id = owing.CustomerId, MobileNo = owing.MobileNo, Name = owing.Name }));
+
+            if (statements.Count == 0)
+            {
+                Console.WriteLine("Nobody owes anything on credit.");
+                return 0;
+            }
+        }
+        else
+        {
+            if (ParseStringOption(args, "--mobile") is not { } mobile)
+            {
+                Console.Error.WriteLine("Whose statement? --mobile and their number, or --owing for everybody who owes.");
+                return 2;
+            }
+
+            if (new CustomerRepository(database).FindByMobile(mobile.Trim()) is not { } customer)
+            {
+                Console.Error.WriteLine($"No customer has the number {mobile.Trim()}.");
+                return 1;
+            }
+
+            statements.Add(For(customer));
+        }
+
+        var composer = new ReceiptComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage);
+
+        foreach (var statement in statements)
+        {
+            Console.WriteLine();
+            Console.WriteLine(composer.ComposeKhataStatement(statement, upi).ToPlainText());
+        }
+
+        if (ParseStringOption(args, "--out") is { } outPath)
+        {
+            File.WriteAllText(outPath, KhataStatementPage.Render(statements, settings.Store.ToProfile(), upi), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Console.WriteLine($"Saved {Plural.Of(statements.Count, "statement")}, one a page, to {outPath}.");
+        }
+
+        if (flags.Contains("--print"))
+        {
+            var printer = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
+
+            if (!printer.IsConfigured)
+            {
+                Console.Error.WriteLine("No printer is set up on this lane.");
+                return 1;
+            }
+
+            foreach (var statement in statements)
+            {
+                var outcome = printer.Print(composer.ComposeKhataStatement(statement, upi).ToEscPos(raster: printer.Raster));
+
+                if (!outcome.Succeeded)
+                {
+                    Console.Error.WriteLine($"A statement did not print: {outcome.Detail}");
+                    return 1;
+                }
+            }
+
+            Console.WriteLine($"Printed {Plural.Of(statements.Count, "statement")}.");
+        }
+
+        log.Info("tool", $"{Plural.Of(statements.Count, "khata statement")}");
+        return 0;
+    }
+
+    case "upi":
+    {
+        // The code the till shows when a customer pays by UPI, for an amount given here: to check
+        // the shop's UPI ID with a real phone before the first customer does.
+        if (settings.Upi.ToPayee(settings.Store.Name) is not { } payee)
+        {
+            Console.Error.WriteLine("No UPI ID is set for this lane. The owner sets it in Settings (Ctrl+D), or \"upi\": { \"id\": \"...\" } in settings.json.");
+            return 2;
+        }
+
+        var amountText = ParseStringOption(args, "--amount");
+
+        if (amountText is null
+            || !decimal.TryParse(amountText, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount)
+            || amount <= 0m || decimal.Round(amount, 2) != amount)
+        {
+            Console.Error.WriteLine($"--amount is the rupees to ask for, such as 400.50, not '{amountText}'.");
+            return 2;
+        }
+
+        var link = UpiLink.For(payee, amount);
+        var width = ParseWidth(args) ?? settings.Hardware.PrinterPaperWidthChars;
+        var slip = new ReceiptComposer(settings.Store.ToProfile(), width, settings.ReceiptLanguage).ComposeUpiSlip(payee, amount, link);
+        var code = QrCode.Encode(link);
+
+        Console.WriteLine();
+        Console.WriteLine($"  Pay to   : {payee.Name} ({payee.Id})");
+        Console.WriteLine($"  Amount   : {amount.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"  Link     : {link}");
+        Console.WriteLine($"  QR code  : version {code.Version}, {code.Size} x {code.Size} modules");
+        Console.WriteLine();
+
+        if (ParseStringOption(args, "--png") is { } pngPath)
+        {
+            var raster = rasterizer is null
+                ? null
+                : new RasterOptions(rasterizer, settings.Hardware.EffectivePaperWidthDots, settings.Hardware.PrinterRasterMode);
+
+            if (raster is null)
+            {
+                Console.Error.WriteLine("Nothing to draw the slip's words with: this lane has no text renderer.");
+                return 2;
+            }
+
+            var pixels = slip.ToBitmap(raster);
+            ReceiptImage.SavePng(pixels, pngPath);
+            Console.WriteLine($"Saved the slip, {pixels.Width}x{pixels.Height} dots, to {pngPath}. Scan it off the screen with a phone to check.");
+        }
+
+        if (flags.Contains("--print"))
+        {
+            var printer = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
+
+            if (!printer.IsConfigured)
+            {
+                Console.Error.WriteLine("No printer is set up on this lane.");
+                return 1;
+            }
+
+            var outcome = printer.Print(slip.ToEscPos(raster: printer.Raster));
+
+            if (!outcome.Succeeded)
+            {
+                Console.Error.WriteLine($"The slip did not print: {outcome.Detail}");
+                return 1;
+            }
+
+            Console.WriteLine("Printed. Scan it with a phone: the app should show the shop's name and this amount. Do not pay it.");
+        }
+
+        log.Info("tool", $"UPI code for {amount:0.00} to {payee.Id}");
+        return 0;
+    }
+
+    case "expiring":
+    {
+        // Deliveries within a month of their use-by date and probably still on the shelf: the same
+        // list as the Stock tab's "Near its date".
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var warnings = new ExpiryRepository(database).Expiring(DateOnly.FromDateTime(DateTime.Today));
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        Console.WriteLine();
+
+        if (warnings.Count == 0)
+        {
+            Console.WriteLine($"  Nothing on the shelf is within {Expiry.WarnDays} days of its date, as far as the purchase bills say.");
+            return 0;
+        }
+
+        foreach (var warning in warnings)
+        {
+            var name = warning.Name.Length > 30 ? warning.Name[..29] + "…" : warning.Name;
+            var shelf = warning.LikelyOnShelf is { } left ? $"{left.ToString("0.###", indian)} likely on the shelf" : "not counted";
+
+            Console.WriteLine($"  {name,-32}{warning.Expires:dd-MM-yyyy}  {Plural.Of(warning.DaysLeft, "day"),9}  {shelf,-26}{warning.Advice}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {warnings.Count} deliver{(warnings.Count == 1 ? "y" : "ies")}, {warnings.Count(w => w.IsExpired)} past the date.");
+        return 0;
+    }
+
+    case "order-list":
+    {
+        // What to order, from whom: the same list as the owner's Orders tab.
+        var cover = ParseIntOption(args, "--cover") ?? settings.OrderCoverDays;
+
+        if (!Reorder.IsValidCoverDays(cover))
+        {
+            Console.Error.WriteLine($"An order covers between 1 and 120 days, not {cover}.");
+            return 2;
+        }
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var list = new OrderListQuery(database, settings.LowStockPercent).Gather(cover);
+        var indian = System.Globalization.CultureInfo.GetCultureInfo("en-IN");
+
+        Console.WriteLine();
+
+        if (list.IsEmpty)
+        {
+            Console.WriteLine($"  Nothing needs ordering: every counted item lasts {cover} days or more at the rate it sells.");
+            return 0;
+        }
+
+        Console.WriteLine($"  To last {cover} days, at the rate each sold over the last {Plural.Of(list.DaysMeasured, "day")}.");
+
+        foreach (var supplier in list.Suppliers)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {supplier.Supplier}{(supplier.Phone is { Length: > 0 } phone ? $"  ({phone})" : "")}");
+
+            foreach (var line in supplier.Lines)
+            {
+                var name = line.Name.Length > 30 ? line.Name[..29] + "…" : line.Name;
+                var days = line.DaysLeft is { } left ? $"{left.ToString("0.#", indian)} days left" : "not selling";
+
+                Console.WriteLine($"    {name,-32}{line.Order.ToString("0.###", indian),8} {Units.ScreenLabel(line.Unit),-8}{days}");
+            }
+        }
+
+        if (ParseStringOption(args, "--out") is { } outPath)
+        {
+            OrderListFiles.Write(list, Path.GetFullPath(outPath));
+            Console.WriteLine();
+            Console.WriteLine($"Saved to {Path.GetFullPath(outPath)}");
+        }
+
+        return 0;
+    }
+
+    case "price-sheet":
+    {
+        // Prices in bulk, the same sheet as the Catalogue tab: --out writes one to fill in, --load
+        // reads it back and changes only prices.
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+        var prices = new PriceRepository(database);
+
+        if (ParseStringOption(args, "--out") is { } outPath)
+        {
+            var items = prices.PriceSheet();
+            File.WriteAllText(Path.GetFullPath(outPath), PriceSheet.Write(items), new System.Text.UTF8Encoding(true));
+            Console.WriteLine($"Saved a price sheet of {Plural.Of(items.Count, "item")} to {Path.GetFullPath(outPath)}.");
+            return 0;
+        }
+
+        if (ParseStringOption(args, "--load") is not { } loadPath)
+        {
+            Console.Error.WriteLine("pos price-sheet --out <file.csv>     save a sheet to fill in");
+            Console.Error.WriteLine("pos price-sheet --load <file.csv>    load a filled-in one back");
+            return 2;
+        }
+
+        PriceSheetPlan plan;
+
+        using (var reader = ItemCsvParser.OpenText(Path.GetFullPath(loadPath)))
+            plan = PriceSheet.Read(reader, prices.PriceSheet());
+
+        Console.WriteLine();
+
+        if (!plan.IsClean)
+        {
+            foreach (var problem in plan.Problems)
+                Console.WriteLine($"  Line {problem.Line}, {problem.Column}: {problem.Problem}");
+
+            Console.WriteLine();
+            Console.WriteLine("Nothing was changed.");
+            return 1;
+        }
+
+        foreach (var change in plan.Changes)
+            Console.WriteLine($"  {change.Sku,-16}{change.Name,-32} {change.OldPrice,10:0.00} -> {change.NewPrice,10:0.00}   MRP {change.NewMrp:0.00}");
+
+        foreach (var warning in plan.Warnings)
+            Console.WriteLine($"  NOTE: {warning}");
+
+        if (plan.Changes.Count == 0)
+        {
+            Console.WriteLine("  Nothing in that sheet changes a price.");
+            return 0;
+        }
+
+        if (!flags.Contains("--yes"))
+        {
+            Console.Write($"Change {Plural.Of(plan.Changes.Count, "price")}? [y/N] ");
+            var answer = Console.ReadLine();
+
+            if (answer is null || !answer.Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("Left as they were.");
+                return 0;
+            }
+        }
+
+        var changed = prices.Apply(plan.Changes);
+        Console.WriteLine(changed == 1
+            ? "1 price changed. Its shelf label is due: pos labels."
+            : $"{Plural.Of(changed, "price")} changed. Their shelf labels are due: pos labels.");
+        log.Info("prices", $"{Plural.Of(changed, "price")} changed from a price sheet");
+        return 0;
+    }
+
+    case "labels":
+    {
+        // The shelf labels that are out of date, or every one with --all.
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+        var prices = new PriceRepository(database);
+        var labels = flags.Contains("--all") ? prices.AllLabels() : prices.LabelsDue();
+
+        Console.WriteLine();
+
+        if (labels.Count == 0)
+        {
+            Console.WriteLine("  Every shelf label is up to date.");
+            return 0;
+        }
+
+        foreach (var label in labels)
+            Console.WriteLine($"  {label.Sku,-16}{label.Name,-32} {label.Price,10:0.00} / {Units.ScreenLabel(label.Unit)}   MRP {label.Mrp:0.00}");
+
+        Console.WriteLine();
+        Console.WriteLine($"  {Plural.Of(labels.Count, "label")}{(flags.Contains("--all") ? "" : " due")}.");
+
+        var done = false;
+
+        if (ParseStringOption(args, "--out") is { } pagePath)
+        {
+            File.WriteAllText(Path.GetFullPath(pagePath), ShelfLabelPage.Render(labels, settings.Store.Name), new System.Text.UTF8Encoding(true));
+            Console.WriteLine($"Saved to {Path.GetFullPath(pagePath)}: print it on A4 at actual size.");
+            done = true;
+        }
+
+        if (flags.Contains("--print"))
+        {
+            var labelPrinter = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
+
+            if (!labelPrinter.IsConfigured)
+            {
+                Console.Error.WriteLine("This lane has no printer configured. Use --out to save a page instead.");
+                return 2;
+            }
+
+            var outcome = labelPrinter.Print(new ShelfLabelComposer(labelPrinter.PaperWidthChars, settings.ReceiptLanguage, settings.Store.ToProfile().CurrencyPrefix)
+                .Compose(labels).ToEscPos(raster: labelPrinter.Raster));
+
+            Console.WriteLine(outcome.Succeeded ? $"Printed {Plural.Of(labels.Count, "label")}." : $"Did not print: {outcome.Detail}");
+
+            if (!outcome.Succeeded)
+                return 1;
+
+            done = true;
+        }
+
+        // Only what reached paper or a page counts as done; a listing on its own leaves them due.
+        if (done && !flags.Contains("--all"))
+            prices.MarkLabelled(labels.Select(l => l.ItemId), DateTimeOffset.Now);
+
+        return 0;
+    }
+
+    case "credit-note":
+    {
+        // Reading back a return: on screen, or a duplicate on the printer. The credit note is the
+        // customer's proof that goods went back and money came to them, so it has to be reachable
+        // after the slip has gone.
+        var number = args.Skip(1).FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal));
+
+        if (string.IsNullOrWhiteSpace(number))
+        {
+            Console.Error.WriteLine("Which credit note? pos credit-note CN/26-27/T1-1 [--reprint]");
+            return 2;
+        }
+
+        var database = new PosDatabase(Path.Combine(dataDirectory, "pos.db"));
+        database.EnsureMigrated();
+
+        var note = new CreditNoteRepository(database).Find(number);
+
+        if (note is null)
+        {
+            Console.Error.WriteLine($"There is no credit note {number}.");
+            return 2;
+        }
+
+        var composer = new ReceiptComposer(settings.Store.ToProfile(), settings.Hardware.PrinterPaperWidthChars, settings.ReceiptLanguage);
+        var isReprint = flags.Contains("--reprint");
+
+        Console.WriteLine();
+        Console.WriteLine(composer.ComposeCreditNote(note, isReprint).ToPlainText());
+
+        if (!isReprint)
+            return 0;
+
+        var toPrinter = PeripheralFactory.CreatePrinter(settings.Hardware, rasterizer);
+
+        if (!toPrinter.IsConfigured)
+        {
+            Console.Error.WriteLine("This lane has no printer configured, so there is nothing to print to.");
+            return 2;
+        }
+
+        var duplicate = toPrinter.Print(composer.ComposeCreditNote(note, isReprint: true).ToEscPos(raster: toPrinter.Raster));
+
+        Console.WriteLine(duplicate.Succeeded ? $"Duplicate of {note.Number} printed, marked as a reprint." : $"Did not print: {duplicate.Detail}");
+        log.Info("tool", $"reprinted credit note {note.Number}");
+        return duplicate.Succeeded ? 0 : 1;
     }
 
     case "stock":
@@ -749,7 +1408,7 @@ switch (command)
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {levels.Count} item(s){(low ? $" low - at the reorder level, or down to {settings.LowStockPercent:0.##}% of full" : " counted")}.");
+        Console.WriteLine($"  {Plural.Of(levels.Count, "item")}{(low ? $" low - at the reorder level, or down to {settings.LowStockPercent:0.##}% of full" : " counted")}.");
 
         return 0;
     }
@@ -900,9 +1559,12 @@ switch (command)
         if (all || flags.Contains("--scale"))
             results.Add(("Scale", checks.Scale(window)));
 
+        if (all || flags.Contains("--pole"))
+            results.Add(("Pole display", checks.PoleDisplay()));
+
         if (results.Count == 0)
         {
-            Console.Error.WriteLine("Nothing selected. Pass --printer, --drawer, --scanner, --scale, or nothing for all.");
+            Console.Error.WriteLine("Nothing selected. Pass --printer, --drawer, --scanner, --scale, --pole, or nothing for all.");
             return 2;
         }
 
@@ -919,7 +1581,7 @@ switch (command)
         Console.WriteLine();
         Console.WriteLine(failed == 0
             ? "All configured peripherals passed."
-            : $"{failed} peripheral(s) failed.");
+            : $"{Plural.Of(failed, "peripheral")} failed.");
 
         return failed == 0 ? 0 : 1;
     }
@@ -1110,7 +1772,7 @@ static void WriteHelp()
     Console.WriteLine("""
         RetailPOS lane diagnostics
 
-          pos test-hardware [--printer] [--drawer] [--scanner] [--scale]
+          pos test-hardware [--printer] [--drawer] [--scanner] [--scale] [--pole]
               Checks the lane's peripherals. With no flags it checks all of them.
               The printer and drawer checks ask you to confirm what physically
               happened, because no software can see paper come out of a printer.
@@ -1145,7 +1807,64 @@ static void WriteHelp()
               of supply, nil-rated sales, the HSN summary and the bill numbers
               issued. Writes a page to read and CSV files in the layout of the
               GST offline tool. Defaults to last month. Behind the dashboard
-              PIN when one is set.
+              PIN when one is set. Goods returned on credit notes in the month
+              are taken off the figures.
+
+          pos credit-note <number> [--reprint]
+              Shows a credit note - goods taken back at the till with F9 - as
+              it printed. --reprint prints a duplicate marked as a reprint.
+
+          pos price-sheet --out <file.csv> | --load <file.csv> [--yes]
+              Prices in bulk. --out saves every item with its prices and two
+              empty columns, new_mrp and new_selling_price; --load reads the
+              filled-in sheet back, says what it will change, and changes only
+              prices. A price above its MRP is refused; one below cost is named.
+
+          pos labels [--all] [--print] [--out <page.html>]
+              Shelf labels for every item whose price changed, or which is new,
+              since its label was printed (--all for every item). --print
+              sends them to the till's printer, --out saves an A4 page. Either
+              marks them done.
+
+          pos offers [--sheet <file.csv>] [--load <file.csv> [--yes]] [--try "SKU:qty ..."]
+              The shop's offers and schemes, and what each gave in 30 days.
+              --sheet saves the offers sheet (examples of each kind when there
+              are none); --load checks a filled-in one, and with --yes loads it,
+              replacing every offer. --try prices a bill of those items with
+              the offers, as the till would: "DAL001:3,SUG001:2", or spaces
+              inside quotes.
+
+          pos bill [--no <invoice number>] [--out <file.html>]
+              A bill as the customer gets it on WhatsApp - the last one, or the
+              one numbered. --out saves it as a full A4 tax invoice.
+
+          pos statement --mobile <number> [--from 2026-09-01] [--to 2026-09-30]
+                        [--print] [--out <file.html>]
+          pos statement --owing [--print] [--out <file.html>]
+              A customer's khata statement: everything since they last owed
+              nothing, or the days given, with what they owe now, how old it
+              is, and a UPI code for it. --owing does everybody who owes, one
+              a page. The till prints the same with Ctrl+K.
+
+          pos upi --amount 400.50 [--print] [--png <path>]
+              The UPI link and QR code the till shows for that amount, to check
+              the shop's UPI ID with a real phone before a customer does.
+              --print prints the scan-to-pay slip, --png saves it as a picture.
+
+          pos dead-stock [--days 60]
+              Counted items on the shelf not sold for 60 days (or --days),
+              most money tied up at cost first, with what to do about each.
+
+          pos expiring
+              Deliveries within a month of the use-by date on their purchase
+              bill and probably still on the shelf, soonest first - worked
+              out from the count, newest deliveries on the shelf first.
+
+          pos order-list [--cover 14] [--out <file.csv>]
+              What to order and from whom: enough of each counted item to
+              last the cover at the rate it sold over the last four weeks,
+              grouped by the supplier it was last bought from. --out saves
+              the list as a spreadsheet.
 
           pos receipt-preview [--width N] [--png <path>] [--layout standard|compact]
               Renders a sample receipt as text. Touches no hardware, so it works

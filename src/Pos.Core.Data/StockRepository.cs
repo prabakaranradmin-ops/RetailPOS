@@ -81,7 +81,7 @@ public sealed class StockRepository : IStockStore
     /// something — the shop never said it wanted it counted — but a stocktake that writes a figure
     /// down against it has.
     /// </param>
-    private static decimal? WriteIn(
+    internal static decimal? WriteIn(
         SqliteConnection connection,
         SqliteTransaction transaction,
         long itemId,
@@ -112,7 +112,7 @@ public sealed class StockRepository : IStockStore
 
         // A delivery, a count or a correction that takes the shelf higher is a restock. A void
         // puts back what a sale took, which is not the shelf being filled.
-        var restock = reason is StockReason.Import or StockReason.Adjust or StockReason.Count
+        var restock = reason is StockReason.Import or StockReason.Adjust or StockReason.Count or StockReason.Purchase
                       && (!counted || balance > current);
 
         using (var update = connection.CreateCommand())
@@ -173,6 +173,7 @@ public sealed class StockRepository : IStockStore
     private List<StockLevel> Levels(bool lowOnly, int limit)
     {
         using var connection = _database.OpenConnection();
+        var (since, days) = SalesRateSql.Window(connection, DateTimeOffset.Now);
         using var command = connection.CreateCommand();
 
         // Ordered by how far below the line each item is, not alphabetically. The point of the
@@ -182,9 +183,12 @@ public sealed class StockRepository : IStockStore
         // CAST is needed because the quantities are stored as text to keep them exact; without it
         // SQLite compares '9' against '10' as strings and puts nine below ten.
         command.CommandText = $"""
+            WITH sold AS ({SalesRateSql.SoldSince})
             SELECT i.id, i.sku, i.name, i.category, i.stock_qty, i.reorder_level, i.unit_type, i.full_qty,
-                   {LowStockSql.WarnAt("i")} AS warn
+                   {LowStockSql.WarnAt("i")} AS warn,
+                   COALESCE(s.qty, 0)
             FROM items i
+            LEFT JOIN sold s ON s.item_id = i.id
             WHERE i.is_active = 1
               AND i.stock_qty IS NOT NULL
               {(lowOnly ? "AND " + LowStockSql.IsLow("i") : "")}
@@ -196,6 +200,7 @@ public sealed class StockRepository : IStockStore
             """;
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 100_000));
         command.Parameters.AddWithValue("$pct", LowStockSql.Percent(_percent()));
+        command.Parameters.AddWithValue("$since", since);
 
         using var reader = command.ExecuteReader();
         var levels = new List<StockLevel>();
@@ -211,7 +216,8 @@ public sealed class StockRepository : IStockStore
                 ReorderLevel: reader.IsDBNull(5) ? null : reader.GetDecimal(5),
                 Unit: (UnitType)reader.GetInt32(6),
                 FullLevel: reader.IsDBNull(7) ? null : reader.GetDecimal(7),
-                WarnAt: reader.IsDBNull(8) ? null : Math.Round((decimal)reader.GetDouble(8), 3)));
+                WarnAt: reader.IsDBNull(8) ? null : Math.Round((decimal)reader.GetDouble(8), 3),
+                PerDay: Reorder.PerDay(Math.Round((decimal)reader.GetDouble(9), 3), days)));
         }
 
         return levels;

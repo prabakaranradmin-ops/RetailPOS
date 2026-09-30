@@ -73,12 +73,17 @@ public sealed class CheckoutService(
     /// Settles the bill. The basket must already cover the total; loyalty points, if any, are
     /// expected to be sitting in the basket as a <see cref="TenderType.LoyaltyPoints"/> payment.
     /// </summary>
+    /// <param name="printReceipt">
+    /// False when the customer takes the bill on their phone instead of on paper. The invoice is the
+    /// same invoice, numbered and stored the same way; only the paper is saved.
+    /// </param>
     public CheckoutResult Complete(
         string laneId,
         InvoiceEngine bill,
         TenderBasket basket,
         int pointsRedeemed = 0,
-        string? recalledFromToken = null)
+        string? recalledFromToken = null,
+        bool printReceipt = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(bill);
@@ -112,7 +117,7 @@ public sealed class CheckoutService(
         // Store credit is a debt, and a debt with nobody attached to it is one nobody can collect.
         // Enforced here rather than only on the screen, so there is no route to a walk-in credit sale.
         if (customer is null && basket.TotalOf(TenderType.StoreCredit) > 0m)
-            throw new InvalidOperationException("Store credit needs a customer on the bill - somebody has to owe it.");
+            throw new InvalidOperationException("The khata needs a customer on the bill - somebody has to owe it.");
 
         // Accrual is on the net bill — what the customer actually paid for after points came off —
         // so points spent on an invoice never earn points back (SRS section 4).
@@ -136,7 +141,10 @@ public sealed class CheckoutService(
             // Taken from the bill rather than from settings, so the mode recorded is the one the
             // lines were actually priced under. A bill parked before a mode change and settled
             // after it keeps what it was rung up as, which is the rule its prices already follow.
-            bill.TaxMode);
+            bill.TaxMode,
+
+            // A business buyer, copied onto the bill as they are now.
+            BusinessBuyer.Of(customer));
 
         // The sale is durable from here on. Nothing below may throw the invoice away.
         var invoice = _invoices.Save(sale);
@@ -163,7 +171,10 @@ public sealed class CheckoutService(
 
         MoveStock(sale.Lines, laneId, invoice.InvoiceNo, StockReason.Sale, sign: -1m);
 
-        var printResult = PrintReceipt(invoice);
+        var printResult = printReceipt ? PrintReceipt(invoice) : PrintOutcome.NotAsked();
+
+        if (!printReceipt)
+            _log.Info("printer", $"{invoice.InvoiceNo} not printed: the customer takes it digitally");
 
         if (printResult.Status == PrintStatus.Failed)
             _log.Warn("printer", $"{invoice.InvoiceNo} did not print: {printResult.Detail}");

@@ -58,7 +58,11 @@ public sealed class InvoiceRepository : IInvoiceStore
     /// The sequence is kept per lane and per <em>financial</em> year, so it restarts on 1 April
     /// with the year the invoice will be filed under rather than in the middle of it.
     /// </summary>
-    private static long TakeNextSequence(SqliteConnection connection, SqliteTransaction transaction, string laneId, FiscalYear fiscalYear)
+    /// <param name="laneId">
+    /// The lane, or another series kept beside it - credit notes number under <c>CN:</c> and the
+    /// lane, so they run 1, 2, 3 of their own and never take a number from the bills.
+    /// </param>
+    internal static long TakeNextSequence(SqliteConnection connection, SqliteTransaction transaction, string laneId, FiscalYear fiscalYear)
     {
         using (var seed = connection.CreateCommand())
         {
@@ -95,11 +99,13 @@ public sealed class InvoiceRepository : IInvoiceStore
             INSERT INTO invoices
               (invoice_no, lane_id, created_at, customer_id, status, hold_token,
                subtotal_taxable, total_discount, total_cgst, total_sgst, total_igst, grand_total,
-               points_redeemed, points_earned, change_due, cashier_name, tax_mode, round_off)
+               points_redeemed, points_earned, change_due, cashier_name, tax_mode, round_off,
+               buyer_gstin, buyer_name, buyer_address)
             VALUES
               ($invoiceNo, $lane, $createdAt, $customerId, $status, $holdToken,
                $taxable, $discount, $cgst, $sgst, $igst, $grandTotal,
-               $pointsRedeemed, $pointsEarned, $changeDue, $cashier, $taxMode, $roundOff);
+               $pointsRedeemed, $pointsEarned, $changeDue, $cashier, $taxMode, $roundOff,
+               $buyerGstin, $buyerName, $buyerAddress);
             SELECT last_insert_rowid();
             """;
 
@@ -130,6 +136,10 @@ public sealed class InvoiceRepository : IInvoiceStore
         // browser can see which bills were tax invoices without a lookup table in their head.
         command.Parameters.AddWithValue("$taxMode", sale.TaxMode.ToString());
 
+        command.Parameters.AddWithValue("$buyerGstin", (object?)sale.Buyer?.Gstin ?? DBNull.Value);
+        command.Parameters.AddWithValue("$buyerName", (object?)sale.Buyer?.Name ?? DBNull.Value);
+        command.Parameters.AddWithValue("$buyerAddress", (object?)sale.Buyer?.Address ?? DBNull.Value);
+
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
@@ -142,12 +152,12 @@ public sealed class InvoiceRepository : IInvoiceStore
               (invoice_id, line_no, item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no,
                unit_type, mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount,
                is_inter_state, taxable_value, cgst_amount, sgst_amount, igst_amount, line_total,
-               category_snapshot, cost_snapshot)
+               category_snapshot, cost_snapshot, offer_name)
             VALUES
               ($invoiceId, $lineNo, $itemId, $name, $hsn, $barcode, $batch,
                $unitType, $mrp, $unitPrice, $taxInclusive, $gstRate, $quantity, $discount,
                $interState, $taxable, $cgst, $sgst, $igst, $lineTotal,
-               $category, $cost);
+               $category, $cost, $offer);
             """;
 
         foreach (var name in new[]
@@ -155,7 +165,7 @@ public sealed class InvoiceRepository : IInvoiceStore
                      "$invoiceId", "$lineNo", "$itemId", "$name", "$hsn", "$barcode", "$batch",
                      "$unitType", "$mrp", "$unitPrice", "$taxInclusive", "$gstRate", "$quantity",
                      "$discount", "$interState", "$taxable", "$cgst", "$sgst", "$igst", "$lineTotal",
-                     "$category", "$cost",
+                     "$category", "$cost", "$offer",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -183,6 +193,7 @@ public sealed class InvoiceRepository : IInvoiceStore
             command.Parameters["$interState"].Value = line.IsInterState ? 1 : 0;
             command.Parameters["$category"].Value = (object?)line.CategorySnapshot ?? DBNull.Value;
             command.Parameters["$cost"].Value = (object?)line.CostSnapshot ?? DBNull.Value;
+            command.Parameters["$offer"].Value = (object?)line.OfferName ?? DBNull.Value;
 
             // The computed figures are stored alongside the inputs rather than re-derived on read.
             // A reprint years from now must show the tax that was actually charged, even if the
@@ -290,6 +301,21 @@ public sealed class InvoiceRepository : IInvoiceStore
                     throw new InvalidOperationException($"{number} has already been reported on a day-end report and cannot be voided. A closed day is corrected with a credit note.");
             }
 
+            // Goods already returned against it have their own credit note, which refunded them.
+            // Voiding the bill as well would take the same money off the day twice.
+            using (var returned = connection.CreateCommand())
+            {
+                returned.Transaction = transaction;
+                returned.CommandText = """
+                    SELECT COUNT(*) FROM credit_notes cn JOIN invoices i ON i.id = cn.invoice_id
+                    WHERE i.invoice_no = $no;
+                    """;
+                returned.Parameters.AddWithValue("$no", number);
+
+                if (Convert.ToInt64(returned.ExecuteScalar()) > 0)
+                    throw new InvalidOperationException($"Goods have been returned against {number} on a credit note, so it cannot be voided. Return the rest of it instead.");
+            }
+
             using (var update = connection.CreateCommand())
             {
                 update.Transaction = transaction;
@@ -360,7 +386,8 @@ public sealed class InvoiceRepository : IInvoiceStore
                        -- Appended rather than slotted in beside grand_total: every reader below
                        -- takes its columns by position, and moving one would silently re-point all
                        -- of them.
-                       i.round_off
+                       i.round_off,
+                       i.buyer_gstin, i.buyer_name, i.buyer_address
                 FROM invoices i
                 LEFT JOIN customers c ON c.id = i.customer_id
                 WHERE i.invoice_no = $invoiceNo;
@@ -415,7 +442,11 @@ public sealed class InvoiceRepository : IInvoiceStore
                 // wrongly reprinted as a bill of supply hides that it ever charged any.
                 Enum.TryParse<TaxMode>(reader.IsDBNull(21) ? null : reader.GetString(21), out var mode)
                     ? mode
-                    : TaxMode.Gst);
+                    : TaxMode.Gst,
+                reader.IsDBNull(23) ? null : new BusinessBuyer(
+                    reader.GetString(23),
+                    reader.IsDBNull(24) ? reader.GetString(23) : reader.GetString(24),
+                    reader.IsDBNull(25) ? null : reader.GetString(25)));
 
             voidedAt = reader.IsDBNull(19) ? null : reader.GetDateTimeOffset(19);
             voidReason = reader.IsDBNull(20) ? null : reader.GetString(20);
@@ -445,7 +476,7 @@ public sealed class InvoiceRepository : IInvoiceStore
         command.CommandText = """
             SELECT item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no, unit_type,
                    mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state,
-                   category_snapshot, cost_snapshot
+                   category_snapshot, cost_snapshot, offer_name
             FROM invoice_lines
             WHERE invoice_id = $invoiceId
             ORDER BY line_no;
@@ -477,7 +508,8 @@ public sealed class InvoiceRepository : IInvoiceStore
         discount: reader.GetDecimal(11),
         isInterState: reader.GetInt32(12) != 0,
         categorySnapshot: reader.FieldCount > 13 && !reader.IsDBNull(13) ? reader.GetString(13) : null,
-        costSnapshot: reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetDecimal(14) : null);
+        costSnapshot: reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetDecimal(14) : null,
+        offerName: reader.FieldCount > 15 && !reader.IsDBNull(15) ? reader.GetString(15) : null);
 
     private static List<Tender> ReadPayments(SqliteConnection connection, long invoiceId)
     {

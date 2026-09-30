@@ -9,6 +9,9 @@ public enum PrintStatus
 
     /// <summary>A printer is configured but the job did not reach it.</summary>
     Failed = 2,
+
+    /// <summary>Nothing was sent, because nothing was wanted on paper - a bill taken digitally.</summary>
+    NotAsked = 3,
 }
 
 /// <param name="Status">What happened.</param>
@@ -21,6 +24,8 @@ public readonly record struct PrintOutcome(PrintStatus Status, string Detail = "
     public static PrintOutcome Printed(int bytes) => new(PrintStatus.Printed, string.Empty, bytes);
 
     public static PrintOutcome NotConfigured() => new(PrintStatus.NoPrinterConfigured);
+
+    public static PrintOutcome NotAsked() => new(PrintStatus.NotAsked);
 
     public static PrintOutcome Failed(string detail) => new(PrintStatus.Failed, detail);
 }

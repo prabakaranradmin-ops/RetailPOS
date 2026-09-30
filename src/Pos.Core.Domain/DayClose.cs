@@ -1,5 +1,10 @@
 namespace Pos.Core.Domain;
 
+/// <summary>One kind of cash movement through the drawer on a day-end report.</summary>
+/// <param name="Kind">What it was: <c>SupplierPayment</c>, <c>Refund</c>, and later others.</param>
+/// <param name="Amount">Signed: negative left the drawer.</param>
+public readonly record struct CashMovementTotal(string Kind, int Count, decimal Amount);
+
 /// <param name="Type">How it was paid.</param>
 /// <param name="Amount">Total taken under this tender.</param>
 /// <param name="PaymentCount">How many payments made it up.</param>
@@ -47,7 +52,11 @@ public readonly record struct CashierTotal(string? Name, int InvoiceCount, decim
 /// </param>
 /// <param name="HeldBillsOutstanding">
 /// Bills still parked at close. Not sales, but somebody has to deal with them before the lane is
-/// left for the night.
+/// left for the night. Orders are not counted here: see <paramref name="OrdersWaiting"/>.
+/// </param>
+/// <param name="OrdersWaiting">
+/// Phone and WhatsApp orders saved and not yet paid for. Meant to wait - for the customer to come,
+/// or the delivery to go - so they are reported apart from bills that were parked and forgotten.
 /// </param>
 public sealed record DayCloseSummary(
     long Id,
@@ -74,12 +83,44 @@ public sealed record DayCloseSummary(
     IReadOnlyList<CashierTotal>? Cashiers = null,
     decimal CreditCollected = 0m,
     decimal CreditCollectedCash = 0m,
-    int CreditCollectedCount = 0)
+    int CreditCollectedCount = 0,
+    decimal CashPaidOut = 0m,
+    decimal CashPaidIn = 0m,
+    IReadOnlyList<CashMovementTotal>? DrawerMovements = null,
+    int ReturnsCount = 0,
+    decimal ReturnsValue = 0m,
+    decimal ReturnsTax = 0m,
+    int OrdersWaiting = 0)
 {
+    // Returns are credit notes: goods brought back against a bill, from today or any earlier day.
+    // They are a second document, not a change to the sale, so they touch none of the sales figures
+    // above and the reconciliations still hold. A cash refund left the drawer, and is one of the
+    // DrawerMovements (kind Refund) - which is how CashExpected already allows for it. ReturnsTax is
+    // the output tax the returns took back, which comes off what the day owes in GST.
+
+    /// <summary>Takings less what was refunded on returns: what the day actually kept.</summary>
+    public decimal NetAfterReturns => NetSales - ReturnsValue;
+
+    /// <summary>True when anything came back on a credit note.</summary>
+    public bool HadReturns => ReturnsCount > 0;
+
     // CreditCollected is money customers paid back against earlier store credit. It is not a
     // sale - no tax, no invoice - so it is outside NetSales and outside Tenders, and every
     // reconciliation above still holds. The part paid in cash is in the drawer, though, so
     // CashExpected = cash taken - change given + CreditCollectedCash.
+    //
+    // CashPaidOut and CashPaidIn are cash that left or entered the drawer other than through a sale:
+    // a supplier paid from the till, an expense, the float. Positive figures both. Neither is a sale
+    // either, so CashExpected = cash taken - change given + CreditCollectedCash - CashPaidOut + CashPaidIn.
+
+    /// <summary>Each kind of drawer movement on this report, with its count and signed total.</summary>
+    public IReadOnlyList<CashMovementTotal> DrawerMovementTotals => DrawerMovements ?? [];
+
+    /// <summary>
+    /// True when money moved even though nothing was sold — credit paid back, a supplier paid from
+    /// the till. A report of "no sales" alone would leave that cash unexplained.
+    /// </summary>
+    public bool MovedMoneyWithoutSales => CollectedCredit || CashPaidOut != 0m || CashPaidIn != 0m || HadReturns;
 
     /// <summary>Credit paid back by card or UPI: to the bank, not the drawer.</summary>
     public decimal CreditCollectedToBank => CreditCollected - CreditCollectedCash;

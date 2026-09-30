@@ -27,7 +27,8 @@ public sealed class DayCloseService(
     IPrinterService printer,
     IBackupService? backups = null,
     TimeProvider? clock = null,
-    IStockStore? stock = null)
+    IStockStore? stock = null,
+    IExpiryStore? expiry = null)
 {
     private readonly IDayCloseStore _closes = closes ?? throw new ArgumentNullException(nameof(closes));
     private readonly ZReportComposer _reports = reports ?? throw new ArgumentNullException(nameof(reports));
@@ -70,6 +71,26 @@ public sealed class DayCloseService(
     /// a stock query that will not run is not a reason to lose the sheet that says what is in the
     /// drawer.
     /// </remarks>
+    /// <summary>
+    /// What is past or within a week of its date and probably on the shelf, or null for none. Swallows
+    /// its failure, like the reorder list.
+    /// </summary>
+    private IReadOnlyList<ExpiryWarning>? CheckTheDates()
+    {
+        if (expiry is null)
+            return null;
+
+        try
+        {
+            var soon = expiry.Expiring(DateOnly.FromDateTime(_clock.GetLocalNow().Date)).Where(w => w.DaysLeft <= 7).ToList();
+            return soon.Count == 0 ? null : soon;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private IReadOnlyList<StockLevel>? LowStock()
     {
         if (_stock is null)
@@ -97,8 +118,9 @@ public sealed class DayCloseService(
             // reported, so it goes on the original and never on a duplicate. A report pulled out
             // of the file months later must not carry today's shelves under last spring's takings.
             var lowStock = isReprint ? null : LowStock();
+            var dates = isReprint ? null : CheckTheDates();
 
-            return _printer.Print(_reports.Compose(day, isReprint, lowStock).ToEscPos(raster: _printer.Raster));
+            return _printer.Print(_reports.Compose(day, isReprint, lowStock, dates).ToEscPos(raster: _printer.Raster));
         }
         catch (Exception ex)
         {

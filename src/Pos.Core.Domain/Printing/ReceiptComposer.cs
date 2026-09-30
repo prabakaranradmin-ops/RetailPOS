@@ -119,6 +119,227 @@ public sealed class ReceiptComposer
         return receipt;
     }
 
+    /// <summary>
+    /// A slip with a UPI code for the exact amount, for a counter with no screen facing the customer.
+    /// </summary>
+    /// <remarks>
+    /// Not a bill, and it says so: nothing is sold by it and it carries no tax. The bill prints once
+    /// the payment is taken, as it always does. The amount is printed large above the code, because
+    /// it is what the customer checks against their app before approving.
+    /// </remarks>
+    public ReceiptBuilder ComposeUpiSlip(UpiPayee payee, decimal amount, string link)
+    {
+        ArgumentNullException.ThrowIfNull(payee);
+        ArgumentException.ThrowIfNullOrWhiteSpace(link);
+
+        var receipt = new ReceiptBuilder(PaperWidthChars);
+
+        WriteShop(receipt);
+        receipt.Text(Labels.ScanToPay, TextAlignment.Center, bold: true);
+        receipt.Text($"Rs {Amount(amount)}", TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
+        receipt.Qr(link);
+        receipt.Text(payee.Name, TextAlignment.Center);
+        receipt.Text(payee.Id, TextAlignment.Center);
+        receipt.Rule();
+        receipt.Text(Labels.UpiSlipNote, TextAlignment.Center);
+        receipt.Cut();
+
+        return receipt;
+    }
+
+    /// <summary>
+    /// A customer's khata statement: what they owed at the start, each bill, payment and return with
+    /// the balance after it, what they owe now and how old it is.
+    /// </summary>
+    /// <remarks>
+    /// Not a bill, and it says so. With the shop's UPI ID it ends with a code for everything owed, so
+    /// the customer can settle it on the spot or later from the paper. The dates are the day and
+    /// month only beside each line, with the full period at the head, to keep the lines on one row.
+    /// </remarks>
+    public ReceiptBuilder ComposeKhataStatement(KhataStatement statement, UpiPayee? upi = null)
+    {
+        ArgumentNullException.ThrowIfNull(statement);
+
+        var receipt = new ReceiptBuilder(PaperWidthChars);
+        var customer = statement.Customer;
+
+        WriteShop(receipt);
+        receipt.Text(Labels.KhataStatement, TextAlignment.Center, bold: true);
+        receipt.Rule();
+        receipt.Columns(Labels.Customer, customer.Name ?? customer.MobileNo);
+
+        if (customer.Name is not null)
+            receipt.Columns(Labels.Mobile, customer.MobileNo);
+
+        receipt.Columns(Labels.Period, $"{Day(statement.From)} - {Day(statement.To)}");
+        receipt.Rule();
+        receipt.Columns(Labels.OpeningBalance, Amount(statement.Opening));
+
+        foreach (var line in statement.Lines)
+        {
+            var entry = line.Entry;
+            var what = entry.Kind switch
+            {
+                KhataEntryKind.Bought => $"{Labels.EntryBill} {entry.Reference}",
+                KhataEntryKind.Returned => $"{Labels.EntryReturned} {entry.Reference}",
+                _ => entry.Tender is { } tender ? $"{Labels.EntryPaid}, {Label(tender)}" : Labels.EntryPaid,
+            };
+
+            receipt.Row(
+                $"{entry.At.ToString("dd-MM", CultureInfo.InvariantCulture)} {what}",
+                new ColumnValue(Signed(entry.Change), 10),
+                new ColumnValue(Amount(line.BalanceAfter), 11));
+        }
+
+        receipt.Rule();
+
+        if (statement.Bills > 0)
+            receipt.Columns($"{Labels.BoughtOnCredit} ({statement.Bills})", Amount(statement.Bought));
+
+        if (statement.Paid > 0m)
+            receipt.Columns(Labels.PaidBack, Amount(statement.Paid));
+
+        if (statement.Returned > 0m)
+            receipt.Columns(Labels.ReturnedGoods, Amount(statement.Returned));
+
+        receipt.Columns(Labels.OwedNow, Amount(Math.Max(0m, statement.Closing)), bold: true);
+
+        var ageing = statement.Ageing;
+
+        if (ageing.OldestUnpaid is { } oldest)
+        {
+            receipt.Columns(Labels.OldestUnpaid, $"{Day(oldest)} ({ageing.DaysWaiting(statement.To)} {Labels.Days})");
+
+            foreach (var (label, amount) in new[]
+                     {
+                         (Labels.AgeUpTo30, ageing.UpTo30Days),
+                         (Labels.Age31To60, ageing.Days31To60),
+                         (Labels.Age61To90, ageing.Days61To90),
+                         (Labels.AgeOver90, ageing.Over90Days),
+                     })
+            {
+                if (amount > 0m)
+                    receipt.Columns(label, Amount(amount));
+            }
+        }
+
+        receipt.Rule();
+
+        if (statement.OwesAnything && upi is not null)
+        {
+            receipt.Text(Labels.ScanToPay, TextAlignment.Center, bold: true);
+            receipt.Text($"Rs {Amount(statement.Closing)}", TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
+            receipt.Qr(UpiLink.For(upi, statement.Closing, note: $"Khata {customer.MobileNo}"));
+            receipt.Text(upi.Id, TextAlignment.Center);
+            receipt.Rule();
+        }
+
+        receipt.Text(statement.OwesAnything ? Labels.StatementNote : Labels.NothingOwed, TextAlignment.Center);
+        receipt.Cut();
+
+        return receipt;
+
+        static string Day(DateOnly day) => day.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+
+        static string Signed(decimal change) => (change > 0m ? "+" : "-") + Amount(Math.Abs(change));
+    }
+
+    /// <summary>
+    /// The credit note for goods a customer brought back.
+    /// </summary>
+    /// <remarks>
+    /// Its own document with its own number, naming the bill the goods were sold on and the date of
+    /// it, as a credit note has to. The tax is printed as tax taken back, at the same split the sale
+    /// charged, so it can be set against the bill line for line. One layout for both bill styles:
+    /// a return is rare enough that a shop reads every word of it.
+    /// </remarks>
+    public ReceiptBuilder ComposeCreditNote(CreditNote note, bool isReprint = false)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+
+        var receipt = new ReceiptBuilder(PaperWidthChars);
+        var composition = note.TaxMode == TaxMode.Composition;
+
+        WriteShop(receipt);
+        receipt.Text(Labels.CreditNote, TextAlignment.Center, bold: true);
+
+        if (isReprint)
+            receipt.Text(Labels.Reprint, TextAlignment.Center, bold: true);
+
+        receipt.Rule();
+
+        var at = note.CreatedAt;
+        Pair(receipt, $"{Labels.CreditNote}: {note.Number}", at.ToString("dd-MM-yyyy hh:mm tt", CultureInfo.InvariantCulture));
+        Pair(receipt, $"{Labels.AgainstBill}: {note.InvoiceNo}", note.InvoiceDate.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture));
+
+        if (note.Customer is { } customer)
+            Pair(receipt, $"{Labels.Customer}: {customer.Name ?? customer.MobileNo}", customer.Name is null ? string.Empty : customer.MobileNo);
+
+        receipt.Rule();
+
+        var quantityWidth = Math.Clamp(
+            note.Lines.Select(l => Units.WithQuantity(l.Quantity, l.Unit, Language).Length).Append(Labels.Quantity.Length).Max(),
+            MinQuantityWidth,
+            MaxQuantityWidth);
+
+        receipt.Row(Labels.ItemShort, new ColumnValue(Labels.Quantity, quantityWidth), new ColumnValue(Labels.Amount, 10));
+        receipt.Rule();
+
+        foreach (var line in note.Lines)
+        {
+            receipt.Row(
+                line.Name,
+                new ColumnValue(Units.WithQuantity(line.Quantity, line.Unit, Language), quantityWidth),
+                new ColumnValue(Amount(line.LineTotal), 10));
+
+            var detail = composition
+                ? $"  HSN {line.Hsn}"
+                : $"  HSN {line.Hsn}  GST {Rate(line.GstRate)}%";
+
+            if (!line.Restocked)
+                detail += $"  ({Labels.Damaged})";
+
+            receipt.Text(detail);
+        }
+
+        receipt.Rule();
+        receipt.Columns(composition ? Labels.Subtotal : Labels.TaxableValue, Amount(note.TaxableValue));
+
+        if (!composition)
+        {
+            if (note.Cgst != 0m || note.Sgst != 0m)
+            {
+                receipt.Columns(Labels.Cgst, Amount(note.Cgst));
+                receipt.Columns(Labels.Sgst, Amount(note.Sgst));
+            }
+
+            if (note.Igst != 0m)
+                receipt.Columns(Labels.Igst, Amount(note.Igst));
+
+            receipt.Columns(Labels.TaxReversed, Amount(note.Cgst + note.Sgst + note.Igst));
+        }
+
+        if (note.RoundOff != 0m)
+            receipt.Columns(Labels.RoundOff, Amount(note.RoundOff));
+
+        receipt.Rule('=');
+        var how = note.Refund is TenderType.StoreCredit ? Labels.OffTheKhata : Label(note.Refund);
+        receipt.Text($"{Labels.Refund} ({how}) : {_store.CurrencyPrefix} {Amount(note.Refunded)}", TextAlignment.Right, bold: true, heightMultiplier: 2);
+        receipt.Rule('=');
+
+        receipt.Columns(Labels.Reason, note.Reason);
+
+        if (note.PointsReversed > 0)
+            receipt.Columns(Labels.RewardPoints, $"-{note.PointsReversed.ToString(CultureInfo.InvariantCulture)}");
+
+        receipt.Blank();
+        var stamp = at.ToString("dd-MM-yyyy hh:mm tt", CultureInfo.InvariantCulture);
+        receipt.Text(note.CashierName is { Length: > 0 } cashier ? $"{cashier}/{note.LaneId}/{stamp}" : $"{note.LaneId}/{stamp}");
+        receipt.Cut();
+
+        return receipt;
+    }
+
     /// <summary>Who the shop is: name, address, numbers, licences. Shared by every document it prints.</summary>
     private void WriteShop(ReceiptBuilder receipt)
     {
@@ -167,7 +388,27 @@ public sealed class ReceiptComposer
 
         receipt.Rule();
         WriteBillIdentity(receipt, invoice);
+        WriteBuyer(receipt, invoice.Sale);
         receipt.Rule();
+    }
+
+    /// <summary>
+    /// A bill to a business: who it was to, their GSTIN, where they are, and the state the goods
+    /// were supplied into - which a tax invoice to a registered buyer has to say.
+    /// </summary>
+    private void WriteBuyer(ReceiptBuilder receipt, SaleDraft sale)
+    {
+        if (sale.Buyer is not { } buyer)
+            return;
+
+        receipt.Rule();
+        receipt.Text($"{Labels.BillTo}: {buyer.Name}", bold: true);
+        receipt.Columns(Labels.BuyerGstin, buyer.Gstin, bold: true);
+
+        if (!string.IsNullOrWhiteSpace(buyer.Address))
+            receipt.Text(buyer.Address);
+
+        receipt.Columns(Labels.PlaceOfSupply, GstStates.Label(buyer.StateCode));
     }
 
     /// <summary>
@@ -260,6 +501,10 @@ public sealed class ReceiptComposer
                 detail += $"  less {Amount(line.Discount)}";
 
             receipt.Text(detail);
+
+            // Which offer gave the discount: the customer sees why the third soap cost nothing.
+            if (line.OfferName is { } offer)
+                receipt.Text($"  {Labels.Offer}: {offer}");
         }
 
         receipt.Rule();
@@ -301,6 +546,13 @@ public sealed class ReceiptComposer
             receipt.Columns($"{Labels.Items}: {totals.LineCount}", $"{Labels.TotalQuantity}: {Units.WithQuantity(totals.TotalQuantity, units[0], Language)}");
         else
             receipt.Text($"{Labels.Items}: {totals.LineCount}");
+
+        // What the customer pays, where the arithmetic above arrives at it, big enough to read across
+        // the counter. It used to be only in the tender block below, the same size as "Card 0.00";
+        // the compact bill already did this. Double height only, as there: double width would push a
+        // five-figure total off the paper.
+        receipt.Rule('=');
+        receipt.Text($"{Labels.Total}  {_store.CurrencyPrefix} {Amount(totals.AmountPayable)}", TextAlignment.Right, bold: true, heightMultiplier: 2);
     }
 
     /// <summary>
@@ -587,6 +839,8 @@ public sealed class ReceiptComposer
 
         if (sale.RecalledFromToken is { } token)
             receipt.Columns(Labels.ParkedAs, token);
+
+        WriteBuyer(receipt, sale);
     }
 
     /// <summary>
@@ -645,6 +899,10 @@ public sealed class ReceiptComposer
                 detail += $"  less {Amount(line.Discount)}";
 
             receipt.Text(detail);
+
+            // Which offer gave the discount: the customer sees why the third soap cost nothing.
+            if (line.OfferName is { } offer)
+                receipt.Text($"  {Labels.Offer}: {offer}");
         }
 
         receipt.Rule();

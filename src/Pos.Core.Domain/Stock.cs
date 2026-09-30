@@ -17,6 +17,15 @@ public enum StockReason
 
     /// <summary>Counted on a stock sheet and loaded back — a delivery or a stocktake, in bulk.</summary>
     Count,
+
+    /// <summary>Received on a supplier's bill.</summary>
+    Purchase,
+
+    /// <summary>Taken back off because the supplier's bill was cancelled.</summary>
+    PurchaseVoid,
+
+    /// <summary>Brought back by a customer, on a credit note, and put back on the shelf.</summary>
+    Return,
 }
 
 /// <summary>One movement in the stock ledger.</summary>
@@ -40,6 +49,7 @@ public sealed record StockMovement(
 /// The count it warns at — its reorder level, or its share of full — worked out by whoever read it,
 /// with the share of full that applied then. Null when nothing would make it low.
 /// </param>
+/// <param name="PerDay">What it sells in a day over the last four weeks, or null when it has not sold.</param>
 public sealed record StockLevel(
     long ItemId,
     string Sku,
@@ -49,8 +59,12 @@ public sealed record StockLevel(
     decimal? ReorderLevel,
     UnitType Unit,
     decimal? FullLevel = null,
-    decimal? WarnAt = null)
+    decimal? WarnAt = null,
+    decimal? PerDay = null)
 {
+    /// <summary>How many days what is on the shelf lasts at the rate it sells. Null when it is not selling.</summary>
+    public decimal? DaysLeft => Reorder.DaysLeft(Quantity, PerDay);
+
     public bool IsLow => (WarnAt ?? ReorderLevel) is { } floor && Quantity <= floor;
 
     public bool IsOut => Quantity <= 0m;

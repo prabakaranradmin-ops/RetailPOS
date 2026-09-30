@@ -105,6 +105,8 @@ public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent
             Tenders = tenders,
             GstSlabs = FoldGstSlabs(lines),
             Voids = FoldVoids(facts),
+            Returns = ReadReturns(connection, laneId, from, to),
+            Expenses = CashDrawerRepository.ReadTotals(connection, from, to),
             Customers = ReadCustomerMix(connection, laneId, from, to, facts),
             Points = FoldPoints(connection, facts),
             LowStock = ReadLowStock(connection),
@@ -176,6 +178,22 @@ public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent
         decimal Change,
         int PointsEarned,
         int PointsRedeemed);
+
+    /// <summary>Credit notes issued in the window, by the date of the note rather than of the sale.</summary>
+    private static ReturnSummary ReadReturns(SqliteConnection connection, string lane, DateTimeOffset from, DateTimeOffset to)
+    {
+        using var command = Prepare(connection, lane, from, to, $"""
+            SELECT COUNT(*), COALESCE({Sum("n.total")}, 0) + COALESCE({Sum("n.round_off")}, 0)
+            FROM credit_notes n
+            WHERE n.lane_id = $lane
+              AND n.created_at >= $from AND n.created_at < $to;
+            """);
+
+        using var reader = command.ExecuteReader();
+        reader.Read();
+
+        return new ReturnSummary(reader.GetInt32(0), Rupees(reader.GetInt64(1)));
+    }
 
     private static List<InvoiceFacts> ReadInvoiceFacts(SqliteConnection connection, string lane, DateTimeOffset from, DateTimeOffset to)
     {
@@ -632,7 +650,7 @@ public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent
         TenderType.Cash => "Cash",
         TenderType.Card => "Card",
         TenderType.Upi => "UPI",
-        TenderType.StoreCredit => "Store credit",
+        TenderType.StoreCredit => "Khata",
         TenderType.LoyaltyPoints => "Loyalty points",
         _ => tender.ToString(),
     };

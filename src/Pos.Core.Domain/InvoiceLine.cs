@@ -77,6 +77,18 @@ public sealed class InvoiceLine
     }
 
     /// <summary>
+    /// The offer the discount came from, or null - for a line with no discount, and for one discounted
+    /// by hand. That is how an offer tells a hand discount from its own and leaves it alone.
+    /// </summary>
+    public string? OfferName { get; set; }
+
+    /// <summary>What the line comes to before any discount: the quantity at the unit price.</summary>
+    public decimal Gross => _quantity * UnitPrice;
+
+    /// <summary>True when the discount was given by hand, which no offer may replace or add to.</summary>
+    public bool IsDiscountedByHand => _discount > 0m && OfferName is null;
+
+    /// <summary>
     /// Set from the invoice when the customer (and therefore the place of supply) changes.
     /// </summary>
     public bool IsInterState
@@ -141,6 +153,7 @@ public sealed class InvoiceLine
         IsInterState = IsInterState,
         CategorySnapshot = CategorySnapshot,
         CostSnapshot = CostSnapshot,
+        OfferName = OfferName,
     };
 
     /// <summary>
@@ -170,7 +183,8 @@ public sealed class InvoiceLine
         // Appended, and optional, so that adding them did not have to touch a hundred call sites
         // that have nothing to say about either.
         string? categorySnapshot = null,
-        decimal? costSnapshot = null) => new()
+        decimal? costSnapshot = null,
+        string? offerName = null) => new()
     {
         ItemId = itemId,
         NameSnapshot = nameSnapshot,
@@ -187,6 +201,7 @@ public sealed class InvoiceLine
         IsInterState = isInterState,
         CategorySnapshot = categorySnapshot,
         CostSnapshot = costSnapshot,
+        OfferName = offerName,
     };
 
     /// <summary>Builds a line from an item master record at quantity 1.</summary>

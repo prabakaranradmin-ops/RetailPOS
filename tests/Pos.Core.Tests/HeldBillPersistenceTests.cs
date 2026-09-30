@@ -149,6 +149,56 @@ public class HeldBillPersistenceTests : IDisposable
         Assert.Equal("Lane two", Held.Recall("L2", "H001")!.Lines[0].NameSnapshot);
     }
 
+    // ---- Orders --------------------------------------------------------------------------------
+
+    [Fact]
+    public void AnOrderIsParkedWithHowItCameAndItsNote()
+    {
+        Held.Park(Lane, "H001", When, null, TypicalBill(), new OrderInfo(OrderKind.WhatsApp, "  deliver to 12 North Street  "));
+
+        var summary = Assert.Single(Held.List(Lane));
+        Assert.True(summary.IsOrder);
+        Assert.Equal("WhatsApp order - deliver to 12 North Street", summary.OrderLine);
+
+        var recalled = Held.Recall(Lane, "H001")!;
+        Assert.Equal(new OrderInfo(OrderKind.WhatsApp, "deliver to 12 North Street"), recalled.Order);
+    }
+
+    [Fact]
+    public void AnOrderWithNoNoteIsStillAnOrder()
+    {
+        Held.Park(Lane, "H001", When, null, TypicalBill(), new OrderInfo(OrderKind.Phone, "   "));
+
+        var recalled = Held.Recall(Lane, "H001")!;
+
+        Assert.Equal(OrderKind.Phone, recalled.Order!.Kind);
+        Assert.Null(recalled.Order.Note);
+    }
+
+    [Fact]
+    public void AParkedBillIsNotAnOrder()
+    {
+        Held.Park(Lane, "H001", When, null, TypicalBill());
+
+        Assert.False(Assert.Single(Held.List(Lane)).IsOrder);
+        Assert.Null(Held.Recall(Lane, "H001")!.Order);
+    }
+
+    /// <summary>
+    /// Orders come first, the oldest at the top - it is the one someone is waiting longest for -
+    /// then parked bills, the newest first as before.
+    /// </summary>
+    [Fact]
+    public void OrdersAreListedFirstTheOldestAtTheTop()
+    {
+        Held.Park(Lane, "H001", When, null, [Line("Parked early", 100m, 5m)]);
+        Held.Park(Lane, "H002", When.AddMinutes(5), null, [Line("Order early", 100m, 5m)], new OrderInfo(OrderKind.Phone, null));
+        Held.Park(Lane, "H003", When.AddMinutes(10), null, [Line("Parked late", 100m, 5m)]);
+        Held.Park(Lane, "H004", When.AddMinutes(15), null, [Line("Order late", 100m, 5m)], new OrderInfo(OrderKind.WhatsApp, null));
+
+        Assert.Equal(["H002", "H004", "H003", "H001"], Held.List(Lane).Select(h => h.Token));
+    }
+
     // ---- Taking a bill off the shelf ---------------------------------------------------------
 
     [Fact]

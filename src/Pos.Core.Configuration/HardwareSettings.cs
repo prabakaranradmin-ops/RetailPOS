@@ -116,6 +116,24 @@ public sealed class HardwareSettings
     public int ScaleBaudRate { get; set; } = 9600;
 
     /// <summary>
+    /// Whether the bill is shown on a second monitor facing the customer. Off unless set; with it on
+    /// and only one monitor, nothing happens.
+    /// </summary>
+    [JsonPropertyName("customerScreen")]
+    public bool CustomerScreen { get; set; }
+
+    /// <summary>Serial port for a two-line pole display facing the customer. Empty means none.</summary>
+    [JsonPropertyName("polePort")]
+    public string? PolePort { get; set; }
+
+    [JsonPropertyName("poleBaudRate")]
+    public int PoleBaudRate { get; set; } = 9600;
+
+    /// <summary>Characters on each line of the pole display: 20 on nearly all of them.</summary>
+    [JsonPropertyName("poleWidth")]
+    public int PoleWidth { get; set; } = 20;
+
+    /// <summary>
     /// Which protocol the scale speaks. "Auto" tries the ones in the field and latches onto
     /// whichever answers, which is usually easier than finding the setting in a service menu.
     /// </summary>

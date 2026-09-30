@@ -301,6 +301,36 @@ public sealed class ReceiptBuilder
         return this;
     }
 
+    /// <summary>
+    /// A barcode, centred, drawn by the printer itself with its digits beneath - for a shelf label
+    /// a scanner can read straight off the shelf.
+    /// </summary>
+    public ReceiptBuilder Barcode(string data, int height = 60)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(data);
+
+        // Checked now rather than when the bytes are built, so a code the printer cannot take is
+        // refused where it was asked for.
+        _ = EscPos.Barcode(data, height);
+
+        _directives.Add(new Directive.BarCode(data.Trim(), height));
+        return this;
+    }
+
+    /// <summary>
+    /// A QR code, centred, drawn here and printed as dots - so every printer prints it, at a size a
+    /// phone reads, and the preview shows the very code the customer will scan.
+    /// </summary>
+    /// <exception cref="ArgumentException">More than a QR code holds (<see cref="QrCode.MostBytes"/>).</exception>
+    public ReceiptBuilder Qr(string data)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(data);
+
+        var text = data.Trim();
+        _directives.Add(new Directive.Qr(QrCode.Encode(text), text));
+        return this;
+    }
+
     /// <summary>Pulses a drawer wired to the printer's RJ11 port, in the same job as the receipt.</summary>
     public ReceiptBuilder KickDrawer(int pin = 0, int onMilliseconds = 60, int offMilliseconds = 120)
     {
@@ -424,6 +454,25 @@ public sealed class ReceiptBuilder
                 case Directive.Kick kick:
                     bytes.AddRange(EscPos.KickDrawer(kick.Pin, kick.OnMilliseconds, kick.OffMilliseconds));
                     break;
+
+                // Drawn by the printer in either mode: its own bars are sharper than any raster of
+                // them, and a scanner reads what the printer's firmware lays down.
+                case Directive.BarCode barcode:
+                    if (alignment != TextAlignment.Center)
+                    {
+                        bytes.AddRange(EscPos.Align(TextAlignment.Center));
+                        alignment = TextAlignment.Center;
+                    }
+
+                    bytes.AddRange(EscPos.Barcode(barcode.Data, barcode.Height));
+                    bytes.AddRange(EscPos.LineFeed());
+                    break;
+
+                // Always as dots, raster options or not: the code is the same symbol on every printer.
+                case Directive.Qr qr:
+                    ResetForRaster();
+                    bytes.AddRange(EscPos.RasterImage(DrawQr(qr, raster?.PaperWidthDots ?? RasterOptions.DotsForCharacterWidth(PaperWidthChars))));
+                    break;
             }
         }
 
@@ -546,6 +595,16 @@ public sealed class ReceiptBuilder
 
                 case Directive.Kick:
                     break;
+
+                case Directive.BarCode barcode:
+                    var bars = DrawBarcodeStandIn(barcode, raster);
+                    Add(bars, bars.Height);
+                    break;
+
+                case Directive.Qr qr:
+                    var code = DrawQr(qr, raster.PaperWidthDots);
+                    Add(code, code.Height);
+                    break;
             }
         }
 
@@ -576,10 +635,50 @@ public sealed class ReceiptBuilder
                     index++;
                     y += baseHeight;
                     break;
+
+                case Directive.BarCode:
+                case Directive.Qr:
+                    y += Blit(page, strips[index++], y, 0);
+                    break;
             }
         }
 
         return page;
+    }
+
+    /// <summary>The code across the paper, as big as it comfortably goes.</summary>
+    private static MonochromeBitmap DrawQr(Directive.Qr qr, int paperWidthDots) =>
+        qr.Code.Draw(paperWidthDots, qr.Code.DotsPerModuleFor(paperWidthDots));
+
+    /// <summary>
+    /// Where the printer's barcode goes, for a preview: a band of bars the height it prints, with its
+    /// digits under it. Not a scannable code - the printer draws the real one.
+    /// </summary>
+    private static MonochromeBitmap DrawBarcodeStandIn(Directive.BarCode barcode, RasterOptions raster)
+    {
+        var style = new RasterTextStyle();
+        var textHeight = Math.Max(1, raster.Rasterizer.LineHeight(style));
+        var strip = new MonochromeBitmap(raster.PaperWidthDots, barcode.Height + textHeight + 4);
+
+        var width = Math.Min(raster.PaperWidthDots - 16, (barcode.Data.Length + 4) * 22);
+        var left = (raster.PaperWidthDots - width) / 2;
+
+        for (var x = 0; x < width; x++)
+        {
+            // A pattern that reads as bars, seeded by the digits so two codes do not look alike.
+            var character = barcode.Data[x / 11 % barcode.Data.Length];
+
+            if (((x + character) % 5) < 2)
+                continue;
+
+            for (var y = 0; y < barcode.Height; y++)
+                strip[left + x, y] = true;
+        }
+
+        var measured = raster.Rasterizer.Measure(barcode.Data, style);
+        raster.Rasterizer.Draw(strip, barcode.Data, Math.Max(0, (raster.PaperWidthDots - measured) / 2), barcode.Height + 4, style);
+
+        return strip;
     }
 
     /// <summary>Copies a strip onto the page and reports how tall it was.</summary>
@@ -632,6 +731,17 @@ public sealed class ReceiptBuilder
                     break;
 
                 case Directive.Kick:
+                    break;
+
+                case Directive.BarCode barcode:
+                    var bars = $"||| {barcode.Data} |||";
+                    text.AppendLine(bars.PadLeft(bars.Length + Math.Max(0, (PaperWidthChars - bars.Length) / 2)));
+                    break;
+
+                // Text cannot show the code, so it shows what the code says.
+                case Directive.Qr qr:
+                    foreach (var line in Wrap($"[QR] {qr.Data}", PaperWidthChars))
+                        text.AppendLine(line);
                     break;
             }
         }
@@ -729,6 +839,10 @@ public sealed class ReceiptBuilder
         public sealed record Cut(CutMode Mode, int FeedBeforeCut) : Directive;
 
         public sealed record Kick(int Pin, int OnMilliseconds, int OffMilliseconds) : Directive;
+
+        public sealed record BarCode(string Data, int Height) : Directive;
+
+        public sealed record Qr(QrCode Code, string Data) : Directive;
     }
 }
 

@@ -107,6 +107,37 @@ public sealed class PosSettings
     public decimal LowStockPercent { get; set; } = LowStock.DefaultPercent;
 
     /// <summary>
+    /// How many days an order is meant to last: the order list suggests enough of each item to sell
+    /// for this long at the rate it has been selling. 14 unless the owner says otherwise.
+    /// </summary>
+    /// <remarks>Changed from the owner's screen, Orders.</remarks>
+    [JsonPropertyName("orderCoverDays")]
+    public int OrderCoverDays { get; set; } = Reorder.DefaultCoverDays;
+
+    /// <summary>
+    /// How the shop's weighing scale lays out the barcodes on its labels, so a label scanned at the
+    /// till goes on the bill as the item and its weight or price.
+    /// </summary>
+    [JsonPropertyName("scaleBarcode")]
+    public ScaleBarcodeSettings ScaleBarcode { get; set; } = new();
+
+    /// <summary>
+    /// The shop's UPI ID, for a QR code with the exact amount when a customer pays by UPI. Not set
+    /// by default: UPI is then taken against the shop's own printed code, as before.
+    /// </summary>
+    /// <remarks>Changed from the owner's screen, Settings.</remarks>
+    [JsonPropertyName("upi")]
+    public UpiSettings Upi { get; set; } = new();
+
+    /// <summary>
+    /// Whether Ctrl+W opens WhatsApp on this computer at the customer's chat with the bill typed in.
+    /// On by default, and harmless without WhatsApp: the bill goes on the clipboard instead. Off
+    /// for a shop that sends from WhatsApp in a browser, where the clipboard is what it wants.
+    /// </summary>
+    [JsonPropertyName("openWhatsApp")]
+    public bool OpenWhatsApp { get; set; } = true;
+
+    /// <summary>
     /// Whether the bill settles to the whole rupee, with the difference shown as a round-off.
     /// </summary>
     /// <remarks>
@@ -189,6 +220,15 @@ public sealed class PosSettings
 
         if (!LowStock.IsValidPercent(settings.LowStockPercent))
             throw new InvalidOperationException($"The settings file at '{path}' has a lowStockPercent of {settings.LowStockPercent}. Use 0 to switch it off, or a share of full below 100.");
+
+        if (settings.ScaleBarcode.ToFormat().Problem() is { } scaleProblem)
+            throw new InvalidOperationException($"The settings file at '{path}' has a scaleBarcode that cannot be right: {scaleProblem}");
+
+        if (settings.Upi.Problem() is { } upiProblem)
+            throw new InvalidOperationException($"The settings file at '{path}' has a upi section that cannot be used: {upiProblem}");
+
+        if (!Reorder.IsValidCoverDays(settings.OrderCoverDays))
+            throw new InvalidOperationException($"The settings file at '{path}' has an orderCoverDays of {settings.OrderCoverDays}. An order covers between 1 and 120 days.");
 
         // Surfaces an unworkable loyalty scheme here rather than at the moment a cashier tries to
         // redeem against it.

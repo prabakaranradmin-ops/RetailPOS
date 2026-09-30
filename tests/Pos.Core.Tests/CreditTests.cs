@@ -276,8 +276,8 @@ public class CreditTests : IDisposable
         Assert.Equal(60m, day.CreditCollectedCash);
 
         var printed = Print(day);
-        Assert.Contains("Credit collected (1)", printed);
-        Assert.Contains("Credit collected in cash", printed);
+        Assert.Contains("Khata collected (1)", printed);
+        Assert.Contains("Khata collected in cash", printed);
         Assert.Contains("Reconciled", printed);
     }
 
@@ -335,7 +335,7 @@ public class CreditTests : IDisposable
 
         Assert.Contains("NO SALES IN THIS PERIOD", printed);
         Assert.Contains("CASH IN DRAWER SHOULD BE", printed);
-        Assert.Contains("Credit collected (1)", printed);
+        Assert.Contains("Khata collected (1)", printed);
     }
 
     /// <summary>

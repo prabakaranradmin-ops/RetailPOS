@@ -36,9 +36,19 @@ public static class CommandLine
         "dashboard" => ([], ["--days", "--top", "--out"]),
         "dashboard-pin" => (["--clear"], []),
         "gst-return" => ([], ["--month", "--out"]),
+        "credit-note" => (["--reprint"], []),
+        "order-list" => ([], ["--cover", "--out"]),
+        "price-sheet" => (["--yes"], ["--out", "--load"]),
+        "labels" => (["--all", "--print"], ["--out"]),
+        "expiring" => ([], []),
+        "dead-stock" => ([], ["--days"]),
+        "upi" => (["--print"], ["--amount", "--png", "--width"]),
+        "statement" => (["--print", "--owing"], ["--mobile", "--from", "--to", "--out"]),
+        "bill" => ([], ["--no", "--out"]),
+        "offers" => (["--yes"], ["--sheet", "--load", "--try"]),
         "stock" => (["--low", "--set"], ["--sku", "--qty", "--reason", "--limit"]),
         "receipt-preview" => ([], ["--width", "--png", "--layout"]),
-        "test-hardware" => (["--printer", "--drawer", "--scanner", "--scale"], ["--seconds"]),
+        "test-hardware" => (["--printer", "--drawer", "--scanner", "--scale", "--pole"], ["--seconds"]),
         _ => ([], []),
     };
 
@@ -46,7 +56,7 @@ public static class CommandLine
     public static bool IsKnownCommand(string command)
     {
         var (standalone, valued) = OptionsFor(command);
-        return standalone.Length > 0 || valued.Length > 0 || command == "list-ports";
+        return standalone.Length > 0 || valued.Length > 0 || command is "list-ports" or "expiring";
     }
 
     /// <summary>

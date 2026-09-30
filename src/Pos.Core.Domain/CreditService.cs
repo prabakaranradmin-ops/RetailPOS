@@ -72,6 +72,39 @@ public sealed class CreditService(
         return new CollectionResult(payment, stillOwed, drawerResult, PrintSlip(customer, payment, stillOwed));
     }
 
+    /// <summary>
+    /// The statement a customer asks for at the counter: everything since they last owed nothing,
+    /// up to today, closing on what they owe now.
+    /// </summary>
+    public KhataStatement Statement(Customer customer)
+    {
+        ArgumentNullException.ThrowIfNull(customer);
+
+        var today = DateOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+        return KhataStatement.SinceLastClear(customer, _credit.Ledger(customer.Id), today);
+    }
+
+    /// <summary>Prints a statement, with a UPI code for what is owed when the shop has an ID.</summary>
+    public PrintOutcome PrintStatement(KhataStatement statement, UpiPayee? upi)
+    {
+        ArgumentNullException.ThrowIfNull(statement);
+
+        if (receipts is null || !_printer.IsConfigured)
+            return PrintOutcome.NotConfigured();
+
+        try
+        {
+            var outcome = _printer.Print(receipts.ComposeKhataStatement(statement, upi).ToEscPos(raster: _printer.Raster));
+            _log.Info("credit", $"statement for customer {statement.Customer.Id} printed: {Plural.Of(statement.Lines.Count, "line")}, {statement.Closing:0.00} owed");
+            return outcome;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("printer", "a khata statement did not print", ex);
+            return PrintOutcome.Failed(ex.Message);
+        }
+    }
+
     private PrintOutcome PrintSlip(Customer customer, CreditPayment payment, decimal stillOwed)
     {
         if (receipts is null || !_printer.IsConfigured)

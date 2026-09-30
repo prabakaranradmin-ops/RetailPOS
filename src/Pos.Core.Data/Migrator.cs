@@ -24,6 +24,13 @@ public static class Migrator
         "010_round_off.sql",
         "011_customer_credit.sql",
         "012_full_level.sql",
+        "013_purchases.sql",
+        "014_credit_notes.sql",
+        "015_expenses.sql",
+        "016_price_changes.sql",
+        "017_orders.sql",
+        "018_offers.sql",
+        "019_business_buyers.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>
@@ -41,8 +48,12 @@ public static class Migrator
     /// migrations already applied are skipped, and running against an up-to-date database is a
     /// no-op.
     /// </summary>
+    /// <param name="upTo">
+    /// Stop at this version rather than the latest. For testing an upgrade from a real earlier
+    /// schema, rather than one pieced back together by hand.
+    /// </param>
     /// <returns>The number of migrations applied.</returns>
-    public static int Migrate(SqliteConnection connection)
+    public static int Migrate(SqliteConnection connection, int? upTo = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
@@ -56,8 +67,9 @@ public static class Migrator
         }
 
         var applied = 0;
+        var target = Math.Min(upTo ?? LatestVersion, LatestVersion);
 
-        for (var version = current; version < MigrationFiles.Length; version++)
+        for (var version = current; version < target; version++)
         {
             var sql = ReadMigration(MigrationFiles[version]);
 

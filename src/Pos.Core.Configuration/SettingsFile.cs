@@ -37,6 +37,54 @@ public static class SettingsFile
         Patch(path, root => root["lowStockPercent"] = percent, fresh => fresh.LowStockPercent = percent);
     }
 
+    /// <summary>Writes how many days an order is meant to last.</summary>
+    public static void SetOrderCoverDays(string path, int days)
+    {
+        if (!Reorder.IsValidCoverDays(days))
+            throw new ArgumentOutOfRangeException(nameof(days), days, "An order covers between 1 and 120 days.");
+
+        Patch(path, root => root["orderCoverDays"] = days, fresh => fresh.OrderCoverDays = days);
+    }
+
+    /// <summary>
+    /// Writes the shop's UPI ID, or takes it out when given nothing - which turns the code with the
+    /// amount off. The payee name and merchant code, set in the file by hand if at all, are left.
+    /// </summary>
+    public static void SetUpiId(string path, string? id)
+    {
+        var value = string.IsNullOrWhiteSpace(id) ? null : id.Trim();
+
+        if (value is not null && UpiPayee.Problem(value) is { } problem)
+            throw new ArgumentException(problem, nameof(id));
+
+        Patch(
+            path,
+            root =>
+            {
+                if (root["upi"] is not JsonObject upi)
+                {
+                    if (value is null)
+                        return;
+
+                    upi = new JsonObject();
+                    root["upi"] = upi;
+                }
+
+                if (value is null)
+                {
+                    upi.Remove("id");
+
+                    if (upi.Count == 0)
+                        root.Remove("upi");
+
+                    return;
+                }
+
+                upi["id"] = value;
+            },
+            fresh => fresh.Upi.Id = value);
+    }
+
     /// <summary>Writes which bill layout this lane prints, by name.</summary>
     public static void SetReceiptLayout(string path, ReceiptLayout layout) =>
         Patch(path, root => root["receiptLayout"] = layout.ToString(), fresh => fresh.ReceiptLayout = layout);

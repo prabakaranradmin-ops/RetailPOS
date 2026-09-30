@@ -217,8 +217,8 @@ public class LowStockTests(ITestOutputHelper output) : IDisposable
         using var old = new TempDatabase(migrate: false);
         using var connection = old.Database.OpenConnection();
 
-        Migrator.Migrate(connection);
-        Execute(connection, "ALTER TABLE items DROP COLUMN full_qty; PRAGMA user_version = 11;");
+        // A database as the build before full levels left it.
+        Migrator.Migrate(connection, upTo: 11);
 
         Execute(connection, """
             INSERT INTO items (id, sku, hsn_code, name, mrp, sell_price, gst_rate, stock_qty) VALUES

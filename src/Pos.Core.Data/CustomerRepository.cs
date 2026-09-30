@@ -9,7 +9,7 @@ namespace Pos.Core.Data;
 /// </summary>
 public sealed class CustomerRepository : ICustomerStore
 {
-    private const string SelectColumns = "id, mobile_no, name, loyalty_balance, state_code";
+    private const string SelectColumns = "id, mobile_no, name, loyalty_balance, state_code, gstin, address";
 
     private readonly PosDatabase _database;
 
@@ -92,7 +92,7 @@ public sealed class CustomerRepository : ICustomerStore
         command.CommandText = $"""
             SELECT {SelectColumns}
             FROM customers
-            WHERE mobile_no LIKE $contains ESCAPE '\' OR name LIKE $contains ESCAPE '\'
+            WHERE mobile_no LIKE $contains ESCAPE '\' OR name LIKE $contains ESCAPE '\' OR gstin LIKE $contains ESCAPE '\'
             ORDER BY
                 CASE
                     WHEN mobile_no LIKE $starts ESCAPE '\' THEN 0
@@ -113,6 +113,78 @@ public sealed class CustomerRepository : ICustomerStore
             found.Add(Map(reader));
 
         return found;
+    }
+
+    public Customer SetBusiness(long customerId, string? gstin, string? address)
+    {
+        var number = string.IsNullOrWhiteSpace(gstin) ? null : Gstin.Normalise(gstin);
+
+        if (number is not null && Gstin.Problem(number) is { } problem)
+            throw new ArgumentException(problem, nameof(gstin));
+
+        var place = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+
+        if (number is not null)
+        {
+            using var taken = connection.CreateCommand();
+            taken.Transaction = transaction;
+            taken.CommandText = "SELECT COALESCE(name, mobile_no) FROM customers WHERE gstin = $gstin AND id <> $id;";
+            taken.Parameters.AddWithValue("$gstin", number);
+            taken.Parameters.AddWithValue("$id", customerId);
+
+            if (taken.ExecuteScalar() is string other)
+                throw new InvalidOperationException($"GSTIN {number} is already {other}'s.");
+        }
+
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+
+            // The GSTIN says which state they are in, and so how their bills are taxed. Taking it off
+            // leaves the state as it was: they are still wherever they were.
+            command.CommandText = number is null
+                ? "UPDATE customers SET gstin = NULL, address = $address WHERE id = $id;"
+                : "UPDATE customers SET gstin = $gstin, address = $address, state_code = $state WHERE id = $id;";
+            command.Parameters.AddWithValue("$gstin", (object?)number ?? DBNull.Value);
+            command.Parameters.AddWithValue("$address", (object?)place ?? DBNull.Value);
+            command.Parameters.AddWithValue("$state", number is null ? DBNull.Value : Gstin.StateCode(number));
+            command.Parameters.AddWithValue("$id", customerId);
+
+            if (command.ExecuteNonQuery() == 0)
+                throw new InvalidOperationException($"No customer with id {customerId}.");
+        }
+
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = $"SELECT {SelectColumns} FROM customers WHERE id = $id;";
+            read.Parameters.AddWithValue("$id", customerId);
+
+            using var reader = read.ExecuteReader();
+            reader.Read();
+            var customer = Map(reader);
+            reader.Close();
+
+            transaction.Commit();
+            return customer;
+        }
+    }
+
+    public Customer? FindByGstin(string gstin)
+    {
+        if (string.IsNullOrWhiteSpace(gstin))
+            return null;
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT {SelectColumns} FROM customers WHERE gstin = $gstin;";
+        command.Parameters.AddWithValue("$gstin", Gstin.Normalise(gstin));
+
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? Map(reader) : null;
     }
 
     public void Rename(long customerId, string? name)
@@ -153,7 +225,7 @@ public sealed class CustomerRepository : ICustomerStore
             transaction.Rollback();
 
             throw new InvalidOperationException(owed > 0
-                ? $"They still owe {PaiseSql.Rupees(owed):0.00} on credit. Take the payment first, then forget them."
+                ? $"They still owe {PaiseSql.Rupees(owed).ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("en-IN"))} on the khata. Take the payment first, then forget them."
                 : $"The shop owes them {PaiseSql.Rupees(-owed):0.00}. Settle that first, then forget them.");
         }
 
@@ -163,6 +235,7 @@ public sealed class CustomerRepository : ICustomerStore
         var unlinked = Run("UPDATE invoices SET customer_id = NULL WHERE customer_id = $id;");
         Run("UPDATE held_bills SET customer_id = NULL WHERE customer_id = $id;");
         Run("UPDATE credit_payments SET customer_id = NULL WHERE customer_id = $id;");
+        Run("UPDATE credit_notes SET customer_id = NULL WHERE customer_id = $id;");
 
         if (Run("DELETE FROM customers WHERE id = $id;") == 0)
         {
@@ -181,5 +254,7 @@ public sealed class CustomerRepository : ICustomerStore
         Name = reader.IsDBNull(2) ? null : reader.GetString(2),
         LoyaltyBalance = reader.GetInt32(3),
         StateCode = reader.IsDBNull(4) ? null : reader.GetString(4),
+        Gstin = reader.FieldCount > 5 && !reader.IsDBNull(5) ? reader.GetString(5) : null,
+        Address = reader.FieldCount > 6 && !reader.IsDBNull(6) ? reader.GetString(6) : null,
     };
 }

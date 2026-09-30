@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using Pos.Core.Domain;
 
 namespace Pos.Core.Data;
 
@@ -122,7 +123,7 @@ public sealed class DatabaseRestore(string livePath)
             return new RestoreResult(
                 true,
                 movedAside,
-                $"Restored from '{Path.GetFileName(snapshotPath)}'. {items:N0} item(s) in the catalogue.");
+                $"Restored from '{Path.GetFileName(snapshotPath)}'. {Plural.Of(items, "item")} in the catalogue.");
         }
         catch (SqliteException ex)
         {

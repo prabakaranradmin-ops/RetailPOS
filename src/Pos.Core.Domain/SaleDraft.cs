@@ -38,7 +38,29 @@ public sealed record SaleDraft(
     int PointsEarned,
     string? RecalledFromToken,
     string? CashierName = null,
-    TaxMode TaxMode = TaxMode.Gst);
+    TaxMode TaxMode = TaxMode.Gst,
+    BusinessBuyer? Buyer = null)
+{
+    /// <summary>True for a bill to a customer registered for GST: filed bill by bill, as B2B.</summary>
+    public bool IsToABusiness => Buyer is not null;
+}
+
+/// <summary>
+/// A business a bill was to: its GSTIN, name and address as they were when it was sold.
+/// </summary>
+/// <remarks>
+/// Copied onto the bill rather than read from the customer, like an item's name and HSN: a business
+/// that moves or re-registers does not change a bill it was already given.
+/// </remarks>
+public sealed record BusinessBuyer(string Gstin, string Name, string? Address)
+{
+    /// <summary>Where the goods were supplied: the state the buyer is registered in.</summary>
+    public string StateCode => Pos.Core.Domain.Gstin.StateCode(Gstin);
+
+    /// <summary>The buyer on a bill to this customer, or null when they are not a business.</summary>
+    public static BusinessBuyer? Of(Customer? customer) =>
+        customer is { Gstin: { } gstin } ? new BusinessBuyer(gstin, customer.Name ?? customer.MobileNo, customer.Address) : null;
+}
 
 /// <summary>A sale as it now exists in the database, with the number it was given.</summary>
 /// <param name="VoidedAt">When it was cancelled, or null if it still stands.</param>
@@ -71,13 +93,29 @@ public sealed record SettledInvoice(
 /// <param name="NewLoyaltyBalance">Their balance afterwards, or null for a walk-in.</param>
 public sealed record VoidResult(SettledInvoice Invoice, bool LoyaltyReversed, int? NewLoyaltyBalance);
 
+/// <summary>How an order came in.</summary>
+public enum OrderKind
+{
+    Phone = 0,
+    WhatsApp = 1,
+}
+
+/// <summary>What makes a parked bill an order: how it came in, and where it is going or when.</summary>
+/// <param name="Note">The address to deliver to, or when it will be collected, in the cashier's words.</param>
+public sealed record OrderInfo(OrderKind Kind, string? Note)
+{
+    public string Label => Kind == OrderKind.WhatsApp ? "WhatsApp" : "Phone";
+}
+
 /// <summary>A parked bill, restored in full.</summary>
+/// <param name="Order">Set when the bill is an order taken over the phone or on WhatsApp.</param>
 public sealed record HeldBill(
     long Id,
     string Token,
     DateTimeOffset HeldAt,
     Customer? Customer,
-    IReadOnlyList<InvoiceLine> Lines);
+    IReadOnlyList<InvoiceLine> Lines,
+    OrderInfo? Order = null);
 
 /// <summary>
 /// One row of the recall list. SRS 2.5 asks for token, timestamp, item count and customer, which
@@ -89,4 +127,13 @@ public sealed record HeldBillSummary(
     DateTimeOffset HeldAt,
     int ItemCount,
     string CustomerLabel,
-    decimal GrandTotal);
+    decimal GrandTotal,
+    OrderInfo? Order = null)
+{
+    public bool IsOrder => Order is not null;
+
+    /// <summary>What the recall list shows under the customer: how an order came in and its note.</summary>
+    public string OrderLine => Order is { } order
+        ? string.IsNullOrWhiteSpace(order.Note) ? $"{order.Label} order" : $"{order.Label} order - {order.Note}"
+        : string.Empty;
+}

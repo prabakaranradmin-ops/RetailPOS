@@ -135,10 +135,29 @@ public sealed class InvoiceEngine
             _lines[index].Quantity = target;
     }
 
+    /// <summary>A discount given by hand. It takes the line out of any offer, until it is set back to nothing.</summary>
     public void SetDiscount(int index, decimal discount)
     {
         GuardIndex(index);
         _lines[index].Discount = discount;
+        _lines[index].OfferName = null;
+    }
+
+    /// <summary>
+    /// The discount an offer gives a line, and the offer's name - or nothing, to take an offer off.
+    /// Never over a discount given by hand.
+    /// </summary>
+    public void ApplyOffer(int index, decimal discount, string? offerName)
+    {
+        GuardIndex(index);
+
+        var line = _lines[index];
+
+        if (line.IsDiscountedByHand)
+            throw new InvalidOperationException($"{line.NameSnapshot} has a discount given by hand; an offer does not replace it.");
+
+        line.Discount = discount;
+        line.OfferName = discount > 0m ? offerName : null;
     }
 
     public void Clear()

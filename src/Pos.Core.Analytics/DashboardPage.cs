@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Pos.Core.Domain;
 
 namespace Pos.Core.Analytics;
 
@@ -72,11 +73,11 @@ public static class DashboardPage
         Card(p, "Cash in drawer", Money(t.CashInDrawer), $"{Money(t.Cash)} taken, {Money(t.ChangeGiven)} change");
         Card(p, "To the bank", Money(t.Bank), "card and UPI");
 
-        // Only when there is some. A card that says "on credit 0.00" every day is a card nobody reads.
+        // Only when there is some. A card that says "on khata 0.00" every day is a card nobody reads.
         if (t.Credit != 0m || t.PointsRedeemed != 0m)
         {
             Card(p, "Owed to you", Money(t.Credit),
-                t.PointsRedeemed == 0m ? "on store credit" : $"on store credit; {Money(t.PointsRedeemed)} paid in points");
+                t.PointsRedeemed == 0m ? "on khata, not yet paid" : $"on khata, not yet paid; {Money(t.PointsRedeemed)} paid in points");
         }
 
         p.Append("</div>");
@@ -90,7 +91,7 @@ public static class DashboardPage
 
         p.Append("<div class=\"panel\"><h3>Takings by hour</h3>");
         p.Append(BarChart([.. d.Hourly.Select(h => ((double)h.NetSales, $"{h.Hour:00}"))],
-            [.. d.Hourly.Select(h => $"{h.Hour:00}:00 — {Money(h.NetSales)} over {h.Bills} bill(s)")]));
+            [.. d.Hourly.Select(h => $"{h.Hour:00}:00 — {Money(h.NetSales)} over {Plural.Of(h.Bills, "bill")}")]));
         p.Append("</div>");
 
         p.Append("<div class=\"panel\"><h3>Daily takings</h3>");
@@ -203,7 +204,7 @@ public static class DashboardPage
         if (m.UnpricedSales > 0m)
         {
             p.Append($"<p class=\"note warn\">This picture covers <strong>{m.Coverage.ToString("0.#", India)}%</strong> of the "
-                   + $"window's takings. {Money(m.UnpricedSales)} came from {m.UnpricedItems} item(s) with no cost price "
+                   + $"window's takings. {Money(m.UnpricedSales)} came from {Plural.Of(m.UnpricedItems, "item")} with no cost price "
                    + "recorded at the time of sale, and they are not plotted — an item with no cost would otherwise "
                    + "appear to keep everything it sells for.</p>");
         }
@@ -334,10 +335,15 @@ public static class DashboardPage
         p.Append("<div class=\"figures\">");
         Figure(p, "Discounts", Money(d.Range.Discount), $"{Percent(d.Range.Discount, d.Range.GrossSales)} of gross");
         Figure(p, "Bills voided", d.Voids.Count.ToString("N0", India), $"{Money(d.Voids.Value)} cancelled");
+        Figure(p, "Goods returned", d.Returns.Count.ToString("N0", India), $"{Money(d.Returns.Value)} refunded on credit notes");
+        Figure(p, "Expenses", Money(d.ExpensesTotal), d.Expenses.Count == 0
+            ? "none recorded"
+            : string.Join(", ", d.Expenses.Take(4).Select(e => $"{e.Category} {Money(e.Amount)}")));
         Figure(p, "Points redeemed", d.Points.Redeemed.ToString("N0", India), "settled as a tender, not a discount");
         p.Append("</div>");
         p.Append("<p class=\"note\">Voided bills keep their number and stay in the books. They are excluded from every "
-               + "other figure on this page, which is what lets the invoice run be checked for gaps.</p>");
+               + "other figure on this page, which is what lets the invoice run be checked for gaps. Returns are on "
+               + "credit notes of their own: the sales above are the bills as issued, and what was refunded is here.</p>");
         p.Append("</div>");
 
         WriteLowStock(p, d);
@@ -568,7 +574,7 @@ public static class DashboardPage
                 var intensity = max == 0m || cell is null ? 0d : (double)(cell.NetSales / max);
                 var title = cell is null || cell.Bills == 0
                     ? $"{names[weekday - 1]} {band:00}:00 — nothing"
-                    : $"{names[weekday - 1]} {band:00}:00-{band + 2:00}:00 — {Money(cell.NetSales)} over {cell.Bills} bill(s)";
+                    : $"{names[weekday - 1]} {band:00}:00-{band + 2:00}:00 — {Money(cell.NetSales)} over {Plural.Of(cell.Bills, "bill")}";
 
                 html.Append($"<td style=\"--i:{intensity.ToString("0.###", CultureInfo.InvariantCulture)}\" title=\"{Escape(title)}\"></td>");
             }

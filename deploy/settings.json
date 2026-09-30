@@ -54,6 +54,11 @@
 
     "scalePort": "",
     "scaleBaudRate": 9600,
-    "scaleProtocol": "Auto"
+    "scaleProtocol": "Auto",
+
+    "customerScreen": false,
+    "polePort": "",
+    "poleBaudRate": 9600,
+    "poleWidth": 20
   }
 }

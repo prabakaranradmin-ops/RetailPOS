@@ -11,7 +11,7 @@ public sealed class HeldBillRepository : IHeldBillStore
     private const string LineColumns =
         "item_id, name_snapshot, hsn_snapshot, barcode_snapshot, batch_no, unit_type, " +
         "mrp, unit_price, is_tax_inclusive, gst_rate, quantity, discount, is_inter_state, " +
-        "category_snapshot, cost_snapshot";
+        "category_snapshot, cost_snapshot, offer_name";
 
     private readonly PosDatabase _database;
 
@@ -21,7 +21,7 @@ public sealed class HeldBillRepository : IHeldBillStore
         _database = database;
     }
 
-    public HeldBill Park(string laneId, string token, DateTimeOffset heldAt, Customer? customer, IReadOnlyList<InvoiceLine> lines)
+    public HeldBill Park(string laneId, string token, DateTimeOffset heldAt, Customer? customer, IReadOnlyList<InvoiceLine> lines, OrderInfo? order = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
@@ -39,14 +39,16 @@ public sealed class HeldBillRepository : IHeldBillStore
         {
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO held_bills (lane_id, token, held_at, customer_id)
-                VALUES ($lane, $token, $heldAt, $customerId);
+                INSERT INTO held_bills (lane_id, token, held_at, customer_id, order_kind, order_note)
+                VALUES ($lane, $token, $heldAt, $customerId, $orderKind, $orderNote);
                 SELECT last_insert_rowid();
                 """;
             command.Parameters.AddWithValue("$lane", laneId);
             command.Parameters.AddWithValue("$token", token);
             command.Parameters.AddWithValue("$heldAt", heldAt);
             command.Parameters.AddWithValue("$customerId", (object?)customer?.Id ?? DBNull.Value);
+            command.Parameters.AddWithValue("$orderKind", (object?)order?.Kind.ToString() ?? DBNull.Value);
+            command.Parameters.AddWithValue("$orderNote", order?.Note is { } note && note.Trim().Length > 0 ? note.Trim() : DBNull.Value);
 
             heldBillId = Convert.ToInt64(command.ExecuteScalar());
         }
@@ -60,14 +62,14 @@ public sealed class HeldBillRepository : IHeldBillStore
                 VALUES
                   ($billId, $lineNo, $itemId, $name, $hsn, $barcode, $batch, $unitType,
                    $mrp, $unitPrice, $taxInclusive, $gstRate, $quantity, $discount, $interState,
-                   $category, $cost);
+                   $category, $cost, $offer);
                 """;
 
             foreach (var name in new[]
                      {
                          "$billId", "$lineNo", "$itemId", "$name", "$hsn", "$barcode", "$batch",
                          "$unitType", "$mrp", "$unitPrice", "$taxInclusive", "$gstRate",
-                         "$quantity", "$discount", "$interState", "$category", "$cost",
+                         "$quantity", "$discount", "$interState", "$category", "$cost", "$offer",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -94,6 +96,7 @@ public sealed class HeldBillRepository : IHeldBillStore
                 command.Parameters["$interState"].Value = line.IsInterState ? 1 : 0;
                 command.Parameters["$category"].Value = (object?)line.CategorySnapshot ?? DBNull.Value;
                 command.Parameters["$cost"].Value = (object?)line.CostSnapshot ?? DBNull.Value;
+                command.Parameters["$offer"].Value = (object?)line.OfferName ?? DBNull.Value;
 
                 command.ExecuteNonQuery();
             }
@@ -101,8 +104,15 @@ public sealed class HeldBillRepository : IHeldBillStore
 
         transaction.Commit();
 
-        return new HeldBill(heldBillId, token, heldAt, customer, lines.Select(l => l.Clone()).ToList());
+        return new HeldBill(heldBillId, token, heldAt, customer, lines.Select(l => l.Clone()).ToList(), order);
     }
+
+    private static OrderInfo? ReadOrder(SqliteDataReader reader, int kindColumn, int noteColumn) =>
+        reader.IsDBNull(kindColumn)
+            ? null
+            : new OrderInfo(
+                Enum.TryParse<OrderKind>(reader.GetString(kindColumn), out var kind) ? kind : OrderKind.Phone,
+                reader.IsDBNull(noteColumn) ? null : reader.GetString(noteColumn));
 
     public IReadOnlyList<HeldBillSummary> List(string laneId)
     {
@@ -111,15 +121,17 @@ public sealed class HeldBillRepository : IHeldBillStore
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT h.id, h.token, h.held_at, c.name, c.mobile_no
+            SELECT h.id, h.token, h.held_at, c.name, c.mobile_no, h.order_kind, h.order_note
             FROM held_bills h
             LEFT JOIN customers c ON c.id = h.customer_id
             WHERE h.lane_id = $lane
-            ORDER BY h.held_at DESC, h.id DESC;
+            ORDER BY h.order_kind IS NULL,
+                     CASE WHEN h.order_kind IS NULL THEN NULL ELSE h.held_at END,
+                     h.held_at DESC, h.id DESC;
             """;
         command.Parameters.AddWithValue("$lane", laneId);
 
-        var rows = new List<(long Id, string Token, DateTimeOffset HeldAt, string Label)>();
+        var rows = new List<(long Id, string Token, DateTimeOffset HeldAt, string Label, OrderInfo? Order)>();
 
         using (var reader = command.ExecuteReader())
         {
@@ -129,7 +141,7 @@ public sealed class HeldBillRepository : IHeldBillStore
                     ? reader.IsDBNull(4) ? "Walk-in" : reader.GetString(4)
                     : reader.GetString(3);
 
-                rows.Add((reader.GetInt64(0), reader.GetString(1), reader.GetDateTimeOffset(2), label));
+                rows.Add((reader.GetInt64(0), reader.GetString(1), reader.GetDateTimeOffset(2), label, ReadOrder(reader, 5, 6)));
             }
         }
 
@@ -146,7 +158,8 @@ public sealed class HeldBillRepository : IHeldBillStore
                 row.HeldAt,
                 lines.Count,
                 row.Label,
-                InvoiceTotals.From(lines).GrandTotal));
+                InvoiceTotals.From(lines).GrandTotal,
+                row.Order));
         }
 
         return summaries;
@@ -163,12 +176,14 @@ public sealed class HeldBillRepository : IHeldBillStore
         long heldBillId;
         DateTimeOffset heldAt;
         Customer? customer;
+        OrderInfo? order;
 
         using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
             command.CommandText = """
-                SELECT h.id, h.held_at, c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code
+                SELECT h.id, h.held_at, c.id, c.mobile_no, c.name, c.loyalty_balance, c.state_code,
+                       h.order_kind, h.order_note
                 FROM held_bills h
                 LEFT JOIN customers c ON c.id = h.customer_id
                 WHERE h.lane_id = $lane AND h.token = $token;
@@ -193,6 +208,7 @@ public sealed class HeldBillRepository : IHeldBillStore
                     LoyaltyBalance = reader.GetInt32(5),
                     StateCode = reader.IsDBNull(6) ? null : reader.GetString(6),
                 };
+            order = ReadOrder(reader, 7, 8);
         }
 
         var lines = ReadLines(connection, heldBillId, transaction);
@@ -209,7 +225,7 @@ public sealed class HeldBillRepository : IHeldBillStore
 
         transaction.Commit();
 
-        return new HeldBill(heldBillId, token, heldAt, customer, lines);
+        return new HeldBill(heldBillId, token, heldAt, customer, lines, order);
     }
 
     public bool Discard(string laneId, string token)

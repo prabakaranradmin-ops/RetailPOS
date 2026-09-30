@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Pos.Core.Domain;
 using Pos.Core.Domain.Printing;
+using Pos.Core.Hardware.Display;
 using Pos.Core.Hardware.Drawer;
 using Pos.Core.Hardware.Printing;
 using Pos.Core.Hardware.Scanning;
@@ -85,6 +86,33 @@ public sealed class InvoiceNumberSettings
     };
 }
 
+/// <summary>How the shop's weighing scale lays out the barcode on its labels, as the settings file holds it.</summary>
+public sealed class ScaleBarcodeSettings
+{
+    /// <summary>
+    /// The prefixes the scale prints, 20 to 29 unless set. An empty list turns scale labels off.
+    /// </summary>
+    [JsonPropertyName("prefixes")]
+    public List<string> Prefixes { get; set; } = [.. ScaleBarcodeFormat.Default.Prefixes];
+
+    [JsonPropertyName("itemDigits")]
+    public int ItemDigits { get; set; } = 5;
+
+    [JsonPropertyName("valueDigits")]
+    public int ValueDigits { get; set; } = 5;
+
+    /// <summary>Weight or Price.</summary>
+    [JsonPropertyName("value")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ScaleValue Value { get; set; } = ScaleValue.Weight;
+
+    /// <summary>Decimal places in the value: 3 for a weight in grams, 2 for a price in paise.</summary>
+    [JsonPropertyName("decimals")]
+    public int Decimals { get; set; } = 3;
+
+    public ScaleBarcodeFormat ToFormat() => new(Prefixes, ItemDigits, ValueDigits, Value, Decimals);
+}
+
 /// <summary>
 /// Builds the peripheral services a lane's settings describe.
 /// </summary>
@@ -162,6 +190,16 @@ public static class PeripheralFactory
             : new SerialScaleService(
                 new SystemSerialPort(new SerialPortSettings(settings.ScalePort, settings.ScaleBaudRate)),
                 CreateWeightReader(settings.ScaleProtocol));
+    }
+
+    /// <summary>The pole display facing the customer, or none.</summary>
+    public static IPoleDisplay CreatePoleDisplay(HardwareSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return string.IsNullOrWhiteSpace(settings.PolePort)
+            ? new NoPoleDisplay()
+            : new SerialPoleDisplay(new SystemSerialPort(new SerialPortSettings(settings.PolePort, settings.PoleBaudRate)), settings.PoleWidth);
     }
 
     public static IWeightFrameReader CreateWeightReader(ScaleProtocol protocol) => protocol switch

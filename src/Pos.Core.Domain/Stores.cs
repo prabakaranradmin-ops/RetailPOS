@@ -60,9 +60,10 @@ public interface IBackupService
 public interface IHeldBillStore
 {
     /// <summary>Parks a bill under a token unique to this lane.</summary>
-    HeldBill Park(string laneId, string token, DateTimeOffset heldAt, Customer? customer, IReadOnlyList<InvoiceLine> lines);
+    /// <param name="order">Set to park it as an order taken over the phone or on WhatsApp.</param>
+    HeldBill Park(string laneId, string token, DateTimeOffset heldAt, Customer? customer, IReadOnlyList<InvoiceLine> lines, OrderInfo? order = null);
 
-    /// <summary>The recall list for this lane, most recently parked first.</summary>
+    /// <summary>The recall list for this lane: orders first, oldest first; then parked bills, most recent first.</summary>
     IReadOnlyList<HeldBillSummary> List(string laneId);
 
     /// <summary>
@@ -125,6 +126,17 @@ public interface ICustomerStore
 
     /// <summary>Gives a customer a name, changes it, or clears it with null or blank.</summary>
     void Rename(long customerId, string? name);
+
+    /// <summary>
+    /// Makes a customer a business: their GSTIN, checked, and their address. The GSTIN decides their
+    /// state, so their bills are taxed as supplies into it. Null takes the GSTIN off again.
+    /// </summary>
+    /// <exception cref="ArgumentException">Not a GSTIN.</exception>
+    /// <exception cref="InvalidOperationException">Another customer already has it.</exception>
+    Customer SetBusiness(long customerId, string? gstin, string? address);
+
+    /// <summary>The customer with this GSTIN, or null.</summary>
+    Customer? FindByGstin(string gstin);
 
     /// <summary>
     /// Removes a customer's record, keeping every bill that was issued to them.

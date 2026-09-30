@@ -134,6 +134,52 @@ public static class EscPos
         return [Esc, (byte)'p', (byte)pin, ToPulseUnits(onMilliseconds, nameof(onMilliseconds)), ToPulseUnits(offMilliseconds, nameof(offMilliseconds))];
     }
 
+    /// <summary>
+    /// Prints a barcode the printer draws itself: EAN-13 for a valid thirteen-digit retail code,
+    /// Code 128 for anything else, with the digits printed beneath it.
+    /// </summary>
+    /// <remarks>
+    /// GS h sets the bar height in dots, GS w the module width, GS H 2 puts the human-readable
+    /// digits below, and GS k m n d1..dn prints it (the length-prefixed form, which every printer of
+    /// the last twenty years takes). Code 128 is sent in code set B, which covers every character a
+    /// SKU is made of.
+    /// </remarks>
+    /// <param name="height">Bar height in dots: 60 is about 7.5mm, tall enough for any scanner.</param>
+    public static byte[] Barcode(string data, int height = 60, int moduleWidth = 2)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(data);
+
+        if (height is < 1 or > 255)
+            throw new ArgumentOutOfRangeException(nameof(height), height, "A barcode is 1 to 255 dots tall.");
+
+        if (moduleWidth is < 2 or > 6)
+            throw new ArgumentOutOfRangeException(nameof(moduleWidth), moduleWidth, "A module is 2 to 6 dots wide.");
+
+        var code = data.Trim();
+        var command = new List<byte>(code.Length + 16)
+        {
+            Gs, (byte)'h', (byte)height,
+            Gs, (byte)'w', (byte)moduleWidth,
+            Gs, (byte)'H', 2,
+            Gs, (byte)'f', 0,
+        };
+
+        if (Scanning.Barcode.Identify(code) == Scanning.Symbology.Ean13 && Scanning.Barcode.IsValid(code))
+        {
+            command.AddRange([Gs, (byte)'k', 67, 13]);
+            command.AddRange(Encoding.ASCII.GetBytes(code));
+            return [.. command];
+        }
+
+        if (code.Length > 250 || code.Any(c => c is < ' ' or > '~'))
+            throw new ArgumentException("A Code 128 barcode takes printable ASCII, up to 250 characters.", nameof(data));
+
+        var payload = Encoding.ASCII.GetBytes("{B" + code);
+        command.AddRange([Gs, (byte)'k', 73, (byte)payload.Length]);
+        command.AddRange(payload);
+        return [.. command];
+    }
+
     private static byte ToPulseUnits(int milliseconds, string parameterName)
     {
         if (milliseconds is < 0 or > 510)

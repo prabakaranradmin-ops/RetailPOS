@@ -14,6 +14,10 @@ namespace Pos.Core.Data;
 /// sale therefore takes it off what they owe with nothing having to remember to, and there is no
 /// balance column to drift from the bills it summarises.
 /// </para>
+/// <para>
+/// Goods returned and refunded to the khata come off it too: a credit note whose refund was
+/// <see cref="TenderType.StoreCredit"/> reduces what the customer owes by what it refunded.
+/// </para>
 /// </remarks>
 public sealed class CreditRepository(PosDatabase database) : ICreditStore
 {
@@ -34,8 +38,15 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
                    WHERE cp_i.customer_id = {customerId} AND cp_i.voided_at IS NULL
                      AND cp_p.tender_type = {(int)TenderType.StoreCredit}), 0)
          - COALESCE((SELECT {PaiseSql.Sum("cp_r.amount")} FROM credit_payments cp_r
-                     WHERE cp_r.customer_id = {customerId}), 0))
+                     WHERE cp_r.customer_id = {customerId}), 0)
+         - COALESCE((SELECT SUM({RefundedPaiseSql("cp_n")}) FROM credit_notes cp_n
+                     WHERE cp_n.customer_id = {customerId}
+                       AND cp_n.refund_tender = {(int)TenderType.StoreCredit}), 0))
         """;
+
+    /// <summary>What one credit note refunded, in paise: its lines and its round-off.</summary>
+    internal static string RefundedPaiseSql(string alias) =>
+        $"({PaiseSql.Of($"{alias}.total")} + {PaiseSql.Of($"{alias}.round_off")})";
 
     /// <summary>What a customer owes, in paise. Shared with forgetting, which must not wipe a debt.</summary>
     internal static long OwedPaise(SqliteConnection connection, SqliteTransaction? transaction, long customerId)
@@ -61,7 +72,7 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
         command.CommandText = $"""
             SELECT id, mobile_no, name, owed, last_at FROM (
                 SELECT c.id, c.mobile_no, c.name,
-                       COALESCE(bought.paise, 0) - COALESCE(paid.paise, 0) AS owed,
+                       COALESCE(bought.paise, 0) - COALESCE(paid.paise, 0) - COALESCE(returned.paise, 0) AS owed,
                        bought.last_at
                 FROM customers c
                 LEFT JOIN (
@@ -75,6 +86,11 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
                     FROM credit_payments WHERE customer_id IS NOT NULL
                     GROUP BY customer_id
                 ) paid ON paid.customer_id = c.id
+                LEFT JOIN (
+                    SELECT customer_id, SUM({RefundedPaiseSql("n")}) AS paise
+                    FROM credit_notes n WHERE customer_id IS NOT NULL AND refund_tender = $credit
+                    GROUP BY customer_id
+                ) returned ON returned.customer_id = c.id
             )
             WHERE owed > 0
             ORDER BY owed DESC, name COLLATE NOCASE
@@ -186,6 +202,9 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
                 UNION ALL
                 SELECT received_at, 'paid:' || tender_type, -{PaiseSql.Of("amount")}
                 FROM credit_payments WHERE customer_id = $id
+                UNION ALL
+                SELECT n.created_at, 'returned:' || n.credit_note_no, -{RefundedPaiseSql("n")}
+                FROM credit_notes n WHERE n.customer_id = $id AND n.refund_tender = $credit
             )
             ORDER BY at, paise DESC;
             """;
@@ -205,7 +224,9 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
                 var what = reader.GetString(1);
                 var description = what.StartsWith("paid:", StringComparison.Ordinal)
                     ? $"Paid back, {Tender((TenderType)int.Parse(what[5..], CultureInfo.InvariantCulture))}"
-                    : $"Bought on credit, bill {what}";
+                    : what.StartsWith("returned:", StringComparison.Ordinal)
+                        ? $"Goods returned, credit note {what[9..]}"
+                        : $"Bought on khata, bill {what}";
 
                 movements.Add(new CreditMovement(
                     reader.GetDateTimeOffset(0),
@@ -217,6 +238,47 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
 
         movements.Reverse();
         return movements.Take(Math.Max(1, limit)).ToList();
+    }
+
+    public IReadOnlyList<KhataEntry> Ledger(long customerId)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+
+        // The three sources of the balance, as in OwedPaiseSql: store credit on bills not voided,
+        // repayments, and credit notes refunded to the khata.
+        command.CommandText = $"""
+            SELECT at, kind, reference, paise, tender FROM (
+                SELECT i.created_at AS at, 0 AS kind, i.invoice_no AS reference, {PaiseSql.Sum("p.amount")} AS paise, NULL AS tender
+                FROM payments p JOIN invoices i ON i.id = p.invoice_id
+                WHERE i.customer_id = $id AND i.voided_at IS NULL AND p.tender_type = $credit
+                GROUP BY i.id
+                UNION ALL
+                SELECT received_at, 1, '', {PaiseSql.Of("amount")}, tender_type
+                FROM credit_payments WHERE customer_id = $id
+                UNION ALL
+                SELECT n.created_at, 2, n.credit_note_no, {RefundedPaiseSql("n")}, NULL
+                FROM credit_notes n WHERE n.customer_id = $id AND n.refund_tender = $credit
+            )
+            ORDER BY at, kind;
+            """;
+        command.Parameters.AddWithValue("$id", customerId);
+        command.Parameters.AddWithValue("$credit", (int)TenderType.StoreCredit);
+
+        var ledger = new List<KhataEntry>();
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            ledger.Add(new KhataEntry(
+                reader.GetDateTimeOffset(0),
+                (KhataEntryKind)reader.GetInt32(1),
+                reader.GetString(2),
+                PaiseSql.Rupees(reader.GetInt64(3)),
+                reader.IsDBNull(4) ? null : (TenderType)reader.GetInt32(4)));
+        }
+
+        return ledger;
     }
 
     private static string Tender(TenderType tender) => tender switch

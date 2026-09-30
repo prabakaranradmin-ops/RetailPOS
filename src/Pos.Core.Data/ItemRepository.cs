@@ -59,6 +59,29 @@ public sealed class ItemRepository : IItemStore
         return reader.Read() ? Map(reader) : null;
     }
 
+    /// <summary>Every active item's SKU, for checking a sheet that names items by SKU.</summary>
+    public IReadOnlySet<string> Skus() =>
+        Strings("SELECT sku FROM items WHERE is_active = 1;");
+
+    /// <summary>Every department an active item is in, for checking a sheet that names departments.</summary>
+    public IReadOnlySet<string> Categories() =>
+        Strings("SELECT DISTINCT category FROM items WHERE is_active = 1 AND category IS NOT NULL AND TRIM(category) <> '';");
+
+    private HashSet<string> Strings(string sql)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+            values.Add(reader.GetString(0).Trim());
+
+        return values;
+    }
+
     /// <summary>
     /// The single search box behind SRS 2.1. Match priority is exact barcode, then SKU prefix,
     /// then name substring; inactive items never appear and the result count is capped.
@@ -166,6 +189,38 @@ public sealed class ItemRepository : IItemStore
             """;
         command.Parameters.AddWithValue("$contains", "%" + EscapeLikePattern(query) + "%");
         command.Parameters.AddWithValue("$limit", limit);
+
+        return ReadAll(command);
+    }
+
+    /// <summary>
+    /// Loose items - nothing to scan - most often sold over the last four weeks first, for the
+    /// till's quick keys.
+    /// </summary>
+    /// <remarks>
+    /// Chosen from the sales rather than set up by hand, so the keys follow the season: the mangoes
+    /// move up in April and down again in July without anybody touching a setting. Counted in bills,
+    /// not kilos, because what the keys save is keystrokes per bill.
+    /// </remarks>
+    public IReadOnlyList<Item> LooseItems(int limit = 24)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {string.Join(", ", SelectColumns.Split(", ").Select(c => "i." + c))}
+            FROM items i
+            LEFT JOIN (
+                SELECT l.item_id, COUNT(*) AS bills
+                FROM invoice_lines l JOIN invoices v ON v.id = l.invoice_id
+                WHERE v.voided_at IS NULL AND v.created_at >= $since
+                GROUP BY l.item_id
+            ) s ON s.item_id = i.id
+            WHERE i.is_active = 1 AND (i.barcode IS NULL OR TRIM(i.barcode) = '')
+            ORDER BY COALESCE(s.bills, 0) DESC, i.name COLLATE NOCASE
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$since", new DateTimeOffset(DateTime.Today.AddDays(-(Reorder.WindowDays - 1))));
+        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 100));
 
         return ReadAll(command);
     }

@@ -209,6 +209,36 @@ public sealed class PeripheralCheck(
         return _confirm("Did the drawer open?") ? CheckResult.Passed : CheckResult.Failed;
     }
 
+    /// <summary>Puts a test message on the pole display and asks whether it showed.</summary>
+    public CheckResult PoleDisplay()
+    {
+        Heading("Customer pole display");
+
+        var pole = PeripheralFactory.CreatePoleDisplay(_settings.Hardware);
+        _report($"Configured as : {pole.Name}");
+
+        if (!pole.IsConfigured)
+        {
+            _report("No pole display is set up for this lane.");
+            return CheckResult.NotConfigured;
+        }
+
+        var top = Hardware.Display.SerialPoleDisplay.Pair("DISPLAY TEST", "OK", pole.Width);
+        var bottom = Hardware.Display.SerialPoleDisplay.Pair("TOTAL", "1,234.50", pole.Width);
+
+        _report("It should show:");
+        _report($"  | {top}");
+        _report($"  | {bottom}");
+
+        if (!pole.Show(top, bottom))
+        {
+            _report("FAILED: the display did not take it. Check the port and that it is switched on.");
+            return CheckResult.Failed;
+        }
+
+        return _confirm("Does the pole display show those two lines?") ? CheckResult.Passed : CheckResult.Failed;
+    }
+
     /// <param name="typed">
     /// What a keyboard-wedge scanner typed, when the caller has already collected it. A wedge types
     /// into whatever has focus, so the caller owns the box it lands in.

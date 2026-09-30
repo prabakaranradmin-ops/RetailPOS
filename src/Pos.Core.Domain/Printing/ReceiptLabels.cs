@@ -58,6 +58,12 @@ public sealed record ReceiptLabels
     /// <summary>Heading for the reorder list at the foot of the day-end report.</summary>
     public required string LowStock { get; init; }
 
+    /// <summary>Heading for deliveries past or near their use-by date, at the foot of the day-end report.</summary>
+    public required string CheckTheDates { get; init; }
+
+    /// <summary>Beside a date that has passed.</summary>
+    public required string Expired { get; init; }
+
     public required string Reprint { get; init; }
     public required string BillNumber { get; init; }
     public required string Date { get; init; }
@@ -159,6 +165,59 @@ public sealed record ReceiptLabels
     /// must not be able to mistake it for an invoice.
     /// </summary>
     public required string PaymentSlipNote { get; init; }
+
+    /// <summary>The drawer line for cash paid to suppliers out of the till.</summary>
+    public required string PaidToSuppliers { get; init; }
+
+    /// <summary>The drawer line for cash handed back on returns.</summary>
+    public required string RefundedInCash { get; init; }
+
+    /// <summary>The drawer line for the change the day started with.</summary>
+    public required string OpeningFloat { get; init; }
+
+    /// <summary>The big figure on a shelf label: what the shop charges.</summary>
+    public required string OurPrice { get; init; }
+
+    /// <summary>What a shelf label says the customer saves against the MRP.</summary>
+    public required string YouSave { get; init; }
+
+    /// <summary>The drawer line for expenses paid out of the till.</summary>
+    public required string ExpensesPaid { get; init; }
+
+    /// <summary>The drawer line for cash put in other than by a sale.</summary>
+    public required string CashPutIn { get; init; }
+
+    /// <summary>The drawer line for cash taken out to the bank or the owner.</summary>
+    public required string CashTakenOut { get; init; }
+
+    /// <summary>What a return is called. Left in English in every language: it is the term in law.</summary>
+    public required string CreditNote { get; init; }
+
+    /// <summary>The bill the goods on a credit note were sold on.</summary>
+    public required string AgainstBill { get; init; }
+
+    /// <summary>Why the goods came back.</summary>
+    public required string Reason { get; init; }
+
+    /// <summary>A line refunded but not put back on the shelf.</summary>
+    public required string Damaged { get; init; }
+
+    /// <summary>What the customer gets back, at the foot of a credit note.</summary>
+    public required string Refund { get; init; }
+
+    /// <summary>A refund taken off what the customer owes, rather than handed over.</summary>
+    public required string OffTheKhata { get; init; }
+
+    /// <summary>The tax a credit note, or the day's returns, took back.</summary>
+    public required string TaxReversed { get; init; }
+
+    /// <summary>Heading for the day's credit notes on the day-end report.</summary>
+    public required string Returns { get; init; }
+    public required string CreditNotes { get; init; }
+    public required string ValueRefunded { get; init; }
+    public required string NetAfterReturns { get; init; }
+    public required string ReturnsNote { get; init; }
+
     public required string ByCashier { get; init; }
     public required string CashierName { get; init; }
     public required string CashHeld { get; init; }
@@ -167,8 +226,43 @@ public sealed record ReceiptLabels
     public required string GrossLessDiscount { get; init; }
     public required string TaxablePlusTax { get; init; }
     public required string TendersLessChange { get; init; }
+    /// <summary>After a count of more than one: "2 bills still parked".</summary>
     public required string BillsStillParked { get; init; }
+
+    /// <summary>After a count of one: "1 bill still parked". The same words in a language that does not inflect.</summary>
+    public required string BillStillParked { get; init; }
     public required string ParkedBillsNote { get; init; }
+
+    /// <summary>After a count of more than one: "2 orders waiting".</summary>
+    public required string OrdersWaiting { get; init; }
+
+    /// <summary>After a count of one: "1 order waiting".</summary>
+    public required string OrderWaiting { get; init; }
+    public required string ScanToPay { get; init; }
+    public required string UpiSlipNote { get; init; }
+    public required string KhataStatement { get; init; }
+    public required string Period { get; init; }
+    public required string OpeningBalance { get; init; }
+    public required string EntryBill { get; init; }
+    public required string EntryPaid { get; init; }
+    public required string EntryReturned { get; init; }
+    public required string BoughtOnCredit { get; init; }
+    public required string PaidBack { get; init; }
+    public required string ReturnedGoods { get; init; }
+    public required string OwedNow { get; init; }
+    public required string OldestUnpaid { get; init; }
+    public required string Days { get; init; }
+    public required string AgeUpTo30 { get; init; }
+    public required string Age31To60 { get; init; }
+    public required string Age61To90 { get; init; }
+    public required string AgeOver90 { get; init; }
+    public required string StatementNote { get; init; }
+    public required string NothingOwed { get; init; }
+    public required string Offer { get; init; }
+    public required string BillTo { get; init; }
+    public required string BuyerGstin { get; init; }
+    public required string PlaceOfSupply { get; init; }
+    public required string OrdersWaitingNote { get; init; }
 
     public static ReceiptLabels For(ReceiptLanguage language) => language switch
     {
@@ -182,6 +276,8 @@ public sealed record ReceiptLabels
         BillOfSupply = "BILL OF SUPPLY",
         Subtotal = "Subtotal",
         LowStock = "TO REORDER (have / level)",
+        CheckTheDates = "CHECK THE DATES (use by)",
+        Expired = "EXPIRED",
         Reprint = "** REPRINT **",
         BillNumber = "Bill No",
         Date = "Date",
@@ -217,7 +313,10 @@ public sealed record ReceiptLabels
         Cash = "Cash",
         Card = "Card",
         Upi = "UPI",
-        Credit = "Credit",
+
+        // "Khata", the shop's own word, as on the screen: "Credit" was one of four names for money
+        // a customer owes, and in Indian retail "store credit" usually means the opposite.
+        Credit = "Khata",
         LoyaltyPoints = "Points",
         Change = "Change",
 
@@ -248,14 +347,34 @@ public sealed record ReceiptLabels
         InvoicesVoided = "Invoices voided",
         ValueVoided = "Value voided",
         VoidsExcludedNote = "Excluded from sales and tax above.",
-        CreditCollected = "Credit collected",
-        CreditCollectedInCash = "Credit collected in cash",
+        CreditCollected = "Khata collected",
+        CreditCollectedInCash = "Khata collected in cash",
         CreditCollectedToBank = "By card or UPI",
-        CreditCollectedNote = "Paid back against earlier credit. Not sales, no tax.",
+        CreditCollectedNote = "Paid back against the khata. Not sales, no tax.",
         PaymentReceived = "PAYMENT RECEIVED",
         AmountPaid = "Paid",
         StillOwed = "Still owed",
-        PaymentSlipNote = "Against credit. Not a tax invoice.",
+        PaymentSlipNote = "Against the khata. Not a tax invoice.",
+        PaidToSuppliers = "Paid to suppliers",
+        RefundedInCash = "Refunded on returns",
+        OpeningFloat = "Opening float",
+        OurPrice = "Our price",
+        YouSave = "You save",
+        ExpensesPaid = "Expenses paid",
+        CashPutIn = "Cash put in",
+        CashTakenOut = "Cash taken out",
+        CreditNote = "CREDIT NOTE",
+        AgainstBill = "Against bill",
+        Reason = "Reason",
+        Damaged = "damaged, not restocked",
+        Refund = "Refund",
+        OffTheKhata = "Off the khata",
+        TaxReversed = "Tax reversed",
+        Returns = "Returns",
+        CreditNotes = "Credit notes",
+        ValueRefunded = "Value refunded",
+        NetAfterReturns = "Net after returns",
+        ReturnsNote = "On their own documents. Sales above are unchanged.",
         ByCashier = "By cashier",
         CashierName = "Name",
         CashHeld = "Cash",
@@ -264,8 +383,36 @@ public sealed record ReceiptLabels
         GrossLessDiscount = "gross less discount",
         TaxablePlusTax = "taxable plus tax",
         TendersLessChange = "tenders less change",
-        BillsStillParked = "bill(s) still parked",
+        BillsStillParked = "bills still parked",
+        BillStillParked = "bill still parked",
         ParkedBillsNote = "These are not sales. Recall or discard them.",
+        OrdersWaiting = "orders waiting",
+        OrderWaiting = "order waiting",
+        ScanToPay = "SCAN TO PAY BY UPI",
+        UpiSlipNote = "Not a bill. Your bill prints once it is paid.",
+        KhataStatement = "KHATA STATEMENT",
+        Period = "Period",
+        OpeningBalance = "Owed at the start",
+        EntryBill = "Bill",
+        EntryPaid = "Paid",
+        EntryReturned = "Returned",
+        BoughtOnCredit = "Bought on khata",
+        PaidBack = "Paid back",
+        ReturnedGoods = "Goods returned",
+        OwedNow = "OWED NOW",
+        OldestUnpaid = "Oldest unpaid bill",
+        Days = "days",
+        AgeUpTo30 = "  Up to 30 days",
+        Age31To60 = "  31 to 60 days",
+        Age61To90 = "  61 to 90 days",
+        AgeOver90 = "  Over 90 days",
+        StatementNote = "Not a bill. Your khata as the shop's books have it.",
+        NothingOwed = "Nothing is owed. Thank you.",
+        Offer = "Offer",
+        BillTo = "Bill to",
+        BuyerGstin = "Buyer GSTIN",
+        PlaceOfSupply = "Place of supply",
+        OrdersWaitingNote = "To collect or deliver.",
     };
 
     /// <summary>
@@ -282,6 +429,15 @@ public sealed record ReceiptLabels
         // worse than a slightly formal word for the one above it.
         Subtotal = "இடைத்தொகை",
         LowStock = "ஆர்டர் செய்ய வேண்டியவை (உள்ளது / அளவு)",
+
+        // Plain shop Tamil for the words the reference bill did not carry. They were English until
+        // a shopkeeper said what they print, which left a Tamil lane's day-end report half English;
+        // the pilot shop is to check them, as with the round-off line below.
+        CheckTheDates = "தேதி சரிபார்க்கவும் (காலாவதி)",
+        Expired = "காலாவதியானது",
+
+        // Left in English, like TAX INVOICE: it is the mark somebody checking for a duplicate - an
+        // inspector, or a customer disputing a second bill - looks for, and it prints as characters.
         Reprint = "** REPRINT **",
         BillNumber = "பில் நம்பர்",
         Date = "தேதி",
@@ -321,10 +477,12 @@ public sealed record ReceiptLabels
         TaxSummaryTaxable = "வரிக்குரிய",
         TaxSummaryTax = "வரி",
 
+        // The reference bill prints these three in English, as the shops say them. The khata is கடன்,
+        // the word the khata statement already prints.
         Cash = "Cash",
         Card = "Card",
         Upi = "UPI",
-        Credit = "Credit",
+        Credit = "கடன்",
         LoyaltyPoints = "புள்ளிகள்",
         Change = "மீதம்",
 
@@ -358,18 +516,43 @@ public sealed record ReceiptLabels
         ValueVoided = "ரத்து செய்த தொகை",
         VoidsExcludedNote = "மேலே உள்ள விற்பனை மற்றும் வரியில் சேர்க்கப்படவில்லை.",
 
-        // Left in English, like the tender names above ("Cash", "Credit"): these name the same
-        // tenders, and a Tamil phrase composed here rather than taken from a real bill would need
-        // the native check the round-off label is still waiting on. Worth replacing once a
-        // shopkeeper says what they call it.
-        CreditCollected = "Credit collected",
-        CreditCollectedInCash = "Credit collected in cash",
-        CreditCollectedToBank = "By card or UPI",
-        CreditCollectedNote = "Paid back against earlier credit. Not sales, no tax.",
-        PaymentReceived = "PAYMENT RECEIVED",
-        AmountPaid = "Paid",
-        StillOwed = "Still owed",
-        PaymentSlipNote = "Against credit. Not a tax invoice.",
+        // The khata and the drawer, in the same plain shop Tamil as the rest of the report, and to
+        // be checked with the pilot shop like the words at the top. கடன் is the khata statement's
+        // own word for what a customer owes.
+        CreditCollected = "கடன் வசூல்",
+        CreditCollectedInCash = "ரொக்கமாக கடன் வசூல்",
+        CreditCollectedToBank = "கார்டு அல்லது UPI மூலம்",
+        CreditCollectedNote = "முன்பு வாங்கிய கடனுக்குச் செலுத்தியது. விற்பனை அல்ல, வரி இல்லை.",
+        PaymentReceived = "பணம் பெறப்பட்டது",
+        AmountPaid = "செலுத்தியது",
+        StillOwed = "மீதி நிலுவை",
+        PaymentSlipNote = "கடன் கணக்கிற்கு. இது வரி பில் அல்ல.",
+        PaidToSuppliers = "சப்ளையர்களுக்கு கொடுத்தது",
+
+        // "CREDIT NOTE" stays English for good - it is the document's name in law, as "TAX
+        // INVOICE" is. The words around it are Tamil.
+        RefundedInCash = "திருப்பியதற்கு கொடுத்த பணம்",
+        OpeningFloat = "தொடக்க சில்லறை",
+
+        // On the shelf, where the customer reads it: the same word for price as the bill's column,
+        // and the same word for saving as its foot.
+        OurPrice = "எங்கள் விலை",
+        YouSave = "சேமிப்பு",
+        ExpensesPaid = "செலவுகள்",
+        CashPutIn = "பெட்டியில் வைத்த பணம்",
+        CashTakenOut = "பெட்டியிலிருந்து எடுத்த பணம்",
+        CreditNote = "CREDIT NOTE",
+        AgainstBill = "அசல் பில்",
+        Reason = "காரணம்",
+        Damaged = "சேதம், மீண்டும் அடுக்கவில்லை",
+        Refund = "திருப்பித் தரும் தொகை",
+        OffTheKhata = "கடனில் கழித்தது",
+        TaxReversed = "திரும்பப் பெற்ற வரி",
+        Returns = "திருப்பியவை",
+        CreditNotes = "கிரெடிட் நோட்",
+        ValueRefunded = "திருப்பிய தொகை",
+        NetAfterReturns = "திருப்பியதற்குப் பின் நிகரம்",
+        ReturnsNote = "தனி ஆவணங்களில். மேலே உள்ள விற்பனை மாறவில்லை.",
         ByCashier = "கேஷியர் வாரியாக",
         CashierName = "பெயர்",
         CashHeld = "ரொக்கம்",
@@ -379,6 +562,34 @@ public sealed record ReceiptLabels
         TaxablePlusTax = "வரிக்குரிய தொகை + வரி",
         TendersLessChange = "வந்த பணம் - கொடுத்த மீதம்",
         BillsStillParked = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
+        BillStillParked = "பில் நிறுத்தி வைக்கப்பட்டுள்ளது",
         ParkedBillsNote = "இவை விற்பனை அல்ல. மீண்டும் எடுக்கவும் அல்லது நீக்கவும்.",
+        OrdersWaiting = "ஆர்டர் காத்திருக்கிறது",
+        OrderWaiting = "ஆர்டர் காத்திருக்கிறது",
+        ScanToPay = "ஸ்கேன் செய்து UPI மூலம் செலுத்தவும்",
+        UpiSlipNote = "இது பில் அல்ல. பணம் செலுத்திய பின் பில் வரும்.",
+        KhataStatement = "கடன் கணக்கு அறிக்கை",
+        Period = "காலம்",
+        OpeningBalance = "தொடக்க நிலுவை",
+        EntryBill = "பில்",
+        EntryPaid = "செலுத்தியது",
+        EntryReturned = "திருப்பியது",
+        BoughtOnCredit = "கடனில் வாங்கியது",
+        PaidBack = "திரும்பச் செலுத்தியது",
+        ReturnedGoods = "திருப்பிய பொருட்கள்",
+        OwedNow = "இப்போது நிலுவை",
+        OldestUnpaid = "பழைய நிலுவை பில்",
+        Days = "நாள்",
+        AgeUpTo30 = "  30 நாள் வரை",
+        Age31To60 = "  31 முதல் 60 நாள்",
+        Age61To90 = "  61 முதல் 90 நாள்",
+        AgeOver90 = "  90 நாளுக்கு மேல்",
+        StatementNote = "இது பில் அல்ல. கடையின் கணக்கின்படி உங்கள் நிலுவை.",
+        NothingOwed = "நிலுவை எதுவும் இல்லை. நன்றி.",
+        Offer = "சலுகை",
+        BillTo = "வாங்குபவர்",
+        BuyerGstin = "வாங்குபவர் GSTIN",
+        PlaceOfSupply = "விநியோக இடம்",
+        OrdersWaitingNote = "எடுத்துச் செல்ல அல்லது அனுப்ப.",
     };
 }

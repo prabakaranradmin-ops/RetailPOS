@@ -46,4 +46,10 @@ public interface ICreditStore
 
     /// <summary>The customer's khata, newest first, each line with the balance after it.</summary>
     IReadOnlyList<CreditMovement> History(long customerId, int limit = 50);
+
+    /// <summary>
+    /// Every line of the customer's khata, oldest first: what a statement is built from. The same
+    /// books as <see cref="Balance"/>, so a statement always closes on what they owe.
+    /// </summary>
+    IReadOnlyList<KhataEntry> Ledger(long customerId);
 }

@@ -87,9 +87,22 @@ public sealed class DayCloseRepository : IDayCloseStore
             stamp.ExecuteNonQuery();
         }
 
+        // And so is cash moved through the drawer, and every credit note issued.
+        foreach (var table in new[] { "cash_movements", "credit_notes" })
+        {
+            using var stamp = connection.CreateCommand();
+            stamp.Transaction = transaction;
+            stamp.CommandText = $"UPDATE {table} SET day_close_id = $id WHERE lane_id = $lane AND day_close_id IS NULL;";
+            stamp.Parameters.AddWithValue("$id", id);
+            stamp.Parameters.AddWithValue("$lane", laneId);
+            stamp.ExecuteNonQuery();
+        }
+
         transaction.Commit();
 
-        return summary with { Id = id, HeldBillsOutstanding = CountHeldBills(laneId) };
+        var (parked, orders) = CountHeldBills(laneId);
+
+        return summary with { Id = id, HeldBillsOutstanding = parked, OrdersWaiting = orders };
     }
 
     public DayCloseSummary? FindLatest(string laneId)
@@ -317,9 +330,24 @@ public sealed class DayCloseRepository : IDayCloseStore
 
         MergeCollectedCash(cashiers, collectedByCashier);
 
+        // Cash in or out of the drawer other than through a sale - a supplier paid from the till.
+        var (paidOut, paidIn, movements, movedByCashier) =
+            ReadMovements(connection, transaction, "lane_id = $lane AND day_close_id IS NULL", laneId, 0);
+
+        MergeCollectedCash(cashiers, movedByCashier);
+
+        // Goods brought back. A cash refund is already among the movements above.
+        var (returnsCount, returnsValue, returnsTax) =
+            ReadReturns(connection, transaction, "lane_id = $lane AND day_close_id IS NULL", laneId, 0);
+
         // What should be in the drawer: notes taken in, less change handed back, plus credit paid
-        // back in cash.
-        var cashExpected = Math.Max(0m, tenders.FirstOrDefault(t => t.Type == TenderType.Cash).Amount - change) + collectedCash;
+        // back in cash, less what was paid out of it and plus what was put in. Not held at zero once
+        // money has been paid out: a supplier paid from the float leaves a drawer short of the
+        // day's takings, and the report has to say so rather than round it away.
+        var cashExpected = Math.Max(0m, tenders.FirstOrDefault(t => t.Type == TenderType.Cash).Amount - change) + collectedCash
+                           - paidOut + paidIn;
+
+        var (parked, orders) = CountHeldBills(laneId);
 
         return new DayCloseSummary(
             id,
@@ -342,13 +370,20 @@ public sealed class DayCloseRepository : IDayCloseStore
             PointsEarned: earned,
             Tenders: tenders,
             TaxSlabs: slabs,
-            HeldBillsOutstanding: CountHeldBills(laneId),
+            HeldBillsOutstanding: parked,
             VoidedCount: voidedCount,
             VoidedValue: voidedValue,
             Cashiers: cashiers,
             CreditCollected: collected,
             CreditCollectedCash: collectedCash,
-            CreditCollectedCount: collectedCount);
+            CreditCollectedCount: collectedCount,
+            CashPaidOut: paidOut,
+            CashPaidIn: paidIn,
+            DrawerMovements: movements,
+            ReturnsCount: returnsCount,
+            ReturnsValue: returnsValue,
+            ReturnsTax: returnsTax,
+            OrdersWaiting: orders);
 
         static void Bind(SqliteCommand command, string laneId)
         {
@@ -399,6 +434,78 @@ public sealed class DayCloseRepository : IDayCloseStore
     }
 
     /// <summary>
+    /// Cash that went into or out of the drawer other than through a sale: in total each way, by
+    /// kind, and by who was on the till.
+    /// </summary>
+    private static (decimal PaidOut, decimal PaidIn, List<CashMovementTotal> ByKind, Dictionary<string, decimal> ByCashier) ReadMovements(
+        SqliteConnection connection, SqliteTransaction? transaction, string where, string laneId, long closeId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"""
+            SELECT kind, COALESCE(cashier_name, ''), COUNT(*), {PaiseSql.Sum("amount")}
+            FROM cash_movements
+            WHERE {where}
+            GROUP BY kind, COALESCE(cashier_name, '')
+            ORDER BY kind;
+            """;
+        command.Parameters.AddWithValue("$lane", laneId);
+        command.Parameters.AddWithValue("$id", closeId);
+
+        long paidOut = 0, paidIn = 0;
+        var byKind = new List<CashMovementTotal>();
+        var byCashier = new Dictionary<string, decimal>(StringComparer.Ordinal);
+
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            var kind = reader.GetString(0);
+            var cashier = reader.GetString(1);
+            var count = reader.GetInt32(2);
+            var paise = reader.GetInt64(3);
+
+            if (paise < 0)
+                paidOut -= paise;
+            else
+                paidIn += paise;
+
+            var index = byKind.FindIndex(k => k.Kind == kind);
+
+            byKind = index < 0
+                ? [.. byKind, new CashMovementTotal(kind, count, PaiseSql.Rupees(paise))]
+                : [.. byKind.Select((k, i) => i == index ? k with { Count = k.Count + count, Amount = k.Amount + PaiseSql.Rupees(paise) } : k)];
+
+            byCashier[cashier] = byCashier.GetValueOrDefault(cashier) + PaiseSql.Rupees(paise);
+        }
+
+        return (PaiseSql.Rupees(paidOut), PaiseSql.Rupees(paidIn), byKind, byCashier);
+    }
+
+    /// <summary>Credit notes: how many, what they refunded, and the tax they took back.</summary>
+    private static (int Count, decimal Value, decimal Tax) ReadReturns(
+        SqliteConnection connection, SqliteTransaction? transaction, string where, string laneId, long closeId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"""
+            SELECT COUNT(*),
+                   COALESCE(SUM({CreditRepository.RefundedPaiseSql("credit_notes")}), 0),
+                   COALESCE({PaiseSql.Sum("total_cgst")}, 0) + COALESCE({PaiseSql.Sum("total_sgst")}, 0)
+                     + COALESCE({PaiseSql.Sum("total_igst")}, 0)
+            FROM credit_notes
+            WHERE {where};
+            """;
+        command.Parameters.AddWithValue("$lane", laneId);
+        command.Parameters.AddWithValue("$id", closeId);
+
+        using var reader = command.ExecuteReader();
+        reader.Read();
+
+        return (reader.GetInt32(0), PaiseSql.Rupees(reader.GetInt64(1)), PaiseSql.Rupees(reader.GetInt64(2)));
+    }
+
+    /// <summary>
     /// Adds each cashier's cash repayments to the cash they hold.
     /// </summary>
     /// <remarks>
@@ -420,16 +527,24 @@ public sealed class DayCloseRepository : IDayCloseStore
         }
     }
 
-    private int CountHeldBills(string laneId)
+    /// <summary>
+    /// Bills still parked, and orders taken over the phone that are waiting to be collected or
+    /// delivered. They are counted apart because only the first are loose ends: an order is meant to
+    /// wait overnight.
+    /// </summary>
+    private (int Parked, int Orders) CountHeldBills(string laneId)
     {
         try
         {
-            return _heldBills?.List(laneId).Count ?? 0;
+            var held = _heldBills?.List(laneId) ?? [];
+            var orders = held.Count(h => h.IsOrder);
+
+            return (held.Count - orders, orders);
         }
         catch (SqliteException)
         {
             // A count for a warning line is not worth failing a close over.
-            return 0;
+            return (0, 0);
         }
     }
 
@@ -443,11 +558,13 @@ public sealed class DayCloseRepository : IDayCloseStore
             INSERT INTO day_closes
               (lane_id, closed_at, opened_at, invoice_count, gross_sales, total_discount, net_sales,
                taxable_value, total_cgst, total_sgst, total_igst, cash_expected, points_redeemed,
-               points_earned, voided_count, voided_value, credit_collected, credit_collected_cash)
+               points_earned, voided_count, voided_value, credit_collected, credit_collected_cash,
+               cash_paid_out, cash_paid_in, returns_count, returns_value, returns_tax)
             VALUES
               ($lane, $closedAt, $openedAt, $count, $gross, $discount, $net,
                $taxable, $cgst, $sgst, $igst, $cash, $redeemed,
-               $earned, $voidedCount, $voidedValue, $collected, $collectedCash);
+               $earned, $voidedCount, $voidedValue, $collected, $collectedCash,
+               $paidOut, $paidIn, $returnsCount, $returnsValue, $returnsTax);
             SELECT last_insert_rowid();
             """;
 
@@ -469,6 +586,11 @@ public sealed class DayCloseRepository : IDayCloseStore
         command.Parameters.AddWithValue("$voidedValue", summary.VoidedValue);
         command.Parameters.AddWithValue("$collected", summary.CreditCollected);
         command.Parameters.AddWithValue("$collectedCash", summary.CreditCollectedCash);
+        command.Parameters.AddWithValue("$paidOut", summary.CashPaidOut);
+        command.Parameters.AddWithValue("$paidIn", summary.CashPaidIn);
+        command.Parameters.AddWithValue("$returnsCount", summary.ReturnsCount);
+        command.Parameters.AddWithValue("$returnsValue", summary.ReturnsValue);
+        command.Parameters.AddWithValue("$returnsTax", summary.ReturnsTax);
 
         return Convert.ToInt64(command.ExecuteScalar());
     }
@@ -523,7 +645,8 @@ public sealed class DayCloseRepository : IDayCloseStore
                 SELECT lane_id, closed_at, opened_at, invoice_count, gross_sales, total_discount,
                        net_sales, taxable_value, total_cgst, total_sgst, total_igst, cash_expected,
                        points_redeemed, points_earned, voided_count, voided_value,
-                       credit_collected, credit_collected_cash
+                       credit_collected, credit_collected_cash, cash_paid_out, cash_paid_in,
+                       returns_count, returns_value, returns_tax
                 FROM day_closes WHERE id = $id;
                 """;
             command.Parameters.AddWithValue("$id", id);
@@ -559,7 +682,12 @@ public sealed class DayCloseRepository : IDayCloseStore
                 VoidedCount: reader.GetInt32(14),
                 VoidedValue: reader.GetDecimal(15),
                 CreditCollected: reader.GetDecimal(16),
-                CreditCollectedCash: reader.GetDecimal(17));
+                CreditCollectedCash: reader.GetDecimal(17),
+                CashPaidOut: reader.GetDecimal(18),
+                CashPaidIn: reader.GetDecimal(19),
+                ReturnsCount: reader.GetInt32(20),
+                ReturnsValue: reader.GetDecimal(21),
+                ReturnsTax: reader.GetDecimal(22));
         }
 
         // Recomputed from the invoices this close stamped, rather than stored a second time. The
@@ -634,17 +762,23 @@ public sealed class DayCloseRepository : IDayCloseStore
 
         MergeCollectedCash(cashiers, collectedByCashier);
 
+        var (_, _, movements, movedByCashier) =
+            ReadMovements(connection, null, "day_close_id = $id", summary.LaneId, id);
+
+        MergeCollectedCash(cashiers, movedByCashier);
+
         return summary with
         {
             Tenders = tenders,
             TaxSlabs = slabs,
             Cashiers = cashiers,
             CreditCollectedCount = collectedCount,
+            DrawerMovements = movements,
 
             // Change is not stored; it is what the stored drawer figure leaves unexplained. The
-            // drawer now also holds credit paid back in cash, and without taking that off first a
-            // reprinted report would show it as negative change.
-            ChangeGiven = Money.ToPresentation(cash - (summary.CashExpected - summary.CreditCollectedCash)),
+            // drawer also holds credit paid back in cash and has had cash paid out of it and put in,
+            // and without undoing those first a reprinted report would show them as change.
+            ChangeGiven = Money.ToPresentation(cash - (summary.CashExpected - summary.CreditCollectedCash + summary.CashPaidOut - summary.CashPaidIn)),
         };
     }
 

@@ -298,7 +298,35 @@ public class DayCloseTests(ITestOutputHelper output) : IDisposable
         Assert.Equal(1, day.InvoiceCount);
 
         var report = new ZReportComposer(Store).Compose(day).ToPlainText();
-        Assert.Contains("1 bill(s) still parked", report);
+        Assert.Contains("1 bill still parked", report);
+    }
+
+    /// <summary>
+    /// An order taken over the phone is meant to wait overnight, so it is not a parked bill to
+    /// recall or discard: the report lists it on its own line.
+    /// </summary>
+    [Fact]
+    public void OrdersWaitingAreListedApartFromParkedBills()
+    {
+        SeedCatalogue();
+        Sell("8901234567890");
+
+        var order = new InvoiceEngine(HomeState);
+        order.AddItem(_temp.Items.FindByBarcode("8901234567920")!);
+        Held.Park(Lane, Held.NextToken(Lane), DateTimeOffset.Now, null, order.SnapshotLines(), new OrderInfo(OrderKind.WhatsApp, "deliver at 6"));
+
+        var day = Closes.Close(Lane, DateTimeOffset.Now);
+
+        Assert.Equal(0, day.HeldBillsOutstanding);
+        Assert.Equal(1, day.OrdersWaiting);
+
+        var report = new ZReportComposer(Store).Compose(day).ToPlainText();
+        Assert.DoesNotContain("still parked", report);
+        Assert.Contains("1 order waiting", report);
+        Assert.Contains("To collect or deliver.", report);
+
+        // Closing the day leaves the order where it was, for tomorrow.
+        Assert.True(Assert.Single(Held.List(Lane)).IsOrder);
     }
 
     // ---- Round trip ------------------------------------------------------------------------------

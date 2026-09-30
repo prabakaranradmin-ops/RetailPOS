@@ -10,6 +10,12 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!--
+      A QR decoder, for the tests only: the till draws its own QR codes (Pos.Core.Hardware QrCode),
+      and the proof they are right is that an independent reader reads them back. Nothing shipped
+      references it.
+    -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
   <ItemGroup>

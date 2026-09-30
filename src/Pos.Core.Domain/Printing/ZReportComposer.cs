@@ -81,10 +81,15 @@ public sealed class ZReportComposer
 
     private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
+    /// <param name="dates">
+    /// Deliveries past or near their use-by date and probably on the shelf, printed at the foot like
+    /// the reorder list, and like it only on the original.
+    /// </param>
     public ReceiptBuilder Compose(
         DayCloseSummary day,
         bool isReprint = false,
-        IReadOnlyList<StockLevel>? lowStock = null)
+        IReadOnlyList<StockLevel>? lowStock = null,
+        IReadOnlyList<ExpiryWarning>? dates = null)
     {
         ArgumentNullException.ThrowIfNull(day);
 
@@ -117,10 +122,11 @@ public sealed class ZReportComposer
             // No sales is not the same as no money. A day on which somebody only came in to settle
             // their khata still has cash in the drawer to count, and a report that just said "no
             // sales" would leave it unexplained.
-            if (day.CollectedCredit)
+            if (day.MovedMoneyWithoutSales)
             {
                 WriteDrawer(report, day);
                 WriteCollections(report, day);
+                WriteReturns(report, day);
             }
 
             WriteHeldBills(report, day);
@@ -185,14 +191,38 @@ public sealed class ZReportComposer
         }
 
         WriteVoids(report, day);
+        WriteReturns(report, day);
         WriteCashiers(report, day);
 
         WriteReconciliation(report, day);
         WriteHeldBills(report, day);
         WriteLowStock(report, lowStock);
+        WriteDates(report, dates);
 
         report.Cut();
         return report;
+    }
+
+    /// <summary>What to look at before opening tomorrow: past its date, or within a week of it.</summary>
+    private void WriteDates(ReceiptBuilder report, IReadOnlyList<ExpiryWarning>? dates)
+    {
+        const int most = 15;
+
+        if (dates is null || dates.Count == 0)
+            return;
+
+        report.Rule();
+        report.Text(Labels.CheckTheDates, bold: true);
+
+        foreach (var date in dates.Take(most))
+        {
+            report.Columns(
+                date.Name.Length > 28 ? date.Name[..27] + "…" : date.Name,
+                date.IsExpired ? $"{Labels.Expired} {date.Expires:dd-MM}" : date.Expires.ToString("dd-MM", CultureInfo.InvariantCulture));
+        }
+
+        if (dates.Count > most)
+            report.Text($"  ... and {dates.Count - most} more");
     }
 
     /// <summary>
@@ -214,7 +244,50 @@ public sealed class ZReportComposer
         if (day.CreditCollectedCash != 0m)
             report.Columns($"  {Labels.CreditCollectedInCash}", Amount(day.CreditCollectedCash));
 
+        // Cash that left or entered the drawer other than through a sale, each kind on its own line
+        // with its sign, so the count the cashier makes can be walked back to the figure above.
+        foreach (var movement in day.DrawerMovementTotals)
+            report.Columns($"  {MovementLabel(movement.Kind)} ({movement.Count})", Amount(movement.Amount));
+
         report.Rule();
+    }
+
+    private string MovementLabel(string kind) => kind switch
+    {
+        DrawerKinds.SupplierPayment => Labels.PaidToSuppliers,
+        DrawerKinds.Refund => Labels.RefundedInCash,
+        DrawerKinds.Float => Labels.OpeningFloat,
+        DrawerKinds.Expense => Labels.ExpensesPaid,
+        DrawerKinds.CashIn => Labels.CashPutIn,
+        DrawerKinds.CashOut => Labels.CashTakenOut,
+        _ => kind,
+    };
+
+    /// <summary>
+    /// Goods brought back on credit notes.
+    /// </summary>
+    /// <remarks>
+    /// Beside the sales rather than netted out of them. The bills were issued as they were, and the
+    /// figures above have to go on agreeing with them; a credit note is its own document, and the
+    /// tax it took back comes off the day's liability here, where it can be seen.
+    /// </remarks>
+    private void WriteReturns(ReceiptBuilder report, DayCloseSummary day)
+    {
+        if (!day.HadReturns)
+            return;
+
+        report.Rule();
+        report.Text(Labels.Returns, bold: true);
+        report.Columns(Labels.CreditNotes, day.ReturnsCount.ToString(CultureInfo.InvariantCulture));
+        report.Columns(Labels.ValueRefunded, Amount(day.ReturnsValue));
+
+        if (_taxMode != TaxMode.Composition && day.ReturnsTax != 0m)
+            report.Columns(Labels.TaxReversed, Amount(day.ReturnsTax));
+
+        if (!day.TookNothing)
+            report.Columns(Labels.NetAfterReturns, Amount(day.NetAfterReturns), bold: true);
+
+        report.Text(Labels.ReturnsNote);
     }
 
     /// <summary>
@@ -317,12 +390,20 @@ public sealed class ZReportComposer
 
     private void WriteHeldBills(ReceiptBuilder report, DayCloseSummary day)
     {
-        if (day.HeldBillsOutstanding == 0)
-            return;
+        if (day.HeldBillsOutstanding > 0)
+        {
+            report.Blank();
+            report.Text($"{day.HeldBillsOutstanding} {(day.HeldBillsOutstanding == 1 ? Labels.BillStillParked : Labels.BillsStillParked)}", TextAlignment.Center, bold: true);
+            report.Text(Labels.ParkedBillsNote, TextAlignment.Center);
+        }
 
-        report.Blank();
-        report.Text($"{day.HeldBillsOutstanding} {Labels.BillsStillParked}", TextAlignment.Center, bold: true);
-        report.Text(Labels.ParkedBillsNote, TextAlignment.Center);
+        // Orders are meant to wait, so they are listed without the advice to recall or discard.
+        if (day.OrdersWaiting > 0)
+        {
+            report.Blank();
+            report.Text($"{day.OrdersWaiting} {(day.OrdersWaiting == 1 ? Labels.OrderWaiting : Labels.OrdersWaiting)}", TextAlignment.Center, bold: true);
+            report.Text(Labels.OrdersWaitingNote, TextAlignment.Center);
+        }
     }
 
     private static string Amount(decimal value) => value.ToString("N2", CultureInfo.InvariantCulture);

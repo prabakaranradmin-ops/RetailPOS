@@ -87,6 +87,26 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
     }
 
     /// <summary>
+    /// What the customer pays is printed large under the totals, as the compact bill does. It used
+    /// to be only in the tender block, the same size as "Card 0.00".
+    /// </summary>
+    [Fact]
+    public void TheStandardBillPrintsItsTotalLarge()
+    {
+        var receipt = Composer.Compose(CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice);
+        var lines = receipt.ToPlainText().Split('\n').Select(l => l.Trim()).ToList();
+
+        Assert.Contains("TOTAL  Rs. 189.00", lines);
+
+        var bytes = receipt.ToEscPos();
+        var doubleHeight = EscPos.TextSize(1, 2);
+
+        Assert.True(
+            Enumerable.Range(0, bytes.Length - doubleHeight.Length + 1).Any(i => bytes.AsSpan(i, doubleHeight.Length).SequenceEqual(doubleHeight)),
+            "the total is not printed in double-height type");
+    }
+
+    /// <summary>
     /// The four tenders a counter deals in are printed on every bill whether or not they were used,
     /// so the same four figures land in the same four places on every receipt of the day.
     /// </summary>
@@ -96,7 +116,7 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
         var paper = Composer.Compose(CompleteCashSale(BillWith(("Toor Dal 1kg", 189m, 5m)), 189m).Invoice).ToPlainText();
 
         var first = paper.Split('\n').Single(l => l.Contains("Cash") && l.Contains("UPI"));
-        var second = paper.Split('\n').Single(l => l.Contains("Card") && l.Contains("Credit"));
+        var second = paper.Split('\n').Single(l => l.Contains("Card") && l.Contains("Khata"));
 
         Assert.Contains("189.00", first);
         Assert.Contains("0.00", first);
@@ -104,7 +124,7 @@ public class ReceiptTests(ITestOutputHelper output) : IDisposable
 
         // A right-aligned figure fills its cell, so without a gutter the next label runs into it.
         Assert.DoesNotContain("0.00UPI", first);
-        Assert.DoesNotContain("0.00Credit", second);
+        Assert.DoesNotContain("0.00Khata", second);
     }
 
     /// <summary>

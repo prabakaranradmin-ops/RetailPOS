@@ -99,6 +99,12 @@ public sealed record GstSlab(decimal Rate, decimal TaxableValue, decimal Cgst, d
 
 public sealed record VoidSummary(int Count, decimal Value);
 
+/// <summary>Goods brought back on credit notes in the window, and what was refunded for them.</summary>
+public sealed record ReturnSummary(int Count, decimal Value)
+{
+    public static ReturnSummary None { get; } = new(0, 0m);
+}
+
 /// <param name="IdentifiedBills">Bills rung up against a customer the shop knows by mobile number.</param>
 public sealed record CustomerMix(
     int IdentifiedBills,
@@ -142,6 +148,19 @@ public sealed record DashboardData
     public required IReadOnlyList<TenderSlice> Tenders { get; init; }
     public required IReadOnlyList<GstSlab> GstSlabs { get; init; }
     public required VoidSummary Voids { get; init; }
+
+    /// <summary>
+    /// Credit notes issued in the window. Beside the sales rather than netted out of them: the
+    /// figures above are the bills as issued, and a return is its own document.
+    /// </summary>
+    public ReturnSummary Returns { get; init; } = ReturnSummary.None;
+
+    /// <summary>
+    /// What the shop spent in the window that was not stock, by category, wherever it was paid from.
+    /// </summary>
+    public IReadOnlyList<Pos.Core.Domain.ExpenseTotal> Expenses { get; init; } = [];
+
+    public decimal ExpensesTotal => Expenses.Sum(e => e.Amount);
     public required CustomerMix Customers { get; init; }
     public required PointsFlow Points { get; init; }
 

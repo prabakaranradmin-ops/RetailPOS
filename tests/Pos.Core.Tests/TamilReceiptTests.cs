@@ -126,7 +126,7 @@ public class TamilReceiptTests(ITestOutputHelper output) : IDisposable
         var paper = Paper(invoice, ReceiptLanguage.Tamil);
 
         var first = paper.Split('\n').Single(l => l.Contains("Cash") && l.Contains("UPI"));
-        var second = paper.Split('\n').Single(l => l.Contains("Card") && l.Contains("Credit"));
+        var second = paper.Split('\n').Single(l => l.Contains("Card") && l.Contains("கடன்"));
 
         // 95x5 + 135x2 + 85x2. The whole bill went on UPI, so that is the only figure that is not
         // zero, and it is the one the total beside it has to equal.
@@ -139,7 +139,8 @@ public class TamilReceiptTests(ITestOutputHelper output) : IDisposable
 
     /// <summary>
     /// "TAX INVOICE" stays in English. It is the phrase the GST rules use and the one an inspector
-    /// looks for, so it is not a label to localise.
+    /// looks for, so it is not a label to localise. So do Cash, Card and UPI, as the shops print
+    /// them; the khata is கடன், the khata statement's own word.
     /// </summary>
     [Fact]
     public void TheTaxInvoiceHeadingAndTheTenderNamesStayInEnglish()
@@ -150,9 +151,36 @@ public class TamilReceiptTests(ITestOutputHelper output) : IDisposable
         Assert.Contains("Cash", paper);
         Assert.Contains("UPI", paper);
         Assert.Contains("Card", paper);
-        Assert.Contains("Credit", paper);
+        Assert.Contains("கடன்", paper);
+        Assert.DoesNotContain("Credit", paper);
         Assert.Contains("CGST", paper);
         Assert.Contains("SGST", paper);
+    }
+
+    /// <summary>
+    /// Every label on a Tamil lane is in Tamil, apart from the few the law or the shops themselves
+    /// keep in English. The khata and drawer lines of the day-end report used to be English, which
+    /// left a Tamil lane's own report half in English.
+    /// </summary>
+    [Fact]
+    public void EveryTamilLabelIsInTamilUnlessItIsTheLawsOrTheShopsWord()
+    {
+        string[] englishOnPurpose =
+        [
+            nameof(ReceiptLabels.TaxInvoice), nameof(ReceiptLabels.BillOfSupply), nameof(ReceiptLabels.CreditNote), nameof(ReceiptLabels.Reprint),
+            nameof(ReceiptLabels.Cgst), nameof(ReceiptLabels.Sgst), nameof(ReceiptLabels.Igst),
+            nameof(ReceiptLabels.Cash), nameof(ReceiptLabels.Card), nameof(ReceiptLabels.Upi),
+            nameof(ReceiptLabels.TotalAmount), nameof(ReceiptLabels.CashCustomer),
+        ];
+
+        var english = typeof(ReceiptLabels).GetProperties()
+            .Where(p => p.PropertyType == typeof(string) && !englishOnPurpose.Contains(p.Name))
+            .Select(p => (p.Name, Text: (string)p.GetValue(ReceiptLabels.TamilLabels)!))
+            .Where(p => !p.Text.Any(c => c is >= '஀' and <= '௿'))
+            .Select(p => $"{p.Name} = \"{p.Text}\"")
+            .ToList();
+
+        Assert.True(english.Count == 0, "These Tamil labels are not in Tamil:\n  " + string.Join("\n  ", english));
     }
 
     // ---- The two languages against each other ----------------------------------------------------
@@ -258,7 +286,7 @@ public class TamilReceiptTests(ITestOutputHelper output) : IDisposable
 
         Assert.DoesNotContain(lines, l => l.Contains("Cash") && l.Contains("UPI"));
 
-        foreach (var tender in new[] { "Cash", "UPI", "Card", "Credit" })
+        foreach (var tender in new[] { "Cash", "UPI", "Card", language == ReceiptLanguage.Tamil ? "கடன்" : "Khata" })
             Assert.Contains(lines, l => l.TrimStart().StartsWith(tender, StringComparison.Ordinal));
 
         Assert.Contains("915.00", paper);
