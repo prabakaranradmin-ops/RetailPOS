@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Draws the pictures the RetailPOS showcase is made from: the till with a bill in every unit a shop
+    sells in, and every document the lane prints, as the printer's own dots. It drives the same till
+    the tests drive - keys pressed, a real database - and renders off-screen, so it needs no printer
+    and does not take the keyboard from anyone.
+
+    Not part of the solution and not shipped. Run it by hand from the repository root, with the
+    folder to write to as its one argument (artifacts\showcase if none is given); the command is in
+    tools\showcase\README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- The Windows 10 SDK: the tour video is put together by Windows' own media and speech APIs. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>Pos.Showcase</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- For the till the tests drive (BillingHarness) and the catalogue they stock it from. -->
+    <ProjectReference Include="..\..\tests\Pos.App.Tests\Pos.App.Tests.csproj" />
+  </ItemGroup>
+
+</Project>
