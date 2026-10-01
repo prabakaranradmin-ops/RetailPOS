@@ -129,11 +129,15 @@ internal static class Program
             Source = new Uri("/Pos.App;component/Theme.xaml", UriKind.RelativeOrAbsolute),
         });
 
-        // "video <acceptance screenshots> [<showcase folder>]": the narrated tour, made from the
-        // acceptance run's screenshots and the pictures drawn below.
+        // "video <acceptance screenshots> [<showcase folder>] [<recordings>]": the tours, in Tamil and
+        // in English, made from the acceptance run's screenshots, the pictures drawn below, and the
+        // voice recordings (tools\showcase\recordings unless another folder is given).
         if (args.Length >= 2 && args[0] == "video")
         {
-            Video.Make(Path.GetFullPath(args[1]), Path.GetFullPath(args.Length > 2 ? args[2] : Path.Combine("artifacts", "showcase")));
+            Video.Make(
+                Path.GetFullPath(args[1]),
+                Path.GetFullPath(args.Length > 2 ? args[2] : Path.Combine("artifacts", "showcase")),
+                Path.GetFullPath(args.Length > 3 ? args[3] : Path.Combine("tools", "showcase", "recordings")));
             return 0;
         }
 

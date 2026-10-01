@@ -12,7 +12,7 @@
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- The Windows 10 SDK: the tour video is put together by Windows' own media and speech APIs. -->
+    <!-- The Windows 10 SDK: the tour videos are put together by Windows' own media APIs. -->
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <RootNamespace>Pos.Showcase</RootNamespace>
     <UseWPF>true</UseWPF>
