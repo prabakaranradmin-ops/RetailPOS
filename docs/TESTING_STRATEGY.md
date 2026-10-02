@@ -27,6 +27,14 @@ At minimum, assert exact output for:
 **Phase 0 — Foundations** — passing
 - [x] Local DB schema created and migratable — `SchemaTests`
 - [x] CI running unit tests on every push — `.github/workflows/ci.yml`
+- [x] No package with a known vulnerability, direct or transitive, on every push — `tools/ci/Check-Packages.ps1`
+- [x] Both builds checked as built: the GST build's `pos` prints a tax invoice, the no-tax build's a
+      bill of supply — `tools/ci/Check-Bill-Heading.ps1`, CI's `no-tax-build` job
+
+**On testing the no-tax build.** The variant is a stamp read from the running program's assembly,
+and under `dotnet test` the running program is the unstamped test host. So a test run with
+`-p:Variant=NoTax` still sees the GST build: it proves the variant builds, nothing more. The no-tax
+build's behaviour is checked by running its real executable, in CI and in the acceptance run.
 
 **Phase 1 — GST & invoice engine** — passing
 - [x] Full GST test table above passes — `GstTestTableTests`

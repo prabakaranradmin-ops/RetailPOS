@@ -20,15 +20,26 @@ jobs:
       - name: Restore
         run: dotnet restore RetailPos.sln
 
+      # Every package, including those brought in by another, against NuGet's advisory data. A
+      # package can be clean the day it is chosen and have an advisory published against it later.
+      - name: No package with a known vulnerability
+        shell: pwsh
+        run: ./tools/ci/Check-Packages.ps1
+
       - name: Build
         run: dotnet build RetailPos.sln --configuration Release --no-restore
 
       # minimal, not normal. At normal verbosity this step prints a line for every one of the
-      # ~1,140 passing tests, so the handful of lines that say what actually failed are buried
+      # ~2,970 passing tests, so the handful of lines that say what actually failed are buried
       # thousands of lines deep and get truncated out of anything anyone pastes or reads. A test
       # log exists to show failures; the passes are the summary line.
       - name: Test
         run: dotnet test RetailPos.sln --configuration Release --no-build --verbosity minimal --logger "trx;LogFileName=results.trx" --results-directory artifacts/test-results
+
+      # The real executable, as built: the GST build issues tax invoices.
+      - name: The GST build prints a tax invoice
+        shell: pwsh
+        run: ./tools/ci/Check-Bill-Heading.ps1 -Expect TaxInvoice -Configuration Release
 
       # if: always() -- the results are wanted precisely when the step above failed.
       - name: Keep the test results
@@ -38,3 +49,27 @@ jobs:
           name: test-results
           path: artifacts/test-results/
           retention-days: 14
+
+  # The second build that ships. What differs is a stamp in the executables, read from the running
+  # program's own assembly - which the unit tests, running in an unstamped test host, never see. So
+  # this builds the no-tax variant and runs its real pos tool: it must issue a bill of supply, and
+  # never a tax invoice.
+  no-tax-build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore RetailPos.sln
+
+      - name: Build the no-tax variant
+        run: dotnet build RetailPos.sln --configuration Release --no-restore -p:Variant=NoTax
+
+      - name: The no-tax build prints a bill of supply
+        shell: pwsh
+        run: ./tools/ci/Check-Bill-Heading.ps1 -Expect BillOfSupply -Configuration Release

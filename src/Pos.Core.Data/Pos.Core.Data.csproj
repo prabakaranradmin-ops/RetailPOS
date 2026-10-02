@@ -7,6 +7,14 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+
+    <!--
+      The SQLite engine itself, named here rather than left to Microsoft.Data.Sqlite's choice: the
+      2.1.6 it brings in is covered by GHSA-2m69-gcr7-jv3q (CVE-2025-6965, rated high), which
+      lists 2.1.11 and earlier. CI fails the build if a package with a known vulnerability comes
+      back (tools/ci/Check-Packages.ps1).
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
   </ItemGroup>
 
   <ItemGroup>

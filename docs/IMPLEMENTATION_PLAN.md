@@ -426,8 +426,8 @@ refund cash, take cash out or close the day. ARCHITECTURE.md §6f has the design
   - The owner's screen: adding, refusing and removing cashiers, and approvals saved as they are
     ticked and inert without an owner's PIN.
   - The new cards fit at 1366 × 768, are readable in every look, and share no access key.
-- **Gate.** 1,010 app tests and 1,587 core tests pass. The screen tests also pass on the no-tax
-  build.
+- **Gate.** 1,010 app tests and 1,587 core tests pass. The solution also builds as the no-tax
+  variant (see *What a no-tax test run proves*, below the programme).
 
 ### 3. The exceptions report — **complete** *(2026-10-02)*
 
@@ -619,8 +619,8 @@ the design.
       off the bill count nothing, and once the older packs are gone the till stops asking.
   - On the window: the pane fits at 1366 × 768 with a long name and a 5-digit MRP, the list holds
     the keyboard, and its highlight follows the arrows.
-- **Gate.** 1,070 app tests and 1,663 core tests pass. The screen and till tests also pass on the
-  no-tax build.
+- **Gate.** 1,070 app tests and 1,663 core tests pass. The solution also builds as the no-tax
+  variant.
 
 ### 11. Items not in the catalogue — **complete** *(2026-10-02)*
 
@@ -672,8 +672,8 @@ found the owner. ARCHITECTURE.md §6l has the design.
   - On the windows: the till pane fits at its tallest and the box and list take the keyboard. The
     owner's tests now run with the list and the notice full, in every look, with no clashing
     access key.
-- **Gate.** 1,108 app tests and 1,703 core tests pass, and the screen and till tests pass on the
-  no-tax build. One core test failed once in five full runs and passed in the other four. It was
+- **Gate.** 1,108 app tests and 1,703 core tests pass, and the solution also builds as the no-tax
+  variant. One core test failed once in five full runs and passed in the other four. It was
   not one of these new tests, which passed ten runs in a row on their own. A single intermittent
   core failure has been seen before, with a timing-sensitive backup test the likeliest cause.
 
@@ -809,8 +809,37 @@ last year's. ARCHITECTURE.md §6o has the design.
     - The day names.
   - The figures tab's layout, readability and access-key tests now run with the card full, against
     a sale from a year ago.
-- **Gate.** 1,138 app tests and 1,833 core tests pass. The screen and till tests of items 10 to 14
-  also pass on the no-tax build (445).
+- **Gate.** 1,138 app tests and 1,833 core tests pass, and the solution also builds as the no-tax
+  variant.
+
+### What a no-tax test run proves — *corrected 2026-10-02*
+
+Several gates above, and the UI review's, said the screen and till tests "also pass on the no-tax
+build". That overstated it. The no-tax build differs from the GST build only by a stamp in the
+executables (`-p:Variant=NoTax`), and `ProductVariant` reads that stamp from the *running program's*
+assembly. Under `dotnet test` the running program is the test host, which carries no stamp. So those
+runs saw the GST build every time, and proved only that the solution builds as the no-tax variant.
+
+What does check the no-tax build's behaviour:
+- **CI's `no-tax-build` job.** It builds the variant and runs its real `pos` tool
+  (`tools/ci/Check-Bill-Heading.ps1`). The tool's bill must be a bill of supply and never a tax
+  invoice. The main job checks the GST build the other way round.
+- **The acceptance run.** It drives the installed no-tax build end to end, and `ship.ps1` runs it for
+  each variant before anything ships.
+- **The variant logic itself.** It is unit-tested with the variant passed in (`ProductVariantTests`).
+
+### Security and the second build in CI — *2026-10-02*
+
+The review after the programme found two gaps, closed here:
+- **A known vulnerability in the shipped SQLite.** `SQLitePCLRaw` 2.1.6, brought in by
+  Microsoft.Data.Sqlite, is covered by GHSA-2m69-gcr7-jv3q (CVE-2025-6965, rated high). The data
+  project now names `SQLitePCLRaw.bundle_e_sqlite3` 2.1.13, outside the advisory's range.
+  - **The check.** CI runs `tools/ci/Check-Packages.ps1` on every push. It fails the build if any
+    package, direct or transitive, has a known vulnerability.
+  - **The tests.** The full suites pass on the new engine, including the crash-durability and
+    database-corruption tests.
+- **Only the GST build was checked in CI.** CI now also builds the no-tax variant and checks what its
+  real executable issues, as above.
 
 ## The UI/UX review, a richer look, and charts for the owner — **complete** *(added 2026-09-30, approved: "give me rich look GUI and also plotly kind of charts for owner")*
 
@@ -952,8 +981,8 @@ to read, so the screens now have four looks and a fifth choice that follows the 
 - **A setting that cannot stop the till.** A misspelt or unknown look reads as Night, and the lane
   starts as usual: unlike the tax mode, a look cannot make a bill wrong.
 
-**Gate:** 968 app tests and 1,542 core tests pass, and the screen tests also pass on the no-tax
-build. The whole contrast suite now runs once for each look. New tests check:
+**Gate:** 968 app tests and 1,542 core tests pass, and the solution also builds as the no-tax
+variant (corrected 2026-10-02; see *What a no-tax test run proves*). The whole contrast suite now runs once for each look. New tests check:
 - that every look defines the same names;
 - that no view takes a palette colour statically;
 - that the look swaps live, follows the clock, and saves and reads back;
