@@ -29,7 +29,7 @@ public static class CommandLine
         "list-ports" => ([], []),
         "import-items" => (["--update", "--dry-run"], ["--file"]),
         "backup-db" => ([], ["--keep"]),
-        "close-day" => (["--preview", "--yes", "--force", "--list", "--show", "--reprint"], ["--id", "--limit"]),
+        "close-day" => (["--preview", "--yes", "--force", "--list", "--show", "--reprint"], ["--id", "--limit", "--counted"]),
         "restore-db" => (["--yes"], ["--from"]),
         "void-invoice" => (["--yes"], ["--invoice", "--reason"]),
         "check-db" => (["--quick", "--vacuum"], []),

@@ -9,7 +9,7 @@ namespace Pos.Core.Data;
 /// </summary>
 public sealed class CustomerRepository : ICustomerStore
 {
-    private const string SelectColumns = "id, mobile_no, name, loyalty_balance, state_code, gstin, address";
+    private const string SelectColumns = "id, mobile_no, name, loyalty_balance, state_code, gstin, address, credit_limit";
 
     private readonly PosDatabase _database;
 
@@ -187,6 +187,25 @@ public sealed class CustomerRepository : ICustomerStore
         return reader.Read() ? Map(reader) : null;
     }
 
+    /// <summary>Sets the most a customer may owe on the khata, or takes the limit off with null.</summary>
+    public void SetCreditLimit(long customerId, decimal? limit)
+    {
+        if (limit is < 0m)
+            throw new ArgumentOutOfRangeException(nameof(limit), limit, "A khata limit cannot be less than nothing.");
+
+        if (limit is { } amount && decimal.Round(amount, 2) != amount)
+            throw new ArgumentException("A khata limit is in rupees and paise.", nameof(limit));
+
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE customers SET credit_limit = $limit WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", customerId);
+        command.Parameters.AddWithValue("$limit", (object?)limit ?? DBNull.Value);
+
+        if (command.ExecuteNonQuery() == 0)
+            throw new InvalidOperationException("That customer is no longer on file.");
+    }
+
     public void Rename(long customerId, string? name)
     {
         var tidy = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
@@ -256,5 +275,6 @@ public sealed class CustomerRepository : ICustomerStore
         StateCode = reader.IsDBNull(4) ? null : reader.GetString(4),
         Gstin = reader.FieldCount > 5 && !reader.IsDBNull(5) ? reader.GetString(5) : null,
         Address = reader.FieldCount > 6 && !reader.IsDBNull(6) ? reader.GetString(6) : null,
+        CreditLimit = reader.FieldCount > 7 && !reader.IsDBNull(7) ? reader.GetDecimal(7) : null,
     };
 }

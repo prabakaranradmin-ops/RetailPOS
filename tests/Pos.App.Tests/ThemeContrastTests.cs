@@ -64,13 +64,21 @@ internal static class Wcag
 /// <para>
 /// Colour is not a matter of taste once it stops being readable, and a ratio is checkable in
 /// milliseconds with no window, no dispatcher and no screenshot to go stale. The palette is read
-/// from the real <c>Theme.xaml</c> rather than restated here, so changing a brush is answerable by
-/// these tests rather than by somebody noticing later.
+/// from the real file in <c>Themes\</c> rather than restated here, so changing a brush is answerable
+/// by these tests rather than by somebody noticing later.
+/// </para>
+/// <para>
+/// Every look is held to every check: the classes at the foot of this file run the whole suite once
+/// per palette. A light look is not excused a bar because it is light, nor a dark one because it was
+/// here first.
 /// </para>
 /// </remarks>
-public class ThemeContrastTests
+public abstract class ThemeContrastTests(string look)
 {
-    private static readonly Dictionary<string, string> Palette = LoadPalette();
+    private static readonly Dictionary<string, XDocument> Documents = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, Dictionary<string, string>> Palettes = new(StringComparer.Ordinal);
+
+    private Dictionary<string, string> Palette => PaletteOf(look);
 
     /// <summary>The backgrounds a row of the bill grid can be drawn on.</summary>
     /// <remarks>
@@ -80,39 +88,58 @@ public class ThemeContrastTests
     /// </remarks>
     public static TheoryData<string> GridBackgrounds() => ["SurfaceRaised", "RowAlt", "RowActive"];
 
-    private static Dictionary<string, string> LoadPalette()
+    internal static readonly XNamespace Presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    internal static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+    /// <summary>A look's palette file, as copied beside the tests, read once.</summary>
+    internal static XDocument DocumentOf(string look)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Theme.xaml");
+        lock (Documents)
+        {
+            if (Documents.TryGetValue(look, out var known))
+                return known;
 
-        Assert.True(File.Exists(path),
-            $"Theme.xaml was not copied beside the tests (looked in {AppContext.BaseDirectory}). "
-            + "The palette is read from the real theme rather than restated here.");
+            var path = Path.Combine(AppContext.BaseDirectory, "Themes", look + ".xaml");
 
-        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
-        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+            Assert.True(File.Exists(path),
+                $"Themes\\{look}.xaml was not copied beside the tests (looked in {AppContext.BaseDirectory}). "
+                + "The palette is read from the real file rather than restated here.");
 
-        return XDocument.Load(path)
-            .Descendants(presentation + "SolidColorBrush")
-            .Where(b => b.Attribute(xaml + "Key") is not null && b.Attribute("Color") is not null)
-            .ToDictionary(
-                b => b.Attribute(xaml + "Key")!.Value,
-                b => b.Attribute("Color")!.Value,
-                StringComparer.Ordinal);
+            return Documents[look] = XDocument.Load(path);
+        }
     }
 
-    private static string Colour(string key)
+    /// <summary>Every plain colour a look defines, by name.</summary>
+    internal static Dictionary<string, string> PaletteOf(string look)
     {
-        Assert.True(Palette.ContainsKey(key), $"Theme.xaml has no brush called '{key}'.");
+        lock (Palettes)
+        {
+            if (Palettes.TryGetValue(look, out var known))
+                return known;
+
+            return Palettes[look] = DocumentOf(look)
+                .Descendants(Presentation + "SolidColorBrush")
+                .Where(b => b.Attribute(Xaml + "Key") is not null && b.Attribute("Color") is not null)
+                .ToDictionary(
+                    b => b.Attribute(Xaml + "Key")!.Value,
+                    b => b.Attribute("Color")!.Value,
+                    StringComparer.Ordinal);
+        }
+    }
+
+    private string Colour(string key)
+    {
+        Assert.True(Palette.ContainsKey(key), $"{look}.xaml has no brush called '{key}'.");
         return Palette[key];
     }
 
-    private static void AssertReadable(string foreground, string background, double bar = Wcag.NormalText)
+    private void AssertReadable(string foreground, string background, double bar = Wcag.NormalText)
     {
         var ratio = Wcag.Ratio(Colour(foreground), Colour(background));
 
         Assert.True(ratio >= bar,
-            $"{foreground} on {background} is {ratio:N2}:1, below the {bar:N1}:1 that text this size "
-            + $"needs to stay readable. {foreground} is {Colour(foreground)}, {background} is "
+            $"In the {look} look, {foreground} on {background} is {ratio:N2}:1, below the {bar:N1}:1 that "
+            + $"text this size needs to stay readable. {foreground} is {Colour(foreground)}, {background} is "
             + $"{Colour(background)}.");
     }
 
@@ -127,7 +154,7 @@ public class ThemeContrastTests
                      "Accent", "Positive", "Negative", "Line", "RowActive", "RowAlt",
                  })
         {
-            Assert.True(Palette.ContainsKey(key), $"Theme.xaml no longer defines '{key}'.");
+            Assert.True(Palette.ContainsKey(key), $"{look}.xaml no longer defines '{key}'.");
         }
     }
 
@@ -215,21 +242,29 @@ public class ThemeContrastTests
     }
 
     /// <summary>The three inks are three steps, not two steps and a rounding error.</summary>
+    /// <remarks>
+    /// Measured as contrast with the page rather than as lightness, so the rule means the same thing
+    /// on a light look, where the loudest ink is the darkest, as on a dark one.
+    /// </remarks>
     [Fact]
     public void TheThreeInksAreStillTellableApart()
     {
-        var ink = Wcag.Luminance(Colour("Ink"));
-        var muted = Wcag.Luminance(Colour("InkMuted"));
-        var dim = Wcag.Luminance(Colour("InkDim"));
+        var ink = Wcag.Ratio(Colour("Ink"), Colour("Surface"));
+        var muted = Wcag.Ratio(Colour("InkMuted"), Colour("Surface"));
+        var dim = Wcag.Ratio(Colour("InkDim"), Colour("Surface"));
 
-        Assert.True(ink > muted, "Ink must be lighter than InkMuted.");
-        Assert.True(muted > dim, "InkMuted must be lighter than InkDim.");
+        Assert.True(ink > muted, $"In the {look} look, Ink must stand out from the page more than InkMuted.");
+        Assert.True(muted > dim, $"In the {look} look, InkMuted must stand out from the page more than InkDim.");
 
         // Raising InkDim to meet the readability bar narrowed this gap on purpose. It is checked so
         // that the next raise is a decision rather than an accident that quietly merges the two.
-        Assert.True(muted / dim >= 1.15,
-            $"InkMuted and InkDim are within {muted / dim:N2}x of each other. Two inks that read as "
-            + "one are one ink with extra steps.");
+        var a = Wcag.Luminance(Colour("InkMuted"));
+        var b = Wcag.Luminance(Colour("InkDim"));
+        var apart = Math.Max(a, b) / Math.Min(a, b);
+
+        Assert.True(apart >= 1.15,
+            $"In the {look} look, InkMuted and InkDim are within {apart:N2}x of each other. Two inks "
+            + "that read as one are one ink with extra steps.");
     }
 
     // ---- A record of the figures, so a change shows up as a change -------------------------------
@@ -266,30 +301,26 @@ public class ThemeContrastTests
     /// A card's fill is a gradient, so text on a card is checked against each end of it: whatever
     /// is readable on both ends is readable everywhere between.
     /// </remarks>
-    private static IReadOnlyList<string> Stops(string key)
+    private IReadOnlyList<string> Stops(string key)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Theme.xaml");
-        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
-        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
-
-        var brush = XDocument.Load(path)
+        var brush = DocumentOf(look)
             .Descendants()
             .FirstOrDefault(e => e.Name.LocalName.EndsWith("GradientBrush", StringComparison.Ordinal)
-                                 && (string?)e.Attribute(xaml + "Key") == key);
+                                 && (string?)e.Attribute(Xaml + "Key") == key);
 
-        Assert.True(brush is not null, $"Theme.xaml has no gradient called '{key}'.");
+        Assert.True(brush is not null, $"{look}.xaml has no gradient called '{key}'.");
 
-        return brush!.Descendants(presentation + "GradientStop").Select(s => s.Attribute("Color")!.Value).ToList();
+        return brush!.Descendants(Presentation + "GradientStop").Select(s => s.Attribute("Color")!.Value).ToList();
     }
 
-    private static void AssertReadableOnGradient(string foreground, string gradient, double bar = Wcag.NormalText)
+    private void AssertReadableOnGradient(string foreground, string gradient, double bar = Wcag.NormalText)
     {
         foreach (var stop in Stops(gradient))
         {
             var ratio = Wcag.Ratio(Colour(foreground), stop);
 
             Assert.True(ratio >= bar,
-                $"{foreground} on {gradient} is {ratio:N2}:1 where the gradient is {stop}, below {bar:N1}:1.");
+                $"In the {look} look, {foreground} on {gradient} is {ratio:N2}:1 where the gradient is {stop}, below {bar:N1}:1.");
         }
     }
 
@@ -390,7 +421,52 @@ public class ThemeContrastTests
         var faintest = new[] { "ChartColour0", "ChartColour1", "ChartColour2", "ChartColour3", "ChartColour4", "ChartColour5", "ChartColour6" }
             .Min(k => Wcag.Ratio(Colour(k), Stops("CardFill")[0]));
 
-        Assert.True(grid < 1.5, $"Gridlines are {grid:N2}:1 on the card - loud enough to compete with the data.");
-        Assert.True(faintest > 2 * grid, $"The faintest series is only {faintest:N2}:1 against gridlines at {grid:N2}:1.");
+        Assert.True(grid < 1.5, $"In the {look} look, gridlines are {grid:N2}:1 on the card - loud enough to compete with the data.");
+        Assert.True(faintest > 2 * grid, $"In the {look} look, the faintest series is only {faintest:N2}:1 against gridlines at {grid:N2}:1.");
     }
+
+    /// <summary>The label on the one button a pane or a dialog is for, resting and under the pointer.</summary>
+    [Theory]
+    [InlineData("Accent")]
+    [InlineData("AccentHover")]
+    public void ThePrimaryButtonIsReadable(string face) =>
+        AssertReadable("OnAccent", face);
+
+    /// <summary>The bars in the owner's ranked lists, on the card they sit on: a graphic, so 3:1.</summary>
+    [Fact]
+    public void TheRankedBarsShowOnTheirCard()
+    {
+        foreach (var bar in Stops("RankFill"))
+        {
+            foreach (var card in Stops("CardFill"))
+            {
+                var ratio = Wcag.Ratio(bar, card);
+                Assert.True(ratio >= 3.0, $"In the {look} look, a ranked bar ({bar}) is {ratio:N2}:1 on the card ({card}).");
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Pay &amp; Print" stays the heaviest thing on the till: on a dark look it glows, on a light one
+    /// it goes deep, and either way it stands out from the page it sits on.
+    /// </summary>
+    [Fact]
+    public void ThePayButtonStandsOutFromThePage() =>
+        Assert.All(Stops("PayFill"), stop =>
+        {
+            var ratio = Wcag.Ratio(stop, Colour("Surface"));
+            Assert.True(ratio >= 3.0, $"In the {look} look, the Pay key is {ratio:N2}:1 against the page where it is {stop}.");
+        });
 }
+
+/// <summary>The till's own look, dark, for after sunset.</summary>
+public sealed class NightContrastTests() : ThemeContrastTests("Night");
+
+/// <summary>Dim slate, for dusk.</summary>
+public sealed class EveningContrastTests() : ThemeContrastTests("Evening");
+
+/// <summary>Light, for a shop open to the daylight.</summary>
+public sealed class MorningContrastTests() : ThemeContrastTests("Morning");
+
+/// <summary>The brightest, for sunlight on the screen.</summary>
+public sealed class NoonContrastTests() : ThemeContrastTests("Noon");

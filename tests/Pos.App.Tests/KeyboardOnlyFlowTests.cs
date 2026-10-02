@@ -348,6 +348,30 @@ public class KeyboardOnlyFlowTests
         Assert.Null(till.ViewModel.SelectedLine);
     }
 
+    /// <summary>
+    /// Delete inside a pane that opens over a bill - a customer's number, an invoice to reprint or
+    /// void, who is on the till - is the cashier editing that box, not the bill behind it. It used
+    /// to take the highlighted line off the bill, out of sight.
+    /// </summary>
+    [Theory]
+    [InlineData(Key.F7, ModifierKeys.None)]
+    [InlineData(Key.P, ModifierKeys.Control)]
+    [InlineData(Key.U, ModifierKeys.Control)]
+    [InlineData(Key.V, ModifierKeys.Control | ModifierKeys.Shift)]
+    public void DeleteInAPaneLeavesTheBillBehindItAlone(Key opens, ModifierKeys modifiers)
+    {
+        using var till = Till();
+        till.Scan("8901234567890");
+        till.Scan("8901234567891");
+
+        till.Press(opens, modifiers);
+        Assert.NotEqual(BillingMode.Billing, till.ViewModel.Mode);
+
+        till.Press(Key.Delete);
+
+        Assert.Equal(2, till.ViewModel.Lines.Count);
+    }
+
     [Fact]
     public void EditingWithNothingSelectedSaysSoRatherThanThrowing()
     {

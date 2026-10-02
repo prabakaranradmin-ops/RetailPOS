@@ -305,4 +305,76 @@ public class PurchasesScreenTests : IDisposable
         screen.SupplierSearch = "sett";
         Assert.Equal("Settled Supplier", Assert.Single(screen.Suppliers).Supplier.Name);
     }
+
+    // ---- Sending goods back ----------------------------------------------------------------------
+
+    /// <summary>Ten dal at 100 and ten soap at 50 on bill MT/301, saved from the screen.</summary>
+    private PurchasesViewModel WithADelivery()
+    {
+        Stocked("DAL", "8901234567890", stock: 0m);
+        Stocked("SOAP", "8901234567906", stock: 0m, gst: 18m);
+        Store.AddSupplier(new Supplier(0, "Murugan Traders", null, TamilNaduGstin, "33", true));
+
+        var screen = Screen();
+        Pick(screen, "Murugan Traders");
+        screen.BillNo = "MT/301";
+        AddLine(screen, "DAL", "10", "100");
+        AddLine(screen, "SOAP", "10", "50");
+        screen.PrintedTotal = "1640";
+        Assert.Null(screen.SaveBill());
+
+        screen.SelectedBill = screen.Recent.Single();
+        return screen;
+    }
+
+    [Fact]
+    public void PickingABillListsWhatCanGoBack()
+    {
+        var screen = WithADelivery();
+
+        Assert.True(screen.HasReturnRows);
+        Assert.Equal(["Item DAL", "Item SOAP"], screen.ReturnRows.Select(r => r.Name));
+        Assert.Equal("10 Pcs", screen.ReturnRows[0].OnTheBill);
+        Assert.False(screen.CanSendBack);
+        Assert.Equal("Type how many of each are going back.", screen.SendBackBlocker);
+    }
+
+    [Fact]
+    public void GoodsGoBackOnADebitNoteFromTheScreen()
+    {
+        var screen = WithADelivery();
+
+        screen.ReturnRows[0].Back = "2";
+        Assert.Contains("Say why", screen.SendBackBlocker);
+
+        screen.ReturnReason = "expired";
+        Assert.True(screen.CanSendBack);
+
+        Assert.Null(screen.SendBack());
+
+        Assert.Contains("Debit note DN/26-27/L1-1: 1 line going back to Murugan Traders, 210.00 off what the shop owes them - now 1,430.00", screen.Status);
+        Assert.Equal(8m, _temp.Items.FindBySku("DAL")!.StockQty);
+        Assert.Equal(1_430m, screen.SelectedSupplier!.Owed);
+        Assert.Equal("Sent back, debit note DN/26-27/L1-1", screen.History[0].Description);
+
+        // The rows read again: two of the dal gone back, the boxes empty, and the reason cleared.
+        Assert.Equal("2", screen.ReturnRows[0].GoneBack);
+        Assert.Equal(string.Empty, screen.ReturnRows[0].Back);
+        Assert.Equal(string.Empty, screen.ReturnReason);
+    }
+
+    [Theory]
+    [InlineData("eleven", "is not a number")]
+    [InlineData("-1", "less than nothing")]
+    [InlineData("11", "only 10 can still go back")]
+    public void AQuantityThatCannotGoBackSaysWhy(string typed, string said)
+    {
+        var screen = WithADelivery();
+        screen.ReturnReason = "expired";
+
+        screen.ReturnRows[0].Back = typed;
+
+        Assert.False(screen.CanSendBack);
+        Assert.Contains(said, screen.SendBackBlocker);
+    }
 }

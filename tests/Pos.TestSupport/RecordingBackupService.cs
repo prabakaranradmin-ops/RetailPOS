@@ -16,6 +16,9 @@ public sealed class RecordingBackupService : IBackupService
     /// <summary>Set to make the next backup report failure.</summary>
     public string? FailWith { get; set; }
 
+    /// <summary>What the next backup says about the copy off this computer.</summary>
+    public string? OffMachine { get; set; }
+
     public BackupOutcome Create(DateTimeOffset takenAt)
     {
         Calls++;
@@ -23,6 +26,6 @@ public sealed class RecordingBackupService : IBackupService
 
         return FailWith is { } reason
             ? new BackupOutcome(false, string.Empty, reason)
-            : new BackupOutcome(true, $"pos-{takenAt:yyyyMMdd-HHmmss}.db", "verified");
+            : new BackupOutcome(true, $"pos-{takenAt:yyyyMMdd-HHmmss}.db", "verified", OffMachine);
     }
 }

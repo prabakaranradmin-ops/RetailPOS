@@ -11,9 +11,16 @@ From the repository root:
 dotnet run --project tools\showcase -- artifacts\showcase
 ```
 
-Writes `till\` (billing screens), `bills\` (printed documents, 80 mm) and `units.json` (every unit,
-with its Tamil name and whether part of one can be sold). The shop and every number on it are made
-up: these pictures are shown to other shops.
+Writes `till\` (billing screens), `bills\` (printed documents, 80 mm), `looks\` (the till, the
+owner's figures and the owner's Settings tab in each of the four looks: morning, noon, evening and
+night) and `units.json` (every unit, with its Tamil name and whether part of one can be sold). The
+shop and every number on it are made up: these pictures are shown to other shops.
+
+To draw only the looks:
+
+```
+dotnet run --project tools\showcase -- looks artifacts\showcase
+```
 
 ## The tour videos
 

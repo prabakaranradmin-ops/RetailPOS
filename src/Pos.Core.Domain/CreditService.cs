@@ -48,6 +48,13 @@ public sealed class CreditService(
         return _credit.Balance(customer.Id);
     }
 
+    /// <summary>When the customer last paid anything back on the khata, or null if they never have.</summary>
+    public DateTimeOffset? LastPaid(Customer customer)
+    {
+        ArgumentNullException.ThrowIfNull(customer);
+        return _credit.LastPaid(customer.Id);
+    }
+
     /// <summary>
     /// Records the payment, then opens the drawer for cash and prints the customer's slip.
     /// </summary>

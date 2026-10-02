@@ -1,4 +1,5 @@
 using System.Globalization;
+using Pos.Core.Configuration;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Drawer;
 
@@ -193,7 +194,32 @@ public sealed partial class BillingViewModel
         }
     }
 
+    /// <summary>
+    /// Records the entry: cash going out of the drawer waits for the owner's PIN first, on a lane
+    /// that asks.
+    /// </summary>
     private void RecordDrawer(DrawerEntry entry)
+    {
+        if (entry.Kind is not (DrawerEntryKind.CashOut or DrawerEntryKind.ExpenseFromDrawer))
+        {
+            RecordDrawer(entry, approved: null);
+            return;
+        }
+
+        var what = entry.Kind == DrawerEntryKind.CashOut
+            ? $"take {Show.Money(entry.Amount)} out of the drawer"
+            : $"pay {Show.Money(entry.Amount)} from the drawer for {entry.Category}";
+
+        Guard(
+            Guarded.CashOut,
+            what,
+            TillEventKind.CashTakenOut,
+            entry.Kind == DrawerEntryKind.CashOut ? "Cash out" : entry.Category,
+            entry.Amount,
+            approved => RecordDrawer(entry, approved));
+    }
+
+    private void RecordDrawer(DrawerEntry entry, bool? approved)
     {
         DrawerEntryResult result;
 
@@ -206,6 +232,13 @@ public sealed partial class BillingViewModel
             // Left where it was, so the amount or the note can be put right rather than typed again.
             StatusMessage = ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
             return;
+        }
+
+        if (entry.Kind is DrawerEntryKind.CashOut or DrawerEntryKind.ExpenseFromDrawer)
+        {
+            _security.Record(_laneId, _now(), TillEventKind.CashTakenOut, _cashierName,
+                entry.Kind == DrawerEntryKind.CashOut ? "Cash out" : entry.Category,
+                entry.Amount, approved, string.IsNullOrWhiteSpace(entry.Note) ? null : entry.Note.Trim());
         }
 
         var amount = Show.Money(entry.Amount);

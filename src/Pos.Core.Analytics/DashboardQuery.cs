@@ -107,9 +107,12 @@ public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent
             Voids = FoldVoids(facts),
             Returns = ReadReturns(connection, laneId, from, to),
             Expenses = CashDrawerRepository.ReadTotals(connection, from, to),
+            Exceptions = ReadExceptions(connection, laneId, from, to),
+            Drawers = ReadDrawers(connection, laneId, from, to),
             Customers = ReadCustomerMix(connection, laneId, from, to, facts),
             Points = FoldPoints(connection, facts),
             LowStock = ReadLowStock(connection),
+            Stock = ReadStockValue(connection),
             Elapsed = clock.Elapsed,
         };
 
@@ -193,6 +196,248 @@ public sealed class DashboardQuery(PosDatabase database, decimal lowStockPercent
         reader.Read();
 
         return new ReturnSummary(reader.GetInt32(0), Rupees(reader.GetInt64(1)));
+    }
+
+    /// <summary>
+    /// What the counted shelves are worth now, added up in C# from each item so the figures stay
+    /// exact; SQLite would add the text amounts as floating point.
+    /// </summary>
+    private static StockValue ReadStockValue(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT stock_qty, cost_price, sell_price, mrp, category
+            FROM items
+            WHERE is_active = 1 AND stock_qty IS NOT NULL;
+            """;
+
+        int counted = 0, withoutCost = 0, belowZero = 0;
+        decimal atCost = 0m, costedAtSelling = 0m, atSelling = 0m, atMrp = 0m;
+        var byCategory = new Dictionary<string, (int Items, decimal Cost, decimal Selling)>(StringComparer.OrdinalIgnoreCase);
+
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            var quantity = reader.GetDecimal(0);
+
+            if (quantity < 0m)
+            {
+                belowZero++;
+                continue;
+            }
+
+            if (quantity == 0m)
+                continue;
+
+            counted++;
+
+            var selling = Pos.Core.Tax.Money.ToPresentation(quantity * reader.GetDecimal(2));
+            atSelling += selling;
+            atMrp += Pos.Core.Tax.Money.ToPresentation(quantity * reader.GetDecimal(3));
+
+            var category = reader.IsDBNull(4) || string.IsNullOrWhiteSpace(reader.GetString(4)) ? Uncategorised : reader.GetString(4).Trim();
+            var so = byCategory.GetValueOrDefault(category);
+
+            if (reader.IsDBNull(1))
+            {
+                withoutCost++;
+                byCategory[category] = (so.Items + 1, so.Cost, so.Selling + selling);
+                continue;
+            }
+
+            var cost = Pos.Core.Tax.Money.ToPresentation(quantity * reader.GetDecimal(1));
+            atCost += cost;
+            costedAtSelling += selling;
+            byCategory[category] = (so.Items + 1, so.Cost + cost, so.Selling + selling);
+        }
+
+        return new StockValue(
+            counted,
+            atCost,
+            costedAtSelling,
+            atSelling,
+            atMrp,
+            withoutCost,
+            belowZero,
+            [.. byCategory
+                .Select(c => new StockValueByCategory(c.Key, c.Value.Items, c.Value.Cost, c.Value.Selling))
+                .OrderByDescending(c => c.AtSellingPrice)
+                .ThenBy(c => c.Category, StringComparer.OrdinalIgnoreCase)]);
+    }
+
+    /// <summary>How many of the window's exceptions are listed one by one; the totals count them all.</summary>
+    public const int LatestExceptions = 50;
+
+    /// <summary>The kinds an owner asks about. A sign-on or a close is the day going as it should.</summary>
+    private static readonly TillEventKind[] ExceptionKinds =
+    [
+        TillEventKind.Voided,
+        TillEventKind.Discounted,
+        TillEventKind.CashRefunded,
+        TillEventKind.CashTakenOut,
+        TillEventKind.ApprovalRefused,
+        TillEventKind.SignOnRefused,
+        TillEventKind.OverKhataLimit,
+    ];
+
+    /// <summary>
+    /// The till's exceptions in the window, totalled by who was on the till.
+    /// </summary>
+    /// <remarks>
+    /// Read row by row and added up here rather than summed in SQL, because the amounts are kept as
+    /// exact decimals in text, and SQLite would add them as floating point. There are tens of these
+    /// in a day, not tens of thousands.
+    /// </remarks>
+    private static TillExceptions ReadExceptions(SqliteConnection connection, string lane, DateTimeOffset from, DateTimeOffset to)
+    {
+        var kinds = string.Join(", ", ExceptionKinds.Select(k => $"'{k}'"));
+
+        using var command = Prepare(connection, lane, from, to, $"""
+            SELECT id, lane_id, happened_at, kind, cashier_name, reference, amount, approved, detail
+            FROM till_events
+            WHERE lane_id = $lane
+              AND happened_at >= $from AND happened_at < $to
+              AND kind IN ({kinds})
+            ORDER BY happened_at DESC, id DESC;
+            """);
+
+        var events = new List<TillEvent>();
+
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (!Enum.TryParse<TillEventKind>(reader.GetString(3), out var kind))
+                    continue;
+
+                events.Add(new TillEvent(
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    reader.GetDateTimeOffset(2),
+                    kind,
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    reader.IsDBNull(7) ? null : reader.GetInt64(7) == 1,
+                    reader.IsDBNull(8) ? null : reader.GetString(8)));
+            }
+        }
+
+        using var since = connection.CreateCommand();
+        since.CommandText = "SELECT MIN(happened_at) FROM till_events WHERE lane_id = $lane;";
+        since.Parameters.AddWithValue("$lane", lane);
+
+        var first = since.ExecuteScalar() is string stamp
+            && DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+                ? at
+                : (DateTimeOffset?)null;
+
+        var byCashier = events
+            .GroupBy(e => e.Cashier ?? TillExceptions.Nobody, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new CashierExceptions(
+                g.First().Cashier ?? TillExceptions.Nobody,
+                g.Count(e => e.Kind == TillEventKind.Voided),
+                g.Where(e => e.Kind == TillEventKind.Voided).Sum(e => e.Amount ?? 0m),
+                g.Count(e => e.Kind == TillEventKind.Discounted),
+                g.Where(e => e.Kind == TillEventKind.Discounted).Sum(e => e.Amount ?? 0m),
+                g.Count(e => e.Kind == TillEventKind.CashRefunded),
+                g.Where(e => e.Kind == TillEventKind.CashRefunded).Sum(e => e.Amount ?? 0m),
+                g.Count(e => e.Kind == TillEventKind.CashTakenOut),
+                g.Where(e => e.Kind == TillEventKind.CashTakenOut).Sum(e => e.Amount ?? 0m),
+                g.Count(e => e.Kind is TillEventKind.ApprovalRefused or TillEventKind.SignOnRefused),
+                g.Count(e => e.Kind == TillEventKind.OverKhataLimit),
+                g.Where(e => e.Kind == TillEventKind.OverKhataLimit).Sum(e => e.Amount ?? 0m)))
+            .OrderByDescending(c => c.Total)
+            .ThenBy(c => c.Cashier, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new TillExceptions(byCashier, events.Take(LatestExceptions).ToList(), first);
+    }
+
+    /// <summary>
+    /// The closes in the window, oldest first, with who was on the till for each, and each person's
+    /// days over and short.
+    /// </summary>
+    /// <remarks>
+    /// Who was on the till is read from the books the close stamped: the bills paid in cash and the
+    /// cash moved through the drawer. Somebody who only took UPI that day never touched the drawer.
+    /// </remarks>
+    private static DrawerCounts ReadDrawers(SqliteConnection connection, string lane, DateTimeOffset from, DateTimeOffset to)
+    {
+        var closes = new List<(long Id, DateTimeOffset At, decimal Expected, decimal? Counted, string? By)>();
+
+        using (var command = Prepare(connection, lane, from, to, """
+            SELECT id, closed_at, cash_expected, cash_counted, counted_by
+            FROM day_closes
+            WHERE lane_id = $lane AND closed_at >= $from AND closed_at < $to
+            ORDER BY closed_at, id;
+            """))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                closes.Add((
+                    reader.GetInt64(0),
+                    reader.GetDateTimeOffset(1),
+                    reader.GetDecimal(2),
+                    reader.IsDBNull(3) ? null : reader.GetDecimal(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4)));
+            }
+        }
+
+        if (closes.Count == 0)
+            return DrawerCounts.None;
+
+        var drawers = new List<ClosedDrawer>();
+
+        foreach (var close in closes)
+        {
+            using var who = connection.CreateCommand();
+            who.CommandText = """
+                SELECT DISTINCT name FROM (
+                    SELECT i.cashier_name AS name
+                    FROM invoices i
+                    WHERE i.day_close_id = $id AND i.status = $settled
+                      AND EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id AND p.tender_type = $cash)
+                    UNION
+                    SELECT m.cashier_name AS name
+                    FROM cash_movements m
+                    WHERE m.day_close_id = $id)
+                WHERE name IS NOT NULL AND trim(name) <> ''
+                ORDER BY name;
+                """;
+            who.Parameters.AddWithValue("$id", close.Id);
+            who.Parameters.AddWithValue("$settled", (int)InvoiceStatus.Settled);
+            who.Parameters.AddWithValue("$cash", (int)TenderType.Cash);
+
+            var names = new List<string>();
+
+            using (var reader = who.ExecuteReader())
+            {
+                while (reader.Read())
+                    names.Add(reader.GetString(0).Trim());
+            }
+
+            drawers.Add(new ClosedDrawer(close.Id, close.At, close.Expected, close.Counted, close.By, names));
+        }
+
+        var byPerson = drawers
+            .SelectMany(d => d.OnTheTill.Select(name => (Name: name, Drawer: d)))
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new PersonDrawer(
+                g.First().Name,
+                g.Count(),
+                g.Count(p => p.Drawer.Counted is not null),
+                g.Count(p => p.Drawer.Difference < 0m),
+                -g.Where(p => p.Drawer.Difference < 0m).Sum(p => p.Drawer.Difference!.Value),
+                g.Count(p => p.Drawer.Difference > 0m),
+                g.Where(p => p.Drawer.Difference > 0m).Sum(p => p.Drawer.Difference!.Value)))
+            .OrderByDescending(p => p.Short)
+            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new DrawerCounts(drawers, byPerson);
     }
 
     private static List<InvoiceFacts> ReadInvoiceFacts(SqliteConnection connection, string lane, DateTimeOffset from, DateTimeOffset to)

@@ -1015,6 +1015,15 @@ if (-not $NoUi) {
         -Actual $(if ($returnsShown) { 'present' } else { 'missing' }) -Passed $returnsShown `
         -Detail 'Beside the sales, not netted into them: the bills were issued as they were.'
 
+    # The 500 counted at the till, kept with the close and printed with the difference.
+    # In the lane's own language, like the rest of this report.
+    $countKept = ($r.Output -match 'Cash counted\s+500\.00|எண்ணிய ரொக்கம்\s+500\.00') `
+        -and ($r.Output -match 'OVER BY|SHORT BY|COUNTED: EXACTLY RIGHT|கூடுதல்|குறைவு|சரியாக உள்ளது')
+    Add-Result -Kind Positive -Feature 'Day close' -Name 'The cash counted at the till is kept with the close' `
+        -Expected 'Cash counted 500.00, and the drawer over or short, on the stored report' `
+        -Actual $(if ($countKept) { 'present' } else { 'missing' }) -Passed $countKept `
+        -Detail 'Read back from the books: a reprint months later shows the same count.'
+
     # The float and the tea, each on its own drawer line of the same report.
     $drawerLines = ($r.Output -match 'Opening float \(1\)\s+2,000\.00|தொடக்க சில்லறை \(1\)\s+2,000\.00') -and ($r.Output -match 'Expenses paid \(1\)\s+-50\.00|செலவுகள் \(1\)\s+-50\.00')
     Add-Result -Kind Positive -Feature 'Cash in and out' -Name 'The day-end report counts the float and the expense in the drawer' `

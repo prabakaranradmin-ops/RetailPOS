@@ -121,6 +121,23 @@ public class LookupLatencyTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Typed in Tamil, or spelled in English the way it is said: the search runs every branch and
+    /// then how the names sound, so this is the longest path a typed search takes.
+    /// </summary>
+    [Fact]
+    public void ASearchByHowItSoundsStaysInsideTheBudget()
+    {
+        using var temp = BuildCatalogue();
+        var queries = new[] { "பருப்பு", "thuvaram paruppu", "jeeragam", "வாழைப்பழம்", "kadalai maavu" };
+        var next = 0;
+
+        var average = Measure(50, () => temp.Items.Search(queries[next++ % queries.Length]));
+
+        output.WriteLine($"search by sound over {CatalogueSize:N0} SKUs: {average:F3} ms median");
+        Assert.True(average < SearchBudgetMs, $"A search by sound had a median of {average:F3} ms, over the {SearchBudgetMs} ms budget.");
+    }
+
+    /// <summary>
     /// The requirement covers lookup *and* the line reaching the grid, so this measures the whole
     /// step the cashier actually waits on.
     /// </summary>

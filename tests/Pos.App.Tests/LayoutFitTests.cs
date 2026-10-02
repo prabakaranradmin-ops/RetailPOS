@@ -386,6 +386,67 @@ public class LayoutFitTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// The close pane at its tallest: a float, a sale, an expense and cash put in, counted - every
+    /// row it can have, the count box and the keys under it, all above the foot of a 768-high till.
+    /// </summary>
+    [Fact]
+    public void TheClosePaneFitsWithTheCountAndEveryRow()
+    {
+        using var harness = new BillingHarness(Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        void Type(string text)
+        {
+            harness.ViewModel.EditBuffer = text;
+            harness.Press(Key.Enter);
+        }
+
+        harness.Press(Key.M, ModifierKeys.Control);
+        Type("2000");
+
+        harness.Scan("8901234567890");
+        harness.Press(Key.F12);
+        harness.Press(Key.Enter);
+        harness.Press(Key.Enter);
+
+        harness.Press(Key.M, ModifierKeys.Control);
+        Type("120");
+        Type("tea");
+
+        harness.Press(Key.M, ModifierKeys.Control);
+        for (var i = 0; i < 3; i++)
+            harness.Press(Key.Down);
+        Type("500");
+
+        harness.Press(Key.F12, ModifierKeys.Shift);
+        Type("2560");
+
+        Assert.False(harness.ViewModel.IsCountingDrawer);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the close pane open");
+
+                var pane = (FrameworkElement)window.FindName("DayClosePane");
+                var box = (FrameworkElement)window.FindName("CloseCountBox");
+                var bottom = pane.TranslatePoint(new Point(0, pane.ActualHeight), window).Y;
+
+                Assert.True(box.IsVisible, "the count box is not on the close pane");
+                Assert.True(bottom < TillHeight, $"the close pane ends at {bottom:0} of {TillHeight}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     /// <summary>The cash pane at its tallest: an expense, with every category listed under the box.</summary>
     [Fact]
     public void TheCashPaneFitsWithTheCategoriesOpen()
@@ -486,6 +547,128 @@ public class LayoutFitTests : IDisposable
                 var box = (FrameworkElement)window.FindName("BusinessBox");
                 var bottom = box.TranslatePoint(new Point(0, box.ActualHeight), window).Y;
                 Assert.True(box.IsVisible && bottom < TillHeight, $"the business box ends at {bottom:0} of {TillHeight}");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Which MRP is on the pack: both choices in full under a long name, the list holding the keyboard
+    /// and its highlight following the arrows.
+    /// </summary>
+    [Fact]
+    public void TheMrpPaneFitsAndFollowsTheArrows()
+    {
+        const string barcode = "8901234500017";
+        const string name = "Aavin Premium Cow Ghee Pouch 500ml Family Saver Pack";
+
+        using var harness = new BillingHarness(Catalogue.Item(sku: "GHEE500", barcode: barcode, name: name, price: 550m) with
+        {
+            SellPrice = 540m,
+            StockQty = 1_234.5m,
+        });
+        harness.Items.UpsertRange([Catalogue.Item(sku: "GHEE500", barcode: barcode, name: name, price: 12_585m) with { SellPrice = 12_575m }]);
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                // Scanned with the till up, as at the counter.
+                harness.Scan(barcode);
+                Wpf.Settle(window);
+                Assert.True(harness.ViewModel.IsChoosingMrp);
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the MRP pane open");
+
+                var pane = (FrameworkElement)window.FindName("MrpPane");
+                var list = (ListBox)window.FindName("MrpList");
+
+                Assert.True(pane.IsVisible);
+                Assert.True(list.IsKeyboardFocusWithin, "the MRP list should hold the keyboard");
+                Assert.Equal(0, list.SelectedIndex);
+
+                var bottom = pane.TranslatePoint(new Point(0, pane.ActualHeight), window).Y;
+                Assert.True(bottom < TillHeight, $"the MRP pane ends at {bottom:0} of {TillHeight}");
+
+                harness.Press(Key.Down);
+                Wpf.Settle(window);
+                Assert.Equal(1, list.SelectedIndex);
+
+                harness.Press(Key.Enter);
+                Wpf.Settle(window);
+                Assert.False(pane.IsVisible);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// An item not in the catalogue at its tallest: a barcode carried in, a long name, a large price,
+    /// and the slabs with the shop's own suggestions above them. The box takes the keyboard for the
+    /// name and price, and the list for the slab.
+    /// </summary>
+    [Fact]
+    public void TheOpenItemPaneFitsAndTakesTheKeyboard()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "COIL01", name: "All Out Mosquito Repellent Coil", price: 40m, gstRate: 18m, hsn: "3808"),
+            Catalogue.Item(sku: "COIL02", name: "Mortein Mosquito Coil Power Booster", price: 42m, gstRate: 18m, hsn: "38089199"),
+            Catalogue.Item(sku: "COIL03", name: "Maxo Genius Mosquito Coil", price: 38m, gstRate: 12m, hsn: "380891"));
+
+        Wpf.Run(() =>
+        {
+            var window = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+
+            try
+            {
+                Wpf.LayOutAt(window, TillWidth, TillHeight);
+
+                harness.Scan("8901234599990");
+                harness.Press(Key.I, ModifierKeys.Control);
+                Wpf.Settle(window);
+
+                var pane = (FrameworkElement)window.FindName("OpenItemPane");
+                var box = (TextBox)window.FindName("OpenItemBox");
+                var list = (ListBox)window.FindName("OpenRateList");
+
+                Assert.True(pane.IsVisible);
+                Assert.True(box.IsKeyboardFocused, "the name box should take the keyboard");
+
+                // Nearly as long as a name may be: 59 of the 60 characters.
+                harness.ViewModel.EditBuffer = "Good Knight Gold Flash Mosquito Repellent Coil Family Packs";
+                Assert.Null(Pos.Core.Domain.OpenItem.NameProblem(harness.ViewModel.EditBuffer));
+                harness.Press(Key.Enter);
+                harness.ViewModel.EditBuffer = "99999.99";
+                harness.Press(Key.Enter);
+                Wpf.Settle(window);
+
+                Assert.False(box.IsVisible);
+                Assert.True(list.IsKeyboardFocusWithin, "the slabs should take the keyboard");
+                Assert.True(harness.ViewModel.OpenItemRates.Count >= 7, $"{harness.ViewModel.OpenItemRates.Count} slabs, expected the suggestions and the four plain ones");
+
+                AssertNothingOverflowsSideways(window, "the billing screen with the item-not-in-the-catalogue pane open");
+
+                var top = pane.TranslatePoint(new Point(0, 0), window).Y;
+                var bottom = pane.TranslatePoint(new Point(0, pane.ActualHeight), window).Y;
+                Assert.True(top >= 0 && bottom < TillHeight, $"the pane runs from {top:0} to {bottom:0} of {TillHeight}");
+
+                harness.Press(Key.Down);
+                Wpf.Settle(window);
+                Assert.Equal(0, list.SelectedIndex);
+
+                harness.Press(Key.Enter);
+                Wpf.Settle(window);
+                Assert.False(pane.IsVisible);
             }
             finally
             {
@@ -872,6 +1055,8 @@ public class LayoutFitTests : IDisposable
     [Fact]
     public void EveryTabOfTheOwnersScreenFitsATillPanel()
     {
+        SeedACountedClose();
+
         Wpf.Run(() =>
         {
             var window = BuildOwnerView();
@@ -914,6 +1099,8 @@ public class LayoutFitTests : IDisposable
     [Fact]
     public void EveryBoxListAndTableOnTheOwnersScreenHasAName()
     {
+        SeedACountedClose();
+
         Wpf.Run(() =>
         {
             var window = BuildOwnerView();
@@ -980,6 +1167,8 @@ public class LayoutFitTests : IDisposable
     [Fact]
     public void NoTwoControlsOnATabShareAnAccessKey()
     {
+        SeedACountedClose();
+
         Wpf.Run(() =>
         {
             var window = BuildOwnerView();
@@ -1293,12 +1482,46 @@ public class LayoutFitTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// A sale and a close counted short by somebody with a long name, so the drawer card is laid out
+    /// with its chart, its table and its list. For the tests that walk every tab; the tabs' own tests
+    /// count what they put in, and a sale of this one's would put their figures out.
+    /// </summary>
+    private void SeedACountedClose()
+    {
+        var items = new ItemRepository(_temp.Database);
+        items.UpsertRange([Catalogue.Item(sku: "LAYOUT01", name: "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", price: 1299m)]);
+
+        var bill = new InvoiceEngine("33");
+        bill.AddItem(items.FindBySku("LAYOUT01")!);
+        var basket = new TenderBasket(bill.Totals.GrandTotal);
+        basket.Add(TenderType.Cash, bill.Totals.GrandTotal);
+
+        new CheckoutService(new InvoiceRepository(_temp.Database), new CustomerRepository(_temp.Database),
+            new RecordingDrawerService(), cashier: () => "Lakshmi Narayanan Subramaniam").Complete("L1", bill, basket);
+
+        new DayCloseRepository(_temp.Database, new HeldBillRepository(_temp.Database))
+            .Close("L1", DateTimeOffset.Now.AddMinutes(-15), cashCounted: 1_200m, countedBy: "Lakshmi Narayanan Subramaniam");
+    }
+
     private OwnerView BuildOwnerView(CustomersViewModel? customers = null)
     {
         var settings = Settings();
         var items = new ItemRepository(_temp.Database);
+
+        // Exceptions at the till, with a long name and a long description, so the figures tab is laid
+        // out with its exceptions card full rather than with one line saying nothing is recorded.
+        var events = new TillEventRepository(_temp.Database);
+        var now = DateTimeOffset.Now;
+        events.Record(settings.LaneId, now.AddMinutes(-40), TillEventKind.Voided, "Murugan", "SLS/26-27/L1-100245", 12_345.50m, approved: true);
+        events.Record(settings.LaneId, now.AddMinutes(-30), TillEventKind.Discounted, "Lakshmi Narayanan Subramaniam", "Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin", 450m,
+            detail: "34.64% off Premium Organic Cold Pressed Groundnut Oil 5 Litre Tin, for Selvi");
+        events.Record(settings.LaneId, now.AddMinutes(-20), TillEventKind.ApprovalRefused, "Lakshmi Narayanan Subramaniam", "Cash out", 25_000m, approved: false,
+            detail: "Take ₹25,000.00 out of the drawer: the PIN was wrong three times.");
+
         var stock = new StockRepository(_temp.Database);
         var held = new HeldBillRepository(_temp.Database);
+        var newItem = new NewItemViewModel(items, new HsnSuggester(query => items.Search(query)));
 
         var owner = new OwnerViewModel(
             settings.LaneId,
@@ -1313,7 +1536,24 @@ public class LayoutFitTests : IDisposable
             receiptLayout: ReceiptLayout.Standard,
             applyReceiptLayout: _ => null,
             upiId: "sri.lakshmi.stores@okaxis",
-            applyUpiId: _ => null);
+            applyUpiId: _ => null,
+            screenTheme: ScreenTheme.Night,
+            applyScreenTheme: _ => null);
+
+        // A festival compared, against a sale a year ago - outside every other card's window - so the
+        // festival card is laid out with its line, chart and tables rather than empty.
+        SellAYearAgo(settings.LaneId);
+        owner.UseFestivals((from, to, items) => new Pos.Core.Analytics.DashboardQuery(_temp.Database).Gather(settings.LaneId, from, to, items));
+        owner.FestivalName = "Deepavali";
+        owner.CompareFestival();
+
+        // The cashiers and the approvals, with somebody on the list so both cards are laid out full.
+        owner.UseTillAccess(
+            ["Murugan", "Lakshmi"],
+            addCashier: (_, _) => null,
+            removeCashier: _ => null,
+            new ApprovalSettings { Voids = true, DiscountAbovePercent = 10m },
+            applyApprovals: _ => null);
 
         var maintenance = new MaintenanceViewModel(
             _temp.Database,
@@ -1328,14 +1568,18 @@ public class LayoutFitTests : IDisposable
             owner,
             new CatalogueImportViewModel(items),
             new HardwareViewModel(settings, rasterizer: null, confirm: _ => true, post: action => action()),
-            new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))),
+            newItem,
             maintenance,
             customers ?? new CustomersViewModel(
                 new Pos.Core.Analytics.CustomerQuery(_temp.Database),
                 new CustomerRepository(_temp.Database)),
             new GstReturnViewModel(
                 month => new Pos.Core.Analytics.GstReturnQuery(_temp.Database).Gather(settings.LaneId, month, "33"),
-                (_, _) => []),
+                (_, _) => [])
+            {
+                // So the day book's button is on the tab, laid out and keyed with the rest.
+                DayBook = (_, _) => new DayBookSaved(0, [], []),
+            },
             new PurchasesViewModel(
                 new PurchaseRepository(_temp.Database),
                 query => items.Search(query),
@@ -1350,8 +1594,227 @@ public class LayoutFitTests : IDisposable
                 cover => new Pos.Core.Analytics.OrderListQuery(_temp.Database).Gather(cover),
                 _ => { },
                 BillingHarness.Store.Name),
-            new OffersViewModel(new OfferRepository(_temp.Database), items.Skus, items.Categories));
+            new OffersViewModel(new OfferRepository(_temp.Database), items.Skus, items.Categories),
+
+            // Things the till sold that are not in the catalogue, with long names and several
+            // cashiers, so the catalogue tab's list and the figures tab's notice are laid out full.
+            new OpenItemsViewModel(new FixedOpenItems(), newItem));
     }
+
+    private sealed class YearAgo : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new DateTimeOffset(DateTime.Today.AddYears(-1).AddHours(12)).ToUniversalTime();
+    }
+
+    /// <summary>One sale, a year ago today, with a long name in a long department.</summary>
+    private void SellAYearAgo(string laneId)
+    {
+        _temp.Items.UpsertRange([Catalogue.Item(sku: "GIFTBOX", name: "Motichoor Laddu Premium Festival Gift Box 1kg", price: 1_249m, gstRate: 5m)
+            with { Category = "Sweets, Savouries and Festival Gifting" }]);
+
+        var bill = new InvoiceEngine("33");
+        bill.AddItem(_temp.Items.FindBySku("GIFTBOX")!);
+        var basket = new TenderBasket(bill.Totals.AmountPayable);
+        basket.Add(TenderType.Cash, bill.Totals.AmountPayable);
+
+        new CheckoutService(new InvoiceRepository(_temp.Database), new CustomerRepository(_temp.Database), new RecordingDrawerService(), clock: new YearAgo())
+            .Complete(laneId, bill, basket);
+    }
+
+    /// <summary>Sales of items not in the catalogue, held in memory: the layout needs them on screen, not in the books.</summary>
+    private sealed class FixedOpenItems : IOpenItemStore
+    {
+        public IReadOnlyList<OpenItemSale> Waiting(int limit = 500)
+        {
+            var at = DateTimeOffset.Now;
+
+            return
+            [
+                new(1, "SLS/26-27/L1-100245", at.AddMinutes(-5), "Good Knight Gold Flash Mosquito Repellent Coil Family Packs", "8901234599990", 12_345.50m, 18m, string.Empty, 2m, "Lakshmi Narayanan Subramaniam"),
+                new(2, "SLS/26-27/L1-100231", at.AddMinutes(-50), "Good Knight Gold Flash Mosquito Repellent Coil Family Packs", "8901234599990", 12_345.50m, 18m, string.Empty, 1m, "Murugan"),
+                new(3, "SLS/26-27/L1-100198", at.AddHours(-3), "Cycle Pure Agarbathi Three in One", null, 85m, 5m, "3307", 1m, null),
+            ];
+        }
+
+        public void DealtWith(IEnumerable<long> lineIds, DateTimeOffset at, string? addedAs)
+        {
+        }
+    }
+
+    // ---- Every look, on the real screens ---------------------------------------------------------
+
+    /// <summary>
+    /// Every word on the till and on every tab of the owner's screen, in every look, against what is
+    /// actually painted behind it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The palette tests measure the pairings the palettes mean to be used; this measures the ones
+    /// the screens really use. A colour written into a view rather than taken from the palette, or
+    /// a palette colour taken once and kept, is right in the look it was written for and wrong in
+    /// the others: white on a white card, or near-black on the night page. Only drawing the screen
+    /// in each look finds that.
+    /// </para>
+    /// <para>
+    /// 3:1 rather than 4.5: this is a net for text that has gone wrong, not a second copy of the
+    /// palette's own bars, and greyed-out controls are left out as WCAG leaves them out.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryWordIsReadableInEveryLook()
+    {
+        using var harness = new BillingHarness(
+            Catalogue.Item(sku: "DAL001", barcode: "8901234567890", name: "Toor Dal 1kg", price: 189m));
+
+        harness.ViewModel.SearchText = "8901234567890";
+        SeedACountedClose();
+
+        Wpf.Run(() =>
+        {
+            var till = new MainBillingView(harness.ViewModel, Keymap.Default, Settings());
+            var owner = BuildOwnerView();
+            var failures = new List<string>();
+
+            try
+            {
+                Wpf.LayOutAt(till, TillWidth, TillHeight);
+                Wpf.LayOutAt(owner, TillWidth, TillHeight);
+                var tabs = Wpf.Descendants<TabControl>(owner).First();
+
+                foreach (var look in new[] { ScreenTheme.Morning, ScreenTheme.Noon, ScreenTheme.Evening, ScreenTheme.Night })
+                {
+                    Looks.Apply(look);
+                    Wpf.Settle(till);
+                    failures.AddRange(UnreadableText(till).Select(f => $"{look}, the till: {f}"));
+
+                    for (var tab = 0; tab < tabs.Items.Count; tab++)
+                    {
+                        tabs.SelectedIndex = tab;
+                        Wpf.Settle(owner);
+                        failures.AddRange(UnreadableText(owner).Select(f => $"{look}, owner tab {tab + 1}: {f}"));
+                    }
+                }
+            }
+            finally
+            {
+                Looks.Apply(ScreenTheme.Night);
+                till.Close();
+                owner.Close();
+            }
+
+            Assert.True(failures.Count == 0,
+                "This text is hard to read against what is behind it:\n  "
+                + string.Join("\n  ", failures.Distinct()));
+        });
+    }
+
+    /// <summary>Every visible, enabled piece of text whose ink is too close to the ground behind it.</summary>
+    private static IEnumerable<string> UnreadableText(Window window)
+    {
+        foreach (var text in Wpf.Descendants<TextBlock>(window))
+        {
+            if (!text.IsVisible || !text.IsEnabled || string.IsNullOrWhiteSpace(text.Text) || text.ActualWidth < 1)
+                continue;
+
+            if (text.Foreground is not SolidColorBrush ink || Faded(text))
+                continue;
+
+            foreach (var ground in GroundsBehind(text))
+            {
+                var seen = Over(Alpha(ink), ground);
+                var ratio = Contrast(seen, ground);
+
+                if (ratio < 3.0)
+                {
+                    var words = text.Text.Length > 40 ? text.Text[..40] + "…" : text.Text;
+                    yield return $"\"{words}\" in {ink.Color} on {ground}: {ratio:N2}:1";
+                }
+            }
+        }
+    }
+
+    /// <summary>Faded on purpose, or on its way in or out: not text anybody is meant to read as it is.</summary>
+    private static bool Faded(DependencyObject element)
+    {
+        for (var at = element; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is UIElement { Opacity: < 1 })
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The colours that can be behind a piece of text: the first opaque ground under it, with any
+    /// tints between laid over it. A gradient gives one colour per stop.
+    /// </summary>
+    private static IReadOnlyList<Color> GroundsBehind(TextBlock text)
+    {
+        var tints = new List<Color>();
+        var at = (DependencyObject)text;
+
+        while (at is not null)
+        {
+            var brush = at switch
+            {
+                TextBlock t => t.Background,
+                Border b => b.Background,
+                Panel p => p.Background,
+                _ => null,
+            };
+
+            switch (brush)
+            {
+                case SolidColorBrush solid when Alpha(solid).A == 255:
+                    return [Tinted(Alpha(solid), tints)];
+
+                case SolidColorBrush solid when Alpha(solid).A > 0:
+                    tints.Add(Alpha(solid));
+                    break;
+
+                case GradientBrush gradient:
+                    return gradient.GradientStops.Select(s => Tinted(Color.FromRgb(s.Color.R, s.Color.G, s.Color.B), tints)).ToList();
+
+                case null or SolidColorBrush:
+                    break;
+
+                default:
+                    // A picture or a drawing: there is no one colour to measure against.
+                    return [];
+            }
+
+            at = VisualTreeHelper.GetParent(at);
+        }
+
+        return [];
+    }
+
+    private static Color Alpha(SolidColorBrush brush) =>
+        Color.FromArgb((byte)Math.Round(brush.Color.A * Math.Clamp(brush.Opacity, 0, 1)), brush.Color.R, brush.Color.G, brush.Color.B);
+
+    /// <summary>The ground with the tints above it laid on, the farthest first.</summary>
+    private static Color Tinted(Color ground, List<Color> tints)
+    {
+        for (var i = tints.Count - 1; i >= 0; i--)
+            ground = Over(tints[i], ground);
+
+        return ground;
+    }
+
+    /// <summary>One colour laid over an opaque one.</summary>
+    private static Color Over(Color top, Color under)
+    {
+        var a = top.A / 255.0;
+
+        return Color.FromRgb(
+            (byte)Math.Round((top.R * a) + (under.R * (1 - a))),
+            (byte)Math.Round((top.G * a) + (under.G * (1 - a))),
+            (byte)Math.Round((top.B * a) + (under.B * (1 - a))));
+    }
+
+    private static double Contrast(Color a, Color b) =>
+        Wcag.Ratio($"#{a.R:X2}{a.G:X2}{a.B:X2}", $"#{b.R:X2}{b.G:X2}{b.B:X2}");
 
     /// <summary>
     /// The Orders tab with something to order from a supplier with a long name, and an item with a

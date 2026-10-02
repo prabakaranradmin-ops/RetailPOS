@@ -346,7 +346,128 @@ public static class DashboardPage
                + "credit notes of their own: the sales above are the bills as issued, and what was refunded is here.</p>");
         p.Append("</div>");
 
+        WriteExceptions(p, d);
+        WriteDrawers(p, d);
+        WriteStockValue(p, d);
         WriteLowStock(p, d);
+    }
+
+    /// <summary>What the counted shelves are worth now, by department. Absent where nothing is counted.</summary>
+    private static void WriteStockValue(StringBuilder p, DashboardData d)
+    {
+        var s = d.Stock;
+
+        if (s.CountedItems == 0)
+            return;
+
+        p.Append("<div class=\"panel\"><h3>What the shelves are worth <span class=\"aside\">as of now, not for the period</span></h3>");
+        p.Append("<div class=\"figures\">");
+
+        if (s.WithoutCost < s.CountedItems)
+            Figure(p, "At cost", Money(s.AtCost), s.WithoutCost == 0 ? $"{Money(s.Margin)} over cost at today's prices" : $"{s.WithoutCost} items have no cost price");
+
+        Figure(p, "At selling price", Money(s.AtSellingPrice), $"{s.CountedItems} counted items on the shelf");
+        Figure(p, "At MRP", Money(s.AtMrp), "the printed prices");
+        p.Append("</div>");
+
+        if (s.Categories.Count > 0)
+        {
+            p.Append("<div class=\"scroller\"><table class=\"plain\"><thead><tr><th>Department</th><th class=\"n\">Items</th>"
+                   + "<th class=\"n\">At cost</th><th class=\"n\">At selling price</th></tr></thead><tbody>");
+
+            foreach (var c in s.Categories)
+                p.Append($"<tr><td>{Escape(c.Category)}</td><td class=\"n\">{c.Items}</td><td class=\"n\">{Money(c.AtCost)}</td><td class=\"n\">{Money(c.AtSellingPrice)}</td></tr>");
+
+            p.Append("</tbody></table></div>");
+        }
+
+        if (s.BelowZero > 0)
+            p.Append($"<p class=\"note\">{s.BelowZero} counts are below zero and left out: the count and the shelf have parted company.</p>");
+
+        p.Append("</div>");
+    }
+
+    /// <summary>The drawer at each close in the window, and each person's days, over and short.</summary>
+    /// <remarks>Absent on a window with no closes in it.</remarks>
+    private static void WriteDrawers(StringBuilder p, DashboardData d)
+    {
+        var drawers = d.Drawers;
+
+        if (drawers.Closes.Count == 0)
+            return;
+
+        p.Append("<div class=\"panel\"><h3>The drawer at closing <span class=\"aside\">counted before the till said what to expect</span></h3>");
+        p.Append($"<p class=\"note\">Counted at {drawers.CountedCloses} of {drawers.Closes.Count} closes; "
+               + $"short {drawers.ShortCloses} times, {Money(drawers.ShortTotal)} in all; "
+               + $"over {drawers.OverCloses} times, {Money(drawers.OverTotal)} in all.</p>");
+
+        if (drawers.ByPerson.Count > 0)
+        {
+            p.Append("<div class=\"scroller\"><table class=\"plain\"><thead><tr><th>Who was on the till</th>"
+                   + "<th class=\"n\">Days</th><th class=\"n\">Short</th><th class=\"n\">Over</th></tr></thead><tbody>");
+
+            foreach (var person in drawers.ByPerson)
+            {
+                p.Append($"<tr><td>{Escape(person.Name)}</td><td class=\"n\">{person.Days}</td>");
+                p.Append($"<td class=\"n\">{(person.ShortDays == 0 ? "&mdash;" : $"{person.ShortDays} &middot; {Money(person.Short)}")}</td>");
+                p.Append($"<td class=\"n\">{(person.OverDays == 0 ? "&mdash;" : $"{person.OverDays} &middot; {Money(person.Over)}")}</td></tr>");
+            }
+
+            p.Append("</tbody></table></div>");
+            p.Append("<p class=\"note\">A day two people worked counts for both: the drawer was shared.</p>");
+        }
+
+        p.Append("</div>");
+    }
+
+    /// <summary>
+    /// The till's exceptions, by who was on it: the same table the owner's screen shows, so a page sent
+    /// to somebody else says what the screen said.
+    /// </summary>
+    /// <remarks>
+    /// Absent on a lane that has recorded nothing yet, rather than present and empty: an empty table
+    /// reads as "nothing happened", which is not the same claim as "nothing was being written down".
+    /// </remarks>
+    private static void WriteExceptions(StringBuilder p, DashboardData d)
+    {
+        var x = d.Exceptions;
+
+        if (x.RecordedSince is not { } since)
+            return;
+
+        p.Append("<div class=\"panel\"><h3>At the till, by who <span class=\"aside\">voids, discounts typed by hand, cash refunds and cash out</span></h3>");
+
+        if (!x.Any)
+        {
+            p.Append("<p class=\"note\">Nothing out of the ordinary in this period.</p>");
+        }
+        else
+        {
+            p.Append("<div class=\"scroller\"><table class=\"plain\"><thead><tr><th>Who</th>"
+                   + "<th class=\"n\">Voids</th><th class=\"n\">Discounts</th><th class=\"n\">Cash refunds</th>"
+                   + "<th class=\"n\">Cash out</th><th class=\"n\">Past khata limit</th><th class=\"n\">PIN refused</th></tr></thead><tbody>");
+
+            static string Pair(int count, decimal value) =>
+                count == 0 ? "&mdash;" : $"{count.ToString("N0", India)} &middot; {Money(value)}";
+
+            foreach (var c in x.ByCashier)
+            {
+                p.Append($"<tr><td>{Escape(c.Cashier)}</td>");
+                p.Append($"<td class=\"n\">{Pair(c.Voids, c.Voided)}</td>");
+                p.Append($"<td class=\"n\">{Pair(c.Discounts, c.Discounted)}</td>");
+                p.Append($"<td class=\"n\">{Pair(c.CashRefunds, c.CashRefunded)}</td>");
+                p.Append($"<td class=\"n\">{Pair(c.CashOuts, c.CashTakenOut)}</td>");
+                p.Append($"<td class=\"n\">{Pair(c.OverKhataLimit, c.OverKhataLimitValue)}</td>");
+                p.Append($"<td class=\"n\">{(c.Refused == 0 ? "&mdash;" : c.Refused.ToString("N0", India))}</td></tr>");
+            }
+
+            p.Append("</tbody></table></div>");
+        }
+
+        if (since > d.From)
+            p.Append($"<p class=\"note\">Recorded since {since.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}, so the days before that are not here.</p>");
+
+        p.Append("</div>");
     }
 
     /// <summary>

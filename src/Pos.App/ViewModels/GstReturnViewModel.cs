@@ -2,8 +2,12 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using Pos.Core.Analytics;
+using Pos.Core.Domain;
 
 namespace Pos.App.ViewModels;
+
+/// <summary>A day book written: how many vouchers, anything that did not add up, and the files.</summary>
+public sealed record DayBookSaved(int Vouchers, IReadOnlyList<string> Notes, IReadOnlyList<string> Files);
 
 /// <summary>
 /// The owner's GST tab: one month's figures for the return, and saving them for the accountant.
@@ -124,6 +128,44 @@ public sealed class GstReturnViewModel : ObservableObject
         Fill(Warnings, _data?.Warnings);
 
         RaiseAll();
+    }
+
+    /// <summary>
+    /// Reads the month on screen into a day book and writes its files: the CSV at the path given,
+    /// and the Tally files beside it. Null on a screen built without one, which then shows no button.
+    /// </summary>
+    public Func<DateOnly, string, DayBookSaved>? DayBook { get; init; }
+
+    public bool CanSaveDayBook => DayBook is not null;
+
+    /// <summary>What the day book's save dialog offers: "daybook-L1-2026-09.csv".</summary>
+    public string SuggestedDayBookName =>
+        $"daybook-{(_data?.LaneId ?? "lane")}-{_month.ToString("yyyy-MM", CultureInfo.InvariantCulture)}.csv";
+
+    /// <summary>Writes the month's day book for the accountant.</summary>
+    /// <returns>Null when it was written, or why not.</returns>
+    public string? SaveDayBook(string csvPath)
+    {
+        if (DayBook is null)
+            return Status = "This screen cannot save a day book.";
+
+        try
+        {
+            var saved = DayBook(_month, csvPath);
+
+            if (saved.Vouchers == 0)
+                return Status = $"Nothing happened in {MonthLabel} to put in a day book.";
+
+            Status = $"Saved the day book for {MonthLabel}: {Plural.Of(saved.Vouchers, "voucher")}, as a CSV and as "
+                   + $"{saved.Files.Count - 1} files for Tally, to {Path.GetDirectoryName(csvPath)}. They hold the shop's books - keep them private."
+                   + (saved.Notes.Count > 0 ? " To look at: " + string.Join(" ", saved.Notes) : string.Empty);
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return Status = $"Could not save the day book: {ex.Message}";
+        }
     }
 
     /// <summary>Writes the page and the CSVs.</summary>

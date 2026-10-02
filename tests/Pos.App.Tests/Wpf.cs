@@ -34,6 +34,13 @@ internal static class Wpf
             // scheme, and without it a component URI reports that its prefix is unrecognised.
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
 
+            // The palette first, as App.xaml has it: the styles in Theme.xaml take their colours
+            // from it by name. The night look, because that is the one a fresh install opens in.
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("/Pos.App;component/Themes/Night.xaml", UriKind.RelativeOrAbsolute),
+            });
+
             app.Resources.MergedDictionaries.Add(new ResourceDictionary
             {
                 Source = new Uri("/Pos.App;component/Theme.xaml", UriKind.RelativeOrAbsolute),

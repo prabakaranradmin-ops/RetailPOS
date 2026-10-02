@@ -90,8 +90,17 @@ public sealed record DayCloseSummary(
     int ReturnsCount = 0,
     decimal ReturnsValue = 0m,
     decimal ReturnsTax = 0m,
-    int OrdersWaiting = 0)
+    int OrdersWaiting = 0,
+    decimal? CashCounted = null,
+    string? CountedBy = null)
 {
+    // CashCounted is what the cashier counted in the drawer at the close, typed before the till
+    // showed CashExpected, so the count is a count and not a copy. Null when the day was closed
+    // without one.
+
+    /// <summary>Counted less expected: above zero the drawer is over, below it short. Null when not counted.</summary>
+    public decimal? CashDifference => CashCounted is { } counted ? counted - CashExpected : null;
+
     // Returns are credit notes: goods brought back against a bill, from today or any earlier day.
     // They are a second document, not a change to the sale, so they touch none of the sales figures
     // above and the reconciliations still hold. A cash refund left the drawer, and is one of the
@@ -159,7 +168,9 @@ public interface IDayCloseStore
     /// Closes the lane: computes the report, saves it, and stamps every invoice it covers so the
     /// same sale can never appear on two Z-reports.
     /// </summary>
-    DayCloseSummary Close(string laneId, DateTimeOffset closedAt);
+    /// <param name="cashCounted">What was counted in the drawer, or null for a close made without a count.</param>
+    /// <param name="countedBy">Who counted it.</param>
+    DayCloseSummary Close(string laneId, DateTimeOffset closedAt, decimal? cashCounted = null, string? countedBy = null);
 
     /// <summary>The most recent close for this lane, for reprinting.</summary>
     DayCloseSummary? FindLatest(string laneId);
@@ -184,4 +195,10 @@ public sealed record DayCloseEntry(
     DateTimeOffset? OpenedAt,
     int InvoiceCount,
     decimal NetSales,
-    decimal CashExpected);
+    decimal CashExpected,
+    decimal? CashCounted = null,
+    string? CountedBy = null)
+{
+    /// <summary>Counted less expected: above zero over, below zero short. Null when not counted.</summary>
+    public decimal? CashDifference => CashCounted is { } counted ? counted - CashExpected : null;
+}

@@ -1,0 +1,113 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+<!--
+  Morning: a light look, for a shop open to the early daylight. A warm cream page, warm white cards
+  and a brown-black ink - soft on the eyes from opening time, where noon's cool white would glare.
+
+  On a light ground every coloured ink has to be darker to stay readable: the accent is a deep sky,
+  money taken a deep green, money off a deep red, kept apart in lightness as well as hue. The same
+  names as Night.xaml; see there.
+-->
+
+    <sys:Boolean x:Key="IsDarkTheme">False</sys:Boolean>
+
+    <SolidColorBrush x:Key="Surface" Color="#FFF6F2EB" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FFFFFDF9" />
+    <SolidColorBrush x:Key="SurfaceHeader" Color="#FFEFE8DD" />
+    <SolidColorBrush x:Key="Ink" Color="#FF1C1917" />
+    <SolidColorBrush x:Key="InkMuted" Color="#FF524B45" />
+    <SolidColorBrush x:Key="InkDim" Color="#FF6A625B" />
+
+    <SolidColorBrush x:Key="Accent" Color="#FF036596" />
+    <SolidColorBrush x:Key="Positive" Color="#FF02573F" />
+    <SolidColorBrush x:Key="Negative" Color="#FFC42648" />
+    <SolidColorBrush x:Key="Line" Color="#FFE5DDD1" />
+
+    <SolidColorBrush x:Key="RowActive" Color="#FFE4EFF5" />
+    <SolidColorBrush x:Key="RowAlt" Color="#FFFBF8F3" />
+    <SolidColorBrush x:Key="RowHover" Color="#0A1C1917" />
+    <SolidColorBrush x:Key="RowStripe" Color="#071C1917" />
+
+    <SolidColorBrush x:Key="FieldBorder" Color="#FF7A7069" />
+    <SolidColorBrush x:Key="FieldBorderHover" Color="#FF524B45" />
+    <SolidColorBrush x:Key="FieldFill" Color="#FFFFFEFB" />
+
+    <SolidColorBrush x:Key="AccentGlow" Color="#40036596" />
+    <SolidColorBrush x:Key="OnAccent" Color="#FFFFFFFF" />
+
+    <SolidColorBrush x:Key="Danger" Color="#FFB91C1C" />
+    <SolidColorBrush x:Key="DangerSoft" Color="#FFFCEBE7" />
+    <SolidColorBrush x:Key="Warning" Color="#FF8A3F0C" />
+    <SolidColorBrush x:Key="WarningSoft" Color="#FFFDF1D2" />
+    <SolidColorBrush x:Key="Done" Color="#FF064E3B" />
+    <SolidColorBrush x:Key="DoneSoft" Color="#FFDDF5E4" />
+    <SolidColorBrush x:Key="InfoSoft" Color="#FFE2F0F7" />
+    <SolidColorBrush x:Key="Saving" Color="#FF9A4A08" />
+
+    <SolidColorBrush x:Key="Scrim" Color="#8C1C1917" />
+
+    <SolidColorBrush x:Key="ButtonFace" Color="#FFFFFDF9" />
+    <SolidColorBrush x:Key="ButtonFaceHover" Color="#FFF5EFE6" />
+    <SolidColorBrush x:Key="ButtonFacePressed" Color="#FFEBE3D7" />
+    <SolidColorBrush x:Key="ButtonEdge" Color="#FFD8CEC1" />
+    <SolidColorBrush x:Key="ButtonEdgeHover" Color="#FFA59B91" />
+    <SolidColorBrush x:Key="AccentHover" Color="#FF045E8C" />
+
+    <SolidColorBrush x:Key="CardEdge" Color="#FFE6DDD0" />
+    <SolidColorBrush x:Key="IconChip" Color="#FFE2F0F7" />
+
+    <SolidColorBrush x:Key="ChipFill" Color="#0D1C1917" />
+    <SolidColorBrush x:Key="ChipFillStrong" Color="#171C1917" />
+    <SolidColorBrush x:Key="KeyCapFill" Color="#FFF5EFE6" />
+    <SolidColorBrush x:Key="KeyCapEdge" Color="#FFD8CEC1" />
+    <SolidColorBrush x:Key="Well" Color="#FFF5EFE6" />
+
+    <SolidColorBrush x:Key="ScrollThumb" Color="#FF8F857C" />
+    <SolidColorBrush x:Key="ScrollThumbHover" Color="#FF6A625B" />
+
+    <SolidColorBrush x:Key="ChartColour0" Color="#FF0284C7" />
+    <SolidColorBrush x:Key="ChartColour1" Color="#FF059669" />
+    <SolidColorBrush x:Key="ChartColour2" Color="#FFC2700A" />
+    <SolidColorBrush x:Key="ChartColour3" Color="#FF7C3AED" />
+    <SolidColorBrush x:Key="ChartColour4" Color="#FFDB2777" />
+    <SolidColorBrush x:Key="ChartColour5" Color="#FF0D9488" />
+    <SolidColorBrush x:Key="ChartColour6" Color="#FF78706A" />
+    <SolidColorBrush x:Key="ChartGrid" Color="#FFEEE7DC" />
+    <SolidColorBrush x:Key="ChartAxisLine" Color="#FFD8CEC1" />
+    <SolidColorBrush x:Key="ChartTooltip" Color="#FFFFFDF9" />
+    <SolidColorBrush x:Key="ChartTooltipEdge" Color="#FFD8CEC1" />
+    <SolidColorBrush x:Key="ChartHeat0" Color="#FFF5EFE6" />
+    <SolidColorBrush x:Key="ChartHeat1" Color="#FFBAE6FD" />
+    <SolidColorBrush x:Key="ChartHeat2" Color="#FF38BDF8" />
+    <SolidColorBrush x:Key="ChartHeat3" Color="#FF0369A1" />
+
+    <LinearGradientBrush x:Key="AppBackdrop" StartPoint="0,0" EndPoint="0,1">
+      <GradientStop Color="#FFF9F5EF" Offset="0" />
+      <GradientStop Color="#FFF3EDE4" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="CardFill" StartPoint="0,0" EndPoint="0,1">
+      <GradientStop Color="#FFFFFDF9" Offset="0" />
+      <GradientStop Color="#FFFDF9F3" Offset="1" />
+    </LinearGradientBrush>
+
+    <RadialGradientBrush x:Key="TotalFill" Center="1,0" GradientOrigin="1,0" RadiusX="1.1" RadiusY="1.4">
+      <GradientStop Color="#FFE3F4E8" Offset="0" />
+      <GradientStop Color="#FFF8FAF3" Offset="0.65" />
+      <GradientStop Color="#FFFFFDF9" Offset="1" />
+    </RadialGradientBrush>
+
+    <!-- White on a deep green: on a light page the Pay key keeps its weight by going darker. -->
+    <LinearGradientBrush x:Key="PayFill" StartPoint="0,0" EndPoint="0,1">
+      <GradientStop Color="#FF15803D" Offset="0" />
+      <GradientStop Color="#FF166534" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- A deeper sky than the dark looks', so a short bar still shows on a white card. -->
+    <LinearGradientBrush x:Key="RankFill" StartPoint="0,0" EndPoint="1,0">
+      <GradientStop Color="#FF0369A1" Offset="0" />
+      <GradientStop Color="#FF0284C7" Offset="1" />
+    </LinearGradientBrush>
+</ResourceDictionary>

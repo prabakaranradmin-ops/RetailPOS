@@ -14,8 +14,12 @@ public sealed record CustomerSummary(
     int Visits,
     decimal Spent,
     DateTimeOffset? LastVisit,
-    decimal Owed = 0m)
+    decimal Owed = 0m,
+    int? DaysWaiting = null)
 {
+    // DaysWaiting is how long the oldest unpaid khata bill has waited, filled in for the list of
+    // those who owe. Null elsewhere, and for anybody who owes nothing.
+
     /// <summary>What the shop calls them: their name when it knows it, their number when it does not.</summary>
     public string Label => string.IsNullOrWhiteSpace(Name) ? MobileNo : Name;
 }

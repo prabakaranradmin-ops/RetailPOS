@@ -229,6 +229,41 @@ public sealed record KhataStatement(
         return text.ToString();
     }
 
+    /// <summary>
+    /// A short reminder of what is owed and since when - for somebody who has not paid in a while,
+    /// where the whole statement would be more than they need to read.
+    /// </summary>
+    /// <remarks>
+    /// Polite and plain, and naming the oldest unpaid bill: "since 12-08-2026, 51 days" is what makes
+    /// a reminder a reminder rather than a bill. The shop sends it from its own phone; nothing here
+    /// goes anywhere.
+    /// </remarks>
+    public string Reminder(string? shopName, UpiPayee? upi = null)
+    {
+        var shop = string.IsNullOrWhiteSpace(shopName) ? "the shop" : shopName.Trim();
+        var who = Customer.Name ?? Customer.MobileNo;
+
+        if (!OwesAnything)
+            return $"Dear {who}, your khata at {shop} is clear. Thank you.";
+
+        var text = new StringBuilder();
+        text.Append(CultureInfo.InvariantCulture, $"Dear {who}, a reminder from {shop}: Rs {Money(Closing)} is due on your khata");
+
+        if (Ageing.OldestUnpaid is { } oldest)
+        {
+            var days = To.DayNumber - oldest.DayNumber;
+            text.Append(CultureInfo.InvariantCulture, $", unpaid since {Date(oldest)} ({Plural.Of(days, "day")})");
+        }
+
+        text.Append(". ");
+        text.Append(upi is not null
+            ? $"Please pay by UPI to {upi.Id} ({upi.Name}), or at the counter. "
+            : "Please pay at the counter when you next come in. ");
+        text.Append("Thank you.");
+
+        return text.ToString();
+    }
+
     /// <summary>Oldest first; a purchase before a payment in the same instant, as the balance was walked.</summary>
     private static List<KhataEntry> Ordered(IEnumerable<KhataEntry> ledger) =>
         [.. ledger.OrderBy(e => e.At).ThenByDescending(e => e.Change)];

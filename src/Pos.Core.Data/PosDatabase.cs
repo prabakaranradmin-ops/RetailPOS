@@ -77,6 +77,10 @@ public sealed class PosDatabase
     {
         using var connection = OpenConnection();
         Migrator.Migrate(connection);
+
+        // The search keys are worked out in code, which a migration cannot run: an item that has
+        // none yet - every item, the first time after they were added - gets them here.
+        ItemRepository.FillSoundKeys(connection);
     }
 
     /// <summary>

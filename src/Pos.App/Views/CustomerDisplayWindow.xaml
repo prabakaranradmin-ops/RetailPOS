@@ -4,7 +4,7 @@
         xmlns:v="clr-namespace:Pos.App.Views"
         Title="RetailPOS — Customer display"
         WindowStyle="None" ResizeMode="NoResize" ShowActivated="False" ShowInTaskbar="False"
-        Background="{StaticResource Surface}" Foreground="{StaticResource Ink}"
+        Background="{DynamicResource Surface}" Foreground="{DynamicResource Ink}"
         FontFamily="Segoe UI, Nirmala UI">
 
   <Window.Resources>
@@ -25,7 +25,7 @@
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
       <TextBlock Text="{Binding ShopName}" FontSize="34" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-      <TextBlock Grid.Column="1" Text="{Binding Customer}" FontSize="22" Foreground="{StaticResource InkMuted}"
+      <TextBlock Grid.Column="1" Text="{Binding Customer}" FontSize="22" Foreground="{DynamicResource InkMuted}"
                  VerticalAlignment="Center" Margin="24,0,0,0" />
     </Grid>
 
@@ -40,8 +40,8 @@
       <TextBlock Text="{Binding Words.ThankYou}" FontSize="48" HorizontalAlignment="Center" />
       <StackPanel HorizontalAlignment="Center" Margin="0,30,0,0"
                   Visibility="{Binding HasChange, Converter={StaticResource BoolToVisibility}}">
-        <TextBlock Text="{Binding Words.YourChange}" FontSize="22" Foreground="{StaticResource InkMuted}" HorizontalAlignment="Center" />
-        <TextBlock Text="{Binding Change}" FontSize="96" FontWeight="Bold" Foreground="{StaticResource Positive}"
+        <TextBlock Text="{Binding Words.YourChange}" FontSize="22" Foreground="{DynamicResource InkMuted}" HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Change}" FontSize="96" FontWeight="Bold" Foreground="{DynamicResource Positive}"
                    FontFamily="{StaticResource FigureFont}" HorizontalAlignment="Center" />
       </StackPanel>
     </StackPanel>
@@ -98,7 +98,7 @@
               </Grid.ColumnDefinitions>
               <TextBlock Text="{Binding Name}" FontSize="26" TextTrimming="CharacterEllipsis" />
               <TextBlock Grid.Column="1" Text="{Binding Quantity}" FontSize="26" HorizontalAlignment="Right"
-                         Foreground="{StaticResource InkMuted}" />
+                         Foreground="{DynamicResource InkMuted}" />
               <TextBlock Grid.Column="2" Text="{Binding Amount}" FontSize="26" HorizontalAlignment="Right"
                          FontFamily="{StaticResource FigureFont}" />
             </Grid>
@@ -108,7 +108,7 @@
     </Grid>
 
     <!-- The figure the customer looks for. -->
-    <Border Grid.Row="2" Background="{StaticResource SurfaceRaised}" CornerRadius="10" Padding="28,18" Margin="0,24,0,0">
+    <Border Grid.Row="2" Background="{DynamicResource SurfaceRaised}" CornerRadius="10" Padding="28,18" Margin="0,24,0,0">
       <Border.Style>
         <Style TargetType="Border">
           <Setter Property="Visibility" Value="Collapsed" />
@@ -128,19 +128,19 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel VerticalAlignment="Center">
-          <TextBlock Text="{Binding Saving}" FontSize="24" Foreground="{StaticResource Positive}" />
+          <TextBlock Text="{Binding Saving}" FontSize="24" Foreground="{DynamicResource Positive}" />
           <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                       Visibility="{Binding IsPaying, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock FontSize="24" Foreground="{StaticResource InkMuted}">
+            <TextBlock FontSize="24" Foreground="{DynamicResource InkMuted}">
               <Run Text="{Binding Words.Paid, Mode=OneWay}" /> <Run Text="{Binding Paid, Mode=OneWay}" />
               <Run Text="   " /><Run Text="{Binding Words.Balance, Mode=OneWay}" /> <Run Text="{Binding Balance, Mode=OneWay}" />
             </TextBlock>
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-          <TextBlock Text="{Binding Words.Total}" FontSize="22" Foreground="{StaticResource InkMuted}" HorizontalAlignment="Right" />
+          <TextBlock Text="{Binding Words.Total}" FontSize="22" Foreground="{DynamicResource InkMuted}" HorizontalAlignment="Right" />
           <TextBlock Text="{Binding Total}" FontSize="80" FontWeight="Bold" FontFamily="{StaticResource FigureFont}"
-                     Foreground="{StaticResource Positive}" HorizontalAlignment="Right" />
+                     Foreground="{DynamicResource Positive}" HorizontalAlignment="Right" />
         </StackPanel>
       </Grid>
     </Border>

@@ -122,8 +122,13 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        // The theme the tests load: the till's own styles, from the till's own assembly.
+        // The theme the tests load: the night look's palette, then the till's own styles, from the
+        // till's own assembly.
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("/Pos.App;component/Themes/Night.xaml", UriKind.RelativeOrAbsolute),
+        });
         app.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("/Pos.App;component/Theme.xaml", UriKind.RelativeOrAbsolute),
@@ -141,6 +146,13 @@ internal static class Program
             return 0;
         }
 
+        // "looks [<showcase folder>]": only the till and the owner's screen in each of the four looks.
+        if (args.Length >= 1 && args[0] == "looks")
+        {
+            LookPictures.Draw(Path.GetFullPath(args.Length > 1 ? args[1] : Path.Combine("artifacts", "showcase")));
+            return 0;
+        }
+
         var output = Path.GetFullPath(args.Length > 0 ? args[0] : Path.Combine("artifacts", "showcase"));
         var screens = Directory.CreateDirectory(Path.Combine(output, "till")).FullName;
         var paper = Directory.CreateDirectory(Path.Combine(output, "bills")).FullName;
@@ -155,6 +167,7 @@ internal static class Program
         TheDay(paper, raster);
         Slips(paper, raster);
         WriteUnits(output);
+        LookPictures.Draw(output);
 
         Console.WriteLine($"Written to {output}");
         return 0;
@@ -382,7 +395,7 @@ internal static class Program
     /// the laid-out till at full size.
     /// </para>
     /// </remarks>
-    private static void Shoot(BillingHarness till, string path)
+    internal static void Shoot(BillingHarness till, string path)
     {
         var settings = new PosSettings
         {
@@ -391,17 +404,23 @@ internal static class Program
             Store = { Name = Shop.Name, Gstin = Shop.Gstin },
         };
 
-        var window = new MainBillingView(till.ViewModel, Keymap.Default, settings)
-        {
-            WindowStartupLocation = WindowStartupLocation.Manual,
-            WindowState = WindowState.Normal,
-            Left = -20000,
-            Top = -20000,
-            ShowInTaskbar = false,
-            ShowActivated = false,
-            Width = ScreenWidth,
-            Height = ScreenHeight,
-        };
+        Snap(new MainBillingView(till.ViewModel, Keymap.Default, settings), path);
+    }
+
+    /// <summary>
+    /// Any of the lane's windows as a 1600 × 900 shop monitor shows it; see <see cref="Shoot"/>.
+    /// </summary>
+    /// <param name="ready">Anything to do once the window is laid out and before it is drawn.</param>
+    internal static void Snap(Window window, string path, Action<Window>? ready = null)
+    {
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.WindowState = WindowState.Normal;
+        window.Left = -20000;
+        window.Top = -20000;
+        window.ShowInTaskbar = false;
+        window.ShowActivated = false;
+        window.Width = ScreenWidth;
+        window.Height = ScreenHeight;
 
         try
         {
@@ -418,6 +437,14 @@ internal static class Program
             root.Height = ScreenHeight - root.Margin.Top - root.Margin.Bottom;
             window.UpdateLayout();
             Settle(window);
+
+            if (ready is not null)
+            {
+                ready(window);
+                window.UpdateLayout();
+                Settle(window);
+            }
+
             Settle(window);
 
             // A little room on the right: text measured at the shrunk size comes out a hair wider
@@ -456,7 +483,7 @@ internal static class Program
         }
     }
 
-    private static void Settle(Window window)
+    internal static void Settle(Window window)
     {
         var frame = new DispatcherFrame();
         window.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => frame.Continue = false);

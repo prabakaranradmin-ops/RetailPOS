@@ -364,6 +364,18 @@ public sealed class PurchaseRepository(PosDatabase database) : IPurchaseStore
             billNo = reader.GetString(0);
         }
 
+        // Goods from it have gone back on a debit note, which is a document the supplier holds too.
+        // Cancelling the bill under it would leave the note owing against nothing.
+        using (var sent = connection.CreateCommand())
+        {
+            sent.Transaction = transaction;
+            sent.CommandText = "SELECT group_concat(number, ', ') FROM supplier_returns WHERE purchase_id = $id;";
+            sent.Parameters.AddWithValue("$id", purchaseId);
+
+            if (sent.ExecuteScalar() is string notes && notes.Length > 0)
+                throw new InvalidOperationException($"Goods on bill {billNo} have gone back on {notes}, so the bill cannot be cancelled.");
+        }
+
         var taken = new List<(long ItemId, decimal Quantity)>();
 
         using (var lines = connection.CreateCommand())
@@ -477,12 +489,14 @@ public sealed class PurchaseRepository(PosDatabase database) : IPurchaseStore
 
     // ---- What is owed ------------------------------------------------------------------------
 
-    /// <summary>The one definition of what the shop owes a supplier, in whole paise.</summary>
+    /// <summary>The one definition of what the shop owes a supplier, in whole paise: bills, less payments, less debit notes.</summary>
     private static string OwedPaiseSql(string supplierId) => $"""
         (COALESCE((SELECT {PaiseSql.Sum("op_p.total")} FROM purchases op_p
                    WHERE op_p.supplier_id = {supplierId} AND op_p.voided_at IS NULL), 0)
          - COALESCE((SELECT {PaiseSql.Sum("op_s.amount")} FROM supplier_payments op_s
-                     WHERE op_s.supplier_id = {supplierId}), 0))
+                     WHERE op_s.supplier_id = {supplierId}), 0)
+         - COALESCE((SELECT {PaiseSql.Sum("op_r.total")} FROM supplier_returns op_r
+                     WHERE op_r.supplier_id = {supplierId}), 0))
         """;
 
     private static long OwedPaise(SqliteConnection connection, SqliteTransaction? transaction, long supplierId)
@@ -609,6 +623,9 @@ public sealed class PurchaseRepository(PosDatabase database) : IPurchaseStore
                 UNION ALL
                 SELECT paid_at, 'paid:' || method || ':' || COALESCE(reference, ''), -{PaiseSql.Of("amount")}
                 FROM supplier_payments WHERE supplier_id = $id
+                UNION ALL
+                SELECT returned_at, 'back:' || number, -{PaiseSql.Of("total")}
+                FROM supplier_returns WHERE supplier_id = $id
             )
             ORDER BY at, paise DESC;
             """;
@@ -641,10 +658,257 @@ public sealed class PurchaseRepository(PosDatabase database) : IPurchaseStore
         if (what.StartsWith("bill:", StringComparison.Ordinal))
             return $"Bill {what[5..]}";
 
+        if (what.StartsWith("back:", StringComparison.Ordinal))
+            return $"Sent back, debit note {what[5..]}";
+
         var parts = what.Split(':', 3);
         var method = Enum.TryParse<SupplierPaymentMethod>(parts[1], out var m) ? MethodText(m) : parts[1];
 
         return parts.Length > 2 && parts[2].Length > 0 ? $"Paid, {method} ({parts[2]})" : $"Paid, {method}";
+    }
+
+    // ---- Sending goods back ------------------------------------------------------------------
+
+    /// <summary>A debit note number: <c>DN/26-27/L1-3</c>, numbered by lane and financial year like the credit notes.</summary>
+    public static string DebitNoteNumber(string laneId, FiscalYear year, long sequence) =>
+        string.Create(CultureInfo.InvariantCulture, $"DN/{year.ShortLabel}/{laneId}-{sequence}");
+
+    public IReadOnlyList<ReturnablePurchaseLine> Returnable(long purchaseId)
+    {
+        using var connection = _database.OpenConnection();
+        return ReturnableLines(connection, null, purchaseId).Select(l => l.Line).ToList();
+    }
+
+    /// <summary>The bill's lines with what they cost and what has gone back of each already.</summary>
+    private static List<(ReturnablePurchaseLine Line, decimal Taxable, decimal Cgst, decimal Sgst, decimal Igst,
+        decimal BackTaxable, decimal BackCgst, decimal BackSgst, decimal BackIgst, decimal BackTotal, bool Counted)> ReturnableLines(
+        SqliteConnection connection, SqliteTransaction? transaction, long purchaseId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT l.line_no, l.item_id, l.name_snapshot, l.unit_type, l.quantity, l.line_total,
+                   l.taxable_value, l.cgst_amount, l.sgst_amount, l.igst_amount, l.stock_moved
+            FROM purchase_lines l
+            WHERE l.purchase_id = $id
+            ORDER BY l.line_no;
+            """;
+        command.Parameters.AddWithValue("$id", purchaseId);
+
+        var raw = new List<(int No, long Item, string Name, UnitType Unit, decimal Qty, decimal Total, decimal Taxable, decimal Cgst, decimal Sgst, decimal Igst, bool Counted)>();
+
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                raw.Add((reader.GetInt32(0), reader.GetInt64(1), reader.GetString(2), (UnitType)reader.GetInt32(3),
+                    reader.GetDecimal(4), reader.GetDecimal(5), reader.GetDecimal(6), reader.GetDecimal(7),
+                    reader.GetDecimal(8), reader.GetDecimal(9), reader.GetInt32(10) != 0));
+            }
+        }
+
+        // What has gone back of each line already, added up in C# so it stays exact.
+        var back = new Dictionary<int, (decimal Qty, decimal Taxable, decimal Cgst, decimal Sgst, decimal Igst, decimal Total)>();
+
+        using (var sent = connection.CreateCommand())
+        {
+            sent.Transaction = transaction;
+            sent.CommandText = """
+                SELECT rl.purchase_line_no, rl.quantity, rl.taxable_value, rl.cgst_amount, rl.sgst_amount, rl.igst_amount, rl.line_total
+                FROM supplier_return_lines rl
+                JOIN supplier_returns r ON r.id = rl.return_id
+                WHERE r.purchase_id = $id;
+                """;
+            sent.Parameters.AddWithValue("$id", purchaseId);
+
+            using var reader = sent.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var no = reader.GetInt32(0);
+                var so = back.GetValueOrDefault(no);
+                back[no] = (so.Qty + reader.GetDecimal(1), so.Taxable + reader.GetDecimal(2), so.Cgst + reader.GetDecimal(3),
+                    so.Sgst + reader.GetDecimal(4), so.Igst + reader.GetDecimal(5), so.Total + reader.GetDecimal(6));
+            }
+        }
+
+        return raw.Select(r =>
+        {
+            var gone = back.GetValueOrDefault(r.No);
+            return (new ReturnablePurchaseLine(r.No, r.Item, r.Name, r.Unit, r.Qty, gone.Qty, r.Total),
+                r.Taxable, r.Cgst, r.Sgst, r.Igst, gone.Taxable, gone.Cgst, gone.Sgst, gone.Igst, gone.Total, r.Counted);
+        }).ToList();
+    }
+
+    public SupplierReturn SendBack(long purchaseId, IReadOnlyList<SupplierReturnPick> picks, string reason, string laneId, DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(picks);
+        ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Say why the goods are going back; the debit note carries it.", nameof(reason));
+
+        var wanted = picks.Where(p => p.Quantity != 0m).ToList();
+
+        if (wanted.Count == 0)
+            throw new ArgumentException("Pick what is going back, and how many.", nameof(picks));
+
+        if (wanted.Any(p => p.Quantity < 0m))
+            throw new ArgumentException("A quantity going back cannot be less than nothing.", nameof(picks));
+
+        if (wanted.GroupBy(p => p.LineNo).Any(g => g.Count() > 1))
+            throw new ArgumentException("Each line of the bill is picked once.", nameof(picks));
+
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+
+        long supplierId;
+        string billNo, supplierName;
+
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = """
+                SELECT p.supplier_id, p.bill_no, p.voided_at, s.name
+                FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
+                WHERE p.id = $id;
+                """;
+            read.Parameters.AddWithValue("$id", purchaseId);
+
+            using var reader = read.ExecuteReader();
+
+            if (!reader.Read())
+                throw new InvalidOperationException($"No purchase with id {purchaseId}.");
+
+            if (!reader.IsDBNull(2))
+                throw new InvalidOperationException($"Bill {reader.GetString(1)} is cancelled; nothing on it can be sent back.");
+
+            supplierId = reader.GetInt64(0);
+            billNo = reader.GetString(1);
+            supplierName = reader.GetString(3);
+        }
+
+        var lines = ReturnableLines(connection, transaction, purchaseId).ToDictionary(l => l.Line.LineNo);
+        var priced = new List<(int No, long Item, string Name, decimal Qty, decimal Taxable, decimal Cgst, decimal Sgst, decimal Igst, decimal Total, bool Counted)>();
+
+        foreach (var pick in wanted)
+        {
+            if (!lines.TryGetValue(pick.LineNo, out var line))
+                throw new ArgumentException($"Bill {billNo} has no line {pick.LineNo}.", nameof(picks));
+
+            if (pick.Quantity > line.Line.Left)
+            {
+                throw new InvalidOperationException(line.Line.SentBack > 0m
+                    ? $"{line.Line.Name}: {line.Line.Left:0.###} is left to send back of the {line.Line.Bought:0.###} on the bill."
+                    : $"{line.Line.Name}: the bill has {line.Line.Bought:0.###}, so {pick.Quantity:0.###} cannot go back.");
+            }
+
+            decimal taxable, cgst, sgst, igst, total;
+
+            // The last of a line takes exactly what is left of it, so a line sent back in parts adds
+            // up to the bill to the paisa; a part is priced in proportion, rounded as the bill was.
+            if (pick.Quantity == line.Line.Left)
+            {
+                taxable = line.Taxable - line.BackTaxable;
+                cgst = line.Cgst - line.BackCgst;
+                sgst = line.Sgst - line.BackSgst;
+                igst = line.Igst - line.BackIgst;
+                total = line.Line.LineTotal - line.BackTotal;
+            }
+            else
+            {
+                var share = pick.Quantity / line.Line.Bought;
+                taxable = Pos.Core.Tax.Money.ToPresentation(line.Taxable * share);
+                cgst = Pos.Core.Tax.Money.ToPresentation(line.Cgst * share);
+                sgst = Pos.Core.Tax.Money.ToPresentation(line.Sgst * share);
+                igst = Pos.Core.Tax.Money.ToPresentation(line.Igst * share);
+                total = taxable + cgst + sgst + igst;
+            }
+
+            priced.Add((pick.LineNo, line.Line.ItemId, line.Line.Name, pick.Quantity, taxable, cgst, sgst, igst, total, line.Counted));
+        }
+
+        var year = FiscalYear.For(at);
+        var sequence = InvoiceRepository.TakeNextSequence(connection, transaction, "DN:" + laneId, year);
+        var number = DebitNoteNumber(laneId, year, sequence);
+
+        long returnId;
+
+        using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO supplier_returns
+                  (number, purchase_id, supplier_id, returned_at, lane_id, reason,
+                   taxable_value, total_cgst, total_sgst, total_igst, total)
+                VALUES ($number, $purchase, $supplier, $at, $lane, $reason, $taxable, $cgst, $sgst, $igst, $total);
+                SELECT last_insert_rowid();
+                """;
+            insert.Parameters.AddWithValue("$number", number);
+            insert.Parameters.AddWithValue("$purchase", purchaseId);
+            insert.Parameters.AddWithValue("$supplier", supplierId);
+            insert.Parameters.AddWithValue("$at", at);
+            insert.Parameters.AddWithValue("$lane", laneId);
+            insert.Parameters.AddWithValue("$reason", reason.Trim());
+            insert.Parameters.AddWithValue("$taxable", priced.Sum(p => p.Taxable));
+            insert.Parameters.AddWithValue("$cgst", priced.Sum(p => p.Cgst));
+            insert.Parameters.AddWithValue("$sgst", priced.Sum(p => p.Sgst));
+            insert.Parameters.AddWithValue("$igst", priced.Sum(p => p.Igst));
+            insert.Parameters.AddWithValue("$total", priced.Sum(p => p.Total));
+
+            returnId = Convert.ToInt64(insert.ExecuteScalar(), CultureInfo.InvariantCulture);
+        }
+
+        var notCounted = new List<string>();
+
+        foreach (var line in priced)
+        {
+            // Only a counted item's shelf comes down: the same rule as receiving it, so the shelf
+            // gives back exactly what the delivery put on.
+            var moved = line.Counted
+                && StockRepository.WriteIn(connection, transaction, line.Item, laneId, StockReason.SupplierReturn,
+                    $"{number} to {supplierName}", current => current - line.Qty, startCounting: false) is not null;
+
+            if (!moved)
+                notCounted.Add(line.Name);
+
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO supplier_return_lines
+                  (return_id, purchase_line_no, item_id, name_snapshot, quantity, taxable_value,
+                   cgst_amount, sgst_amount, igst_amount, line_total, stock_moved)
+                VALUES ($return, $no, $item, $name, $qty, $taxable, $cgst, $sgst, $igst, $total, $moved);
+                """;
+            insert.Parameters.AddWithValue("$return", returnId);
+            insert.Parameters.AddWithValue("$no", line.No);
+            insert.Parameters.AddWithValue("$item", line.Item);
+            insert.Parameters.AddWithValue("$name", line.Name);
+            insert.Parameters.AddWithValue("$qty", line.Qty);
+            insert.Parameters.AddWithValue("$taxable", line.Taxable);
+            insert.Parameters.AddWithValue("$cgst", line.Cgst);
+            insert.Parameters.AddWithValue("$sgst", line.Sgst);
+            insert.Parameters.AddWithValue("$igst", line.Igst);
+            insert.Parameters.AddWithValue("$total", line.Total);
+            insert.Parameters.AddWithValue("$moved", moved ? 1 : 0);
+            insert.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+
+        return new SupplierReturn(
+            returnId,
+            number,
+            purchaseId,
+            supplierName,
+            billNo,
+            at,
+            reason.Trim(),
+            priced.Sum(p => p.Taxable),
+            priced.Sum(p => p.Cgst + p.Sgst + p.Igst),
+            priced.Sum(p => p.Total),
+            priced.Count,
+            notCounted);
     }
 
     /// <summary>How a payment method reads in a sentence.</summary>

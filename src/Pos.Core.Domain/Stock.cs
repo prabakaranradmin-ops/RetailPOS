@@ -26,6 +26,9 @@ public enum StockReason
 
     /// <summary>Brought back by a customer, on a credit note, and put back on the shelf.</summary>
     Return,
+
+    /// <summary>Sent back to the supplier, on a debit note.</summary>
+    SupplierReturn,
 }
 
 /// <summary>One movement in the stock ledger.</summary>

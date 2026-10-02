@@ -46,6 +46,13 @@ Measured at 100,000 SKUs, against NFR-01's 100ms:
 | Scan to line appended on the bill | 0.019 ms |
 | Typed search | 5.8 ms |
 | Typed search matching nothing (worst case) | 9.8 ms |
+| Search by how it sounds, in Tamil or English spelling (2026-10-02) | 24.4 ms |
+| Matching nothing, every branch including the sound match (2026-10-02) | 24.0 ms |
+
+The sound match (ARCHITECTURE §6m) is a second scan, of its own index, so it about doubles the
+worst case. Measured side by side on the same machine on 2026-10-02, a miss that stops at the name
+match took 12.3 ms and one that goes on to the sound match 26.7 ms. The budget in
+`LookupLatencyTests` is 60 ms.
 
 The keyboard-only tests drive the till through `KeyboardRouter` with the shipped keymap rather
 than calling view model methods, so an action that still works but has lost its binding fails the

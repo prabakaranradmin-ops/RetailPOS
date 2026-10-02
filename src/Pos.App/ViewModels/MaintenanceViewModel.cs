@@ -10,7 +10,8 @@ namespace Pos.App.ViewModels;
 
 /// <summary>One snapshot on disk, as the restore list shows it.</summary>
 /// <param name="TakenAt">When it was taken, read from the file name rather than its timestamp.</param>
-public sealed record SnapshotRow(string Path, DateTimeOffset? TakenAt, long Bytes)
+/// <param name="KeptOn">This computer, or the pen drive it is on.</param>
+public sealed record SnapshotRow(string Path, DateTimeOffset? TakenAt, long Bytes, string KeptOn = "This computer")
 {
     public string Taken => TakenAt is { } at ? Show.DateAndTime(at) : "unknown";
 
@@ -50,8 +51,11 @@ public sealed class MaintenanceViewModel : ObservableObject
     private readonly string _laneId;
     private readonly Func<ReceiptBuilder, PrintOutcome> _print;
     private readonly Action<Action> _post;
+    private readonly OffMachineCopy? _offMachine;
 
     private bool _busy;
+    private string _offMachineStatus = string.Empty;
+    private bool _offMachineOverdue;
     private string _summary = string.Empty;
     private string _reportText = string.Empty;
     private bool _thorough = true;
@@ -66,6 +70,7 @@ public sealed class MaintenanceViewModel : ObservableObject
     /// one attached, and so a lane with no printer configured fails as a message rather than a throw.
     /// </param>
     /// <param name="post">Runs an action on the UI thread. Tests pass one that runs it directly.</param>
+    /// <param name="offMachine">Copies to a pen drive. Null on a lane wired without one, which then offers none.</param>
     public MaintenanceViewModel(
         PosDatabase database,
         string dataDirectory,
@@ -73,7 +78,8 @@ public sealed class MaintenanceViewModel : ObservableObject
         ZReportComposer composer,
         string laneId,
         Func<ReceiptBuilder, PrintOutcome> print,
-        Action<Action> post)
+        Action<Action> post,
+        OffMachineCopy? offMachine = null)
     {
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _dataDirectory = dataDirectory ?? throw new ArgumentNullException(nameof(dataDirectory));
@@ -82,13 +88,32 @@ public sealed class MaintenanceViewModel : ObservableObject
         _laneId = laneId ?? throw new ArgumentNullException(nameof(laneId));
         _print = print ?? throw new ArgumentNullException(nameof(print));
         _post = post ?? throw new ArgumentNullException(nameof(post));
+        _offMachine = offMachine;
 
         RefreshSnapshots();
         RefreshCloses();
+        RefreshOffMachine();
     }
 
     /// <summary>Where the snapshots live, shown so somebody can copy one to a memory stick.</summary>
     public string BackupDirectory => Path.Combine(_dataDirectory, "backups");
+
+    /// <summary>Whether this lane can copy its backups to a pen drive from here.</summary>
+    public bool CanCopyOff => _offMachine is not null;
+
+    /// <summary>When the books last went onto a pen drive, and whether the shop's drive is plugged in.</summary>
+    public string OffMachineStatus
+    {
+        get => _offMachineStatus;
+        private set => Set(ref _offMachineStatus, value);
+    }
+
+    /// <summary>True when the last copy off this computer is a week old or more, or there has never been one.</summary>
+    public bool OffMachineOverdue
+    {
+        get => _offMachineOverdue;
+        private set => Set(ref _offMachineOverdue, value);
+    }
 
     /// <summary>Progress from whatever is running, newest last.</summary>
     public ObservableCollection<string> Log { get; } = [];
@@ -247,7 +272,15 @@ public sealed class MaintenanceViewModel : ObservableObject
         snapshot.Confirmation.Length > 0 &&
         string.Equals(TypedConfirmation.Trim(), snapshot.Confirmation, StringComparison.Ordinal);
 
-    /// <summary>Re-reads the snapshots on disk, newest first.</summary>
+    /// <summary>
+    /// Re-reads the snapshots on disk, newest first, and then those on the shop's backup drive if it
+    /// is plugged in.
+    /// </summary>
+    /// <remarks>
+    /// The pen drive's copies are listed so they can be restored from here. After a disk dies and the
+    /// till is installed afresh, they are the only snapshots there are, and restoring them should not
+    /// need a command prompt.
+    /// </remarks>
     public void RefreshSnapshots()
     {
         Snapshots.Clear();
@@ -264,6 +297,37 @@ public sealed class MaintenanceViewModel : ObservableObject
             // A folder that cannot be read costs the list, not the screen.
             Summary = $"The backup folder could not be read: {ex.Message}";
         }
+
+        if (_offMachine is null)
+            return;
+
+        foreach (var drive in _offMachine.Marked())
+        {
+            foreach (var file in _offMachine.CopiesOn(drive))
+                Snapshots.Add(new SnapshotRow(file.FullName, DatabaseBackup.TimestampOf(file.Name), file.Length, drive.Name));
+        }
+    }
+
+    /// <summary>Re-reads when the books last went off this computer.</summary>
+    public void RefreshOffMachine()
+    {
+        if (_offMachine is null)
+            return;
+
+        var now = DateTimeOffset.Now;
+        var last = _offMachine.LastCopied();
+        var overdue = _offMachine.Overdue(now);
+        var plugged = _offMachine.Marked();
+
+        // Overdue says it when there has never been a copy, so a recent one is the only other case.
+        var said = overdue ?? $"Last copied to a pen drive {Show.DateAndTime(last!.Value)}.";
+
+        said += plugged is [var drive, ..]
+            ? $" The shop's backup drive, {drive.Name}, is plugged in."
+            : " Plug in the pen drive and press Alt+P to copy the books onto it.";
+
+        OffMachineStatus = said;
+        OffMachineOverdue = overdue is not null;
     }
 
     /// <summary>Re-reads the day-end reports already taken.</summary>
@@ -311,6 +375,61 @@ public sealed class MaintenanceViewModel : ObservableObject
         return $"Backed up: {result.Bytes / 1024:N0} KB, verified, {Plural.Of(held, "snapshot")} on hand.";
     },
     then: RefreshSnapshots);
+
+    /// <summary>
+    /// Takes a snapshot now and copies it to a pen drive, checking the copy byte for byte.
+    /// </summary>
+    /// <remarks>
+    /// A fresh snapshot rather than the newest on disk: the point of the copy is the books as they
+    /// stand, and the newest snapshot could be last night's.
+    /// </remarks>
+    public Task CopyToPenDrive() => Run("Copy to the pen drive", () =>
+    {
+        if (_offMachine is null)
+            return "This lane has no way to copy to a pen drive.";
+
+        if (_offMachine.Choose() is not { } drive)
+        {
+            return _offMachine.Plugged().Count == 0
+                ? "No pen drive found. Plug one in, then press Alt+P again."
+                : $"{Plural.Of(_offMachine.Plugged().Count, "pen drive")} plugged in, and none is the shop's backup drive yet. "
+                  + "Take out the ones that are not the shop's, then press Alt+P again.";
+        }
+
+        Say($"Taking a snapshot for {drive.Name}…");
+
+        var backup = new DatabaseBackup(_database, BackupDirectory);
+        var snapshot = backup.Create(DateTimeOffset.Now, Keep);
+
+        foreach (var problem in snapshot.Problems)
+            Say(problem);
+
+        if (!snapshot.Succeeded)
+            return "Backup FAILED, so nothing was copied to the pen drive.";
+
+        Say($"Wrote {snapshot.Path}, verified.");
+        Say($"Copying to {_offMachine.FolderOn(drive)}");
+
+        var copy = _offMachine.Copy(snapshot.Path, drive, DateTimeOffset.Now);
+
+        Say(copy.Detail);
+
+        if (!copy.Succeeded)
+            return $"Copy FAILED: {copy.Detail}";
+
+        if (copy.Pruned.Count > 0)
+            Say($"Removed {Plural.Of(copy.Pruned.Count, "older copy", "older copies")} from the drive, keeping {OffMachineCopy.DefaultKeep}.");
+
+        var held = _offMachine.CopiesOn(drive).Count;
+        Say($"{Plural.Of(held, "copy", "copies")} on {drive.Name}.");
+
+        return $"Copied to {drive.Name} and checked. Keep the drive somewhere other than the shop.";
+    },
+    then: () =>
+    {
+        RefreshSnapshots();
+        RefreshOffMachine();
+    });
 
     /// <summary>Checks the database, and says what is wrong rather than offering to fix it.</summary>
     public Task Check() => Run("Check", () =>

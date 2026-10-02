@@ -27,9 +27,68 @@ public sealed partial class BillingViewModel
                 return;
 
             _pendingDayClose = value;
+
+            // A count belongs to the close it was typed for. Backing out and coming back counts again.
+            if (!value)
+            {
+                _cashCounted = null;
+                _dayClosePreview = null;
+            }
+
             Raise(nameof(IsConfirmingDayClose));
+            Raise(nameof(IsCountingDrawer));
             Raise(nameof(DayCloseKeys));
         }
+    }
+
+    private decimal? _cashCounted;
+    private DayCloseSummary? _dayClosePreview;
+
+    /// <summary>
+    /// True while the close pane waits for the drawer to be counted. The cash the till expects is not
+    /// on screen until it has been: a count made with the answer showing is a copy, not a count.
+    /// </summary>
+    public bool IsCountingDrawer => _pendingDayClose && _cashCounted is null;
+
+    /// <summary>
+    /// Enter in the close pane: what was typed is the cash counted. The expected figure and the
+    /// difference come up once it is in.
+    /// </summary>
+    private void CommitCount()
+    {
+        var typed = EditBuffer.Trim();
+
+        if (typed.Length == 0)
+        {
+            StatusMessage = _cashCounted is null
+                ? $"Count the cash in the drawer, type it, then {CommitKey}. Or {CloseDayKey} to close without a count."
+                : $"{CloseDayKey} again to close the day, {CancelKey} to keep selling.";
+            return;
+        }
+
+        if (!TryParseAmount(typed, out var counted) || counted < 0m)
+        {
+            StatusMessage = $"'{typed}' is not an amount of cash.";
+            return;
+        }
+
+        if (_dayClosePreview is not { } preview)
+            return;
+
+        _cashCounted = counted;
+        EditBuffer = string.Empty;
+        DayCloseRows = CloseRows(preview, counted);
+        Raise(nameof(IsCountingDrawer));
+        Raise(nameof(DayCloseKeys));
+
+        var difference = counted - preview.CashExpected;
+
+        StatusMessage = difference switch
+        {
+            0m => $"Counted {Show.Money(counted)}: exactly right. {CloseDayKey} again to close the day.",
+            > 0m => $"Counted {Show.Money(counted)}: over by {Show.Money(difference)}. Count again, or {CloseDayKey} to close the day.",
+            _ => $"Counted {Show.Money(counted)}: short by {Show.Money(-difference)}. Count again, or {CloseDayKey} to close the day.",
+        };
     }
 
     /// <summary>The day about to be closed, a figure a line.</summary>
@@ -57,9 +116,23 @@ public sealed partial class BillingViewModel
     public string CancelKey { get; set; } = "Esc";
 
     /// <summary>The foot of the close pane: how to go ahead, and how not to.</summary>
-    public string DayCloseKeys => $"{CloseDayKey} again closes the day  ·  {CancelKey} keeps selling  ·  a close cannot be undone";
+    public string DayCloseKeys => IsCountingDrawer
+        ? $"Count the drawer, type it, {CommitKey}  ·  {CloseDayKey} closes without a count  ·  {CancelKey} keeps selling"
+        : $"{CloseDayKey} again closes the day  ·  {CancelKey} keeps selling  ·  a close cannot be undone";
 
-    private static List<DayCloseRow> CloseRows(DayCloseSummary day)
+    /// <summary>A drawer difference in words: "counted exactly right", "over by ₹5.00", "short by ₹20.00".</summary>
+    private static string Drawer(decimal difference) => difference switch
+    {
+        0m => "counted exactly right",
+        > 0m => $"over by {Show.Money(difference)}",
+        _ => $"short by {Show.Money(-difference)}",
+    };
+
+    /// <param name="counted">
+    /// The cash counted, once it has been. Until then the drawer figure is left off, so the count is
+    /// made without the answer on screen.
+    /// </param>
+    private static List<DayCloseRow> CloseRows(DayCloseSummary day, decimal? counted = null)
     {
         var rows = new List<DayCloseRow>
         {
@@ -81,7 +154,23 @@ public sealed partial class BillingViewModel
         if (day.CashPaidIn != 0m)
             rows.Add(new("Put into the drawer", Show.Money(day.CashPaidIn)));
 
-        rows.Add(new("Cash expected in the drawer", Show.Money(day.CashExpected), Emphasis: true));
+        if (counted is not { } count)
+        {
+            rows.Add(new("Cash in the drawer", "count it first", Emphasis: true));
+            return rows;
+        }
+
+        rows.Add(new("Cash counted", Show.Money(count)));
+        rows.Add(new("Cash expected in the drawer", Show.Money(day.CashExpected)));
+
+        var difference = count - day.CashExpected;
+
+        rows.Add(difference switch
+        {
+            0m => new DayCloseRow("The drawer is", "exactly right", Emphasis: true),
+            > 0m => new DayCloseRow("The drawer is over by", Show.Money(difference), Emphasis: true),
+            _ => new DayCloseRow("The drawer is short by", Show.Money(-difference), Emphasis: true),
+        });
 
         return rows;
     }

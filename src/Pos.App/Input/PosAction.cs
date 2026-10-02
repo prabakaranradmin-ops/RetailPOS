@@ -83,6 +83,9 @@ public enum PosAction
     /// <summary>The customer on the bill is a business: their GSTIN and address.</summary>
     BusinessCustomer,
 
+    /// <summary>An item not in the catalogue: its name, price and GST slab, typed in and flagged for the owner.</summary>
+    OpenItem,
+
     /// <summary>
     /// Every key and what it does, read off the keymap - including the ones with no room on the
     /// strip, such as the UPI slip, the khata statement and voiding a sale.
@@ -107,6 +110,7 @@ public static class PosActionText
         ("The bill", PosAction.EditDiscount, "Discount the line"),
         ("The bill", PosAction.DeleteLine, "Remove the line"),
         ("The bill", PosAction.QuickKeys, "Loose items off their keys"),
+        ("The bill", PosAction.OpenItem, "An item not in the catalogue"),
         ("The bill", PosAction.HoldBill, "Hold the bill"),
         ("The bill", PosAction.RecallBill, "Take back a held bill or an order"),
         ("The bill", PosAction.NewBill, "Start a new bill"),

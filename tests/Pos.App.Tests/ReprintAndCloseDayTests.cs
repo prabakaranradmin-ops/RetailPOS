@@ -325,6 +325,27 @@ public class ReprintAndCloseDayTests
     }
 
     /// <summary>
+    /// Whatever became of the pen drive copy is said at the close: copied, failed, or a week overdue.
+    /// The close is the one moment somebody is standing at the till to read it.
+    /// </summary>
+    [Theory]
+    [InlineData("Copied to SHOP (E:), checked.")]
+    [InlineData("The shop's books were last copied off this computer 9 days ago. Plug in the backup pen drive before closing.")]
+    public void TheCloseSaysWhatBecameOfThePenDriveCopy(string said)
+    {
+        using var till = Till();
+        till.Backups.OffMachine = said;
+
+        Sell(till, "8901234567890");
+
+        till.Press(Key.F12, ModifierKeys.Shift);
+        till.Press(Key.F12, ModifierKeys.Shift);
+
+        Assert.StartsWith("Day closed.", till.ViewModel.StatusMessage);
+        Assert.Contains(said, till.ViewModel.StatusMessage);
+    }
+
+    /// <summary>
     /// A printer out of paper must not stop the day being closed. The report can be reprinted from
     /// the saved figures.
     /// </summary>

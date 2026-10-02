@@ -75,6 +75,9 @@ public static class GstReturnFiles
         if (data.Purchases.Count > 0)
             tables.Add(("purchases", PurchaseRegister(data)));
 
+        if (data.SentBack.Count > 0)
+            tables.Add(("debit-notes", DebitNotes(data)));
+
         var written = new List<string> { pagePath };
         var csvNames = tables.Select(t => $"{stem}-{t.Suffix}.csv").ToList();
 
@@ -292,6 +295,34 @@ public static class GstReturnFiles
                 Amount(row.Sgst),
                 Amount(row.Total),
                 row.ChargesGst ? "Yes" : "No"));
+        }
+
+        return csv.ToString();
+    }
+
+    /// <summary>
+    /// Every debit note in the month, one row each: goods sent back to suppliers, and the input tax
+    /// on them that comes off the claim.
+    /// </summary>
+    public static string DebitNotes(GstReturnData data)
+    {
+        var csv = new StringBuilder();
+        csv.AppendLine("Supplier GSTIN,Supplier,Debit Note No,Date,Against Bill,Taxable Value,Integrated Tax,Central Tax,State/UT Tax,Total,Input Tax To Reverse");
+
+        foreach (var row in data.SentBack)
+        {
+            csv.AppendLine(Row(
+                row.SupplierGstin ?? "",
+                row.SupplierName,
+                row.Number,
+                row.Date.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture),
+                row.BillNo,
+                Amount(row.TaxableValue),
+                Amount(row.Igst),
+                Amount(row.Cgst),
+                Amount(row.Sgst),
+                Amount(row.Total),
+                row.ChargesGst ? Amount(row.Tax) : "0.00"));
         }
 
         return csv.ToString();
@@ -542,6 +573,23 @@ public static class GstReturnFiles
                 p.Append($"<td>{row.BillDate.ToString("dd MMM yyyy", India)}</td><td class=\"n\">{Money(row.TaxableValue)}</td>");
                 p.Append($"<td class=\"n\">{(row.ChargesGst ? Money(row.Igst + row.Cgst + row.Sgst) : "no GST")}</td><td class=\"n\">{Money(row.Total)}</td></tr>");
             }
+            p.Append("</tbody></table>");
+        }
+
+        // Goods sent back: the input tax on them comes off the claim.
+        if (d.SentBack.Count > 0)
+        {
+            p.Append("<h3 style=\"margin-top:22px\">Goods sent back to suppliers</h3>");
+            p.Append($"<p class=\"lede\">Debit notes made this month. The input tax on them, {Money(d.InputTaxSentBack)}, comes off what is claimed; the suppliers' credit notes for them should be in GSTR-2B.</p>");
+            p.Append("<table><thead><tr><th>Supplier</th><th>Debit note</th><th>Date</th><th>Against bill</th><th class=\"n\">Taxable</th><th class=\"n\">Tax</th><th class=\"n\">Total</th></tr></thead><tbody>");
+
+            foreach (var row in d.SentBack)
+            {
+                p.Append($"<tr><td>{Escape(row.SupplierName)}</td><td class=\"mono\">{Escape(row.Number)}</td><td>{row.Date.ToString("dd MMM yyyy", India)}</td>");
+                p.Append($"<td class=\"mono\">{Escape(row.BillNo)}</td><td class=\"n\">{Money(row.TaxableValue)}</td>");
+                p.Append($"<td class=\"n\">{(row.ChargesGst ? Money(row.Tax) : "no GST")}</td><td class=\"n\">{Money(row.Total)}</td></tr>");
+            }
+
             p.Append("</tbody></table>");
         }
 

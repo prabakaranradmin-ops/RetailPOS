@@ -263,6 +263,56 @@ public static class OwnerCharts
             EmptyText: "Nothing bought in the last year.",
             CategoryName: "Month");
 
+    /// <summary>
+    /// The drawer at each close: over above the line in green, short below it in rose, nothing for a
+    /// close that was not counted. Two series rather than one, so the colour says which way it went
+    /// as well as the side of the line.
+    /// </summary>
+    public static CategoryChartData Drawers(Pos.Core.Analytics.DrawerCounts drawers) =>
+        new(
+            Labels: drawers.Closes.Select(c => c.ClosedAt.ToString("dd MMM", Dates)).ToList(),
+            Titles: drawers.Closes.Select(c => $"Report {c.ReportId}, closed {c.ClosedAt.ToString("ddd d MMM yyyy, HH:mm", Dates)}").ToList(),
+            Series:
+            [
+                new ChartSeries("Over", SeriesKind.Column, drawers.Closes.Select(c => (double)Math.Max(0m, c.Difference ?? 0m)).ToList(), Green),
+                new ChartSeries("Short", SeriesKind.Column, drawers.Closes.Select(c => (double)Math.Min(0m, c.Difference ?? 0m)).ToList(), Rose),
+            ],
+            AxisFormat: ChartFormat.CompactMoney,
+            ValueFormat: v => ChartFormat.Money(Math.Abs(v)),
+            Notes: drawers.Closes.Select(c => c.Counted is null
+                ? "Not counted"
+                : $"Counted {ChartFormat.Money((double)c.Counted.Value)} by {c.CountedBy ?? "nobody named"}, expected {ChartFormat.Money((double)c.Expected)}"
+                  + (c.OnTheTill.Count > 0 ? $" · on the till: {string.Join(", ", c.OnTheTill)}" : string.Empty)).ToList(),
+            EmptyText: "Every drawer counted in this period came out exactly right - or none was counted.",
+            CategoryName: "Close");
+
+    /// <summary>
+    /// A festival's days, this year's takings beside last year's, counted from the day itself so the
+    /// two weeks line up however far the festival moved.
+    /// </summary>
+    public static CategoryChartData Festival(FestivalComparison festival) =>
+        new(
+            Labels: festival.Days.Select(d => FestivalDayLabel(d.Offset, shortForm: true)).ToList(),
+            Titles: festival.Days.Select(d => $"{FestivalDayLabel(d.Offset, shortForm: false)}: {d.ThisDate.ToString("ddd d MMM yyyy", Dates)} against {d.LastDate.ToString("ddd d MMM yyyy", Dates)}").ToList(),
+            Series:
+            [
+                new ChartSeries($"{festival.ThisYear.Day.Year}", SeriesKind.Column, festival.Days.Select(d => (double)d.ThisSales).ToList(), Green),
+                new ChartSeries($"{festival.LastYear.Day.Year}", SeriesKind.Column, festival.Days.Select(d => (double)d.LastSales).ToList(), Slate),
+            ],
+            AxisFormat: ChartFormat.CompactMoney,
+            ValueFormat: ChartFormat.Money,
+            Notes: festival.Days.Select(d => $"{Plural(d.ThisBills, "bill")} against {Plural(d.LastBills, "bill")}").ToList(),
+            EmptyText: "No sales on these days in either year.",
+            CategoryName: "Day");
+
+    /// <summary>"3 before", "the day", "1 after" - or written out for the tooltip.</summary>
+    public static string FestivalDayLabel(int offset, bool shortForm) => offset switch
+    {
+        0 => shortForm ? "Day" : "The day itself",
+        < 0 => shortForm ? $"−{-offset}" : $"{Plural(-offset, "day")} before",
+        _ => shortForm ? $"+{offset}" : $"{Plural(offset, "day")} after",
+    };
+
     /// <summary>Takings day by day, for the small line under the period's total.</summary>
     public static IReadOnlyList<double> Spark(IReadOnlyList<DailyPoint> days) =>
         days.Select(d => (double)d.NetSales).ToList();

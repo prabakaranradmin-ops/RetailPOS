@@ -15,14 +15,16 @@
 
   <ItemGroup>
     <!--
-      The real theme file, copied beside the tests and read as XML.
+      The real theme files - the styles and every look's palette - copied beside the tests and read
+      as XML.
 
-      Not a second copy of the palette: a colour changed in App.xaml has to be answerable by
+      Not a second copy of the palettes: a colour changed in Themes\ has to be answerable by
       ThemeContrastTests, and a hard-coded table of hex values in a test would agree with the
       screen only until somebody edited one of them. None rather than Content so the WPF targets
-      do not try to compile it a second time.
+      do not try to compile them a second time.
     -->
     <None Include="..\..\src\Pos.App\Theme.xaml" Link="Theme.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Pos.App\Themes\*.xaml" Link="Themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

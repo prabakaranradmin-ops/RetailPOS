@@ -4,7 +4,13 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <!-- Every brush, font and style the windows bind to. See Theme.xaml for why it is split. -->
+        <!--
+          The look's colours: Night until the lane's settings say otherwise, when Looks.Apply swaps
+          this for the chosen one. First, so the styles below find their colours from the start.
+        -->
+        <ResourceDictionary Source="Themes/Night.xaml" />
+
+        <!-- Every font and style the windows bind to. See Theme.xaml for why it is split. -->
         <ResourceDictionary Source="Theme.xaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>

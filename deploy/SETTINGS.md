@@ -21,6 +21,52 @@ shifts change — the cashier presses `Ctrl+U` and types their name, and the day
 splits takings and cash by person, which is what makes a drawer difference answerable. Set it to a
 name only on a lane that one person runs all day.
 
+### Cashiers with their own PIN
+
+`cashiers` is empty unless the owner adds people, and then the till works as above. With one or
+more cashiers listed:
+- **Signing on.** `Ctrl+U` shows the list. The cashier picks their name with the arrows, types
+  their own PIN, and presses `Enter`.
+- **No money before signing on.** The till takes no money until somebody has signed on. Every sale,
+  void, refund and cash movement then carries that person's name.
+- **`defaultCashierName` is ignored.** A name assumed from the file would put sales against
+  somebody who never signed on.
+
+The owner adds and removes cashiers on the owner's screen: **Ctrl+D**, **Ctrl+5**, *Who works the
+till*. Each PIN is stored as a salted hash, like the owner's, and is never written to the file:
+
+```json
+"cashiers": [
+  { "name": "Murugan", "pin": { "salt": "…", "hash": "…", "iterations": 600000 } }
+]
+```
+
+These are per-person PINs, not a shared password. A shared one would attribute nothing, which is
+why the till never had one.
+
+### What waits for the owner's PIN
+
+`approvals` lists which of the till's riskier actions wait for the owner's PIN, typed at the till
+over the action with its amount on screen. All are off unless the owner turns them on, and none
+applies until the owner's PIN (`security.dashboardPin`) is set, since nobody could approve without it.
+
+| Key | Asks before |
+|---|---|
+| `voids` | Voiding a bill that has been paid |
+| `discountAbovePercent` | A discount typed by hand that takes more than this share of a line. `0` means any discount; `null` means none. Offers are never asked about. |
+| `cashRefunds` | A return refunded in cash. UPI, card and khata refunds are not asked about. |
+| `cashOut` | Cash taken out of the drawer, or an expense paid from it. The float and cash put in are not. |
+| `closeDay` | Closing the day |
+
+The owner changes these on the owner's screen, *What waits for the owner's PIN*. At the till,
+`Enter` tries the PIN and `Esc` backs out with nothing done. Three wrong PINs also back out. While
+the PIN is asked for, no other key does anything.
+
+Every void, discount typed by hand, cash refund, cash out and close is recorded whether or not it
+was asked about. So is every sign-on, and every PIN the till asked for and did not get. The
+records go in the `till_events` table, for the owner's exceptions report. This covers the till
+only; the `pos` command-line tool is for support and does not ask.
+
 ## Invoice numbers
 
 `{storePrefix}/{financial year}/{lane}-{sequence}` — for example `RM/26-27/L1-11358`, or
@@ -132,6 +178,46 @@ shelf. Anything from `1` to `120`; outside that the lane will not start, and say
 The owner changes it on the Orders tab: **Ctrl+D**, **Ctrl+0**, **Alt+D**, type the days,
 **Enter**.
 
+## Ledger names for the day book
+
+The owner's GST tab saves the month's **day book** for the accountant (**Ctrl+D**, **Ctrl+8**,
+**Alt+D**). It is every bill, return, khata payment, purchase, payment and expense as vouchers. It
+is saved as a CSV and as two files for Tally. The vouchers name ledgers, and these are the names it
+uses unless `dayBook` says otherwise:
+
+```json
+"dayBook": {
+  "cash": "Cash",
+  "bank": "Bank",
+  "card": "Card collections",
+  "upi": "UPI collections",
+  "khataCustomers": "Khata customers",
+  "loyaltyPoints": "Loyalty points redeemed",
+  "sales": "Sales",
+  "purchases": "Purchases",
+  "outputCgst": "Output CGST",
+  "outputSgst": "Output SGST",
+  "outputIgst": "Output IGST",
+  "inputCgst": "Input CGST",
+  "inputSgst": "Input SGST",
+  "inputIgst": "Input IGST",
+  "roundOff": "Round off",
+  "expensesPaidOutside": "Bank",
+  "cashTakenOut": "Cash taken out of the till",
+  "cashPutIn": "Cash put into the till"
+}
+```
+
+Put in only the ones the accountant names differently; the rest keep the names above.
+- **Built from these.** Ledgers that depend on the rate are built from them: `Sales @ 5%`,
+  `Sales inter-state @ 18%`, `Sales, bill of supply`, `Purchases @ 5%`, `Purchases, no GST`.
+- **Named for themselves.** Each khata customer is a ledger of their own, `Lakshmi (9500012345)`,
+  and so is each supplier. `khataCustomers` is only for a customer the shop has since forgotten at
+  their request.
+- **Expenses** use their category as the ledger name: `Tea and snacks`, `Electricity`.
+- **What stops the lane.** A name left empty, or two the same, stops the lane starting, and it says
+  which. The one exception is `expensesPaidOutside`, which may be the same as `bank`.
+
 ## Bill layout
 
 `receiptLayout` is `Standard` or `Compact`. The owner changes it from the owner's screen —
@@ -151,6 +237,28 @@ need to edit the file. The next bill uses the new layout.
 Both are complete tax invoices (or bills of supply, on a composition lane). Both print the quantity
 with its unit — `3 Pcs`, `2.75 Kg`, `2 Seepu` — and a Tamil lane prints the traditional units in
 Tamil: `2 சீப்பு`, `1.5 முழம்`.
+
+## How the screens look
+
+`screenTheme` is `Night` unless the owner chooses another. It takes one of five values:
+
+| Value | The look | Suits |
+|---|---|---|
+| `Morning` | Light and warm: a cream page and soft dark text | A shop open to the early daylight |
+| `Noon` | The brightest and crispest: cool white, the darkest text, firm edges | Sunlight falling on the screen |
+| `Evening` | Dim slate, short of black | Dusk, as the daylight goes |
+| `Night` | Dark, the till's original look | A shop lit by its own lamps |
+| `ByTimeOfDay` | Changes on its own: morning from 6 am, noon from 11 am, evening from 4 pm, night from 7 pm | A shop open from morning to night |
+
+The owner changes it from the owner's screen, which writes this setting, so there is no need to
+edit the file. Open the owner's screen with **Ctrl+D**, go to Settings with **Ctrl+5**, then press
+**Alt+T** (follow the time of day), **Alt+M** (morning), **Alt+O** (noon), **Alt+E** (evening) or
+**Alt+N** (night). The till,
+the owner's screen and any dialog change at once. A bill in progress is not touched, and nothing
+about a bill or its printing changes.
+
+A value this build does not know, misspelt or from a later version, is read as `Night`, and the
+lane starts as usual. A look only changes colours, so it is never a reason for a till not to bill.
 
 A reprint of an old bill comes out in whichever layout is set when it is reprinted. The figures are
 the same either way.

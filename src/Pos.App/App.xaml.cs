@@ -83,6 +83,10 @@ public partial class App : Application
         settings.TaxMode = ProductVariant.Resolve(settings.TaxMode);
         var keymap = Keymap.LoadOrDefault(Path.Combine(DataDirectory, "keymap.json"));
 
+        // The look the owner chose, before the first window opens, so the till never flashes dark
+        // on a lane set to a light look.
+        Looks.Follow(settings.ScreenTheme);
+
         var database = new PosDatabase(Path.Combine(DataDirectory, "pos.db"));
         database.EnsureMigrated();
 
@@ -122,7 +126,10 @@ public partial class App : Application
             new DayCloseRepository(database, heldBills),
             new ZReportComposer(settings.Store.ToProfile(), printer.PaperWidthChars, settings.ReceiptLanguage, settings.TaxMode),
             printer,
-            new DatabaseBackupService(new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")), log: _log),
+            new DatabaseBackupService(
+                new DatabaseBackup(database, Path.Combine(DataDirectory, "backups")),
+                log: _log,
+                offMachine: new OffMachineCopy(Path.Combine(DataDirectory, "backups"), settings.LaneId)),
             clock: null,
             stock: new StockRepository(database, () => settings.LowStockPercent),
             expiry: new ExpiryRepository(database));
@@ -140,7 +147,9 @@ public partial class App : Application
             settings.ScannerMaxKeystrokeGap,
             invoices: invoices,
             dayClose: dayClose,
-            cashierName: settings.DefaultCashierName,
+            // With cashiers set up, nobody is on the till until somebody signs on with their PIN: a
+            // name assumed from the file would put sales against a person who never signed on.
+            cashierName: settings.Cashiers.Count > 0 ? null : settings.DefaultCashierName,
 
             // The till's own drawer and printer, and whoever is on the till when the money is
             // handed over - so the day-end report puts a cash repayment on the right shift.
@@ -175,6 +184,10 @@ public partial class App : Application
 
         viewModelRef = viewModel;
         viewModel.LowStockPercent = settings.LowStockPercent;
+
+        // The cashiers' PINs, the owner's PIN in front of voids and the like, and the record of both.
+        // Read from the settings as they stand, so the owner's screen changes them without a restart.
+        viewModel.Security = new TillSecurity(settings, new TillEventRepository(database));
 
         // An order confirmed to the customer is a message the cashier pastes into their own reply.
         viewModel.ShopName = settings.Store.Name;
@@ -234,14 +247,16 @@ public partial class App : Application
 
             var items = new ItemRepository(database);
 
+            // Suggestions come off the same index the till searches on, so what the shop is offered
+            // is what the shop actually sells. Shared with the list of items the till sold that are
+            // not in the catalogue, which fills it in to add one.
+            var newItem = new NewItemViewModel(items, new HsnSuggester(query => items.Search(query)));
+
             return new OwnerView(
                 BuildOwnerViewModel(settings, database, viewModel, receipts),
                 new CatalogueImportViewModel(items),
                 BuildHardwareViewModel(settings),
-
-                // Suggestions come off the same index the till searches on, so what the shop is
-                // offered is what the shop actually sells.
-                new NewItemViewModel(items, new HsnSuggester(query => items.Search(query))),
+                newItem,
 
                 BuildMaintenanceViewModel(settings, database, heldBills, printer),
 
@@ -262,7 +277,16 @@ public partial class App : Application
                 // The month's return, read from the same books and written where the owner says.
                 new GstReturnViewModel(
                     month => new GstReturnQuery(database).Gather(settings.LaneId, month, settings.OutletStateCode),
-                    (data, path) => GstReturnFiles.Write(data, path, settings.Store.Name, settings.Store.Gstin)),
+                    (data, path) => GstReturnFiles.Write(data, path, settings.Store.Name, settings.Store.Gstin))
+                {
+                    // The month's books for the accountant, under the ledger names they keep.
+                    DayBook = (month, path) =>
+                    {
+                        var book = new DayBookQuery(database).Month(settings.LaneId, month, settings.DayBook);
+                        var files = book.HasAnything ? DayBookFiles.Write(book, path) : [];
+                        return new DayBookSaved(book.Vouchers.Count, book.Notes, files);
+                    },
+                },
 
                 // Deliveries come in against the same catalogue the till sells from, and a supplier
                 // paid from the drawer is on whoever is on the till at the time.
@@ -317,7 +341,10 @@ public partial class App : Application
                     {
                         viewModel.Offers = offers;
                         _log?.Info("offers", $"{Plural.Of(offers.Count, "offer")} loaded");
-                    }));
+                    }),
+
+                // What the till sold that is not in the catalogue, waiting to be added.
+                new OpenItemsViewModel(new OpenItemRepository(database), newItem));
         };
 
         MainWindow = billingView;
@@ -374,7 +401,7 @@ public partial class App : Application
         var settingsPath = Path.Combine(DataDirectory, "settings.json");
         var stock = new StockRepository(database, () => settings.LowStockPercent);
 
-        return new OwnerViewModel(
+        var owner = new OwnerViewModel(
             settings.LaneId,
             days =>
             {
@@ -519,7 +546,83 @@ public partial class App : Application
 
                 _log?.Info("settings", id is null ? "UPI code turned off" : $"UPI ID set to {id}");
                 return null;
+            },
+
+            // Every window changes at once, the till behind this screen included; the file keeps
+            // the choice for the next time the lane starts.
+            screenTheme: settings.ScreenTheme,
+            applyScreenTheme: theme =>
+            {
+                settings.ScreenTheme = theme;
+                Looks.Follow(theme);
+
+                try
+                {
+                    SettingsFile.SetScreenTheme(settingsPath, theme);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the screen theme", ex);
+                    return $"Changed for this session, but it could not be saved: {ex.Message}";
+                }
+
+                _log?.Info("settings", $"screens set to the {theme} look");
+                return null;
             });
+
+        // The people on the till and what waits for the owner's PIN. Changed in the settings the
+        // till reads at each question, so the next sign-on or void follows it without a restart.
+        owner.UseTillAccess(
+            settings.Cashiers.Select(c => c.Name.Trim()).ToList(),
+            addCashier: (name, pin) => SaveCashiers(settingsPath, settings,
+                [.. settings.Cashiers, new CashierSettings { Name = name, Pin = DashboardLock.Create(pin) }],
+                $"cashier {name} added"),
+            removeCashier: name => SaveCashiers(settingsPath, settings,
+                settings.Cashiers.Where(c => !string.Equals(c.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)).ToList(),
+                $"cashier {name} taken off"),
+            settings.Approvals,
+            applyApprovals: approvals =>
+            {
+                try
+                {
+                    SettingsFile.SetApprovals(settingsPath, approvals);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error("settings", "could not write the approvals", ex);
+                    return $"Not changed: it could not be saved. {ex.Message}";
+                }
+
+                settings.Approvals = approvals.Copy();
+                _log?.Info("settings", "what waits for the owner's PIN was changed");
+                return null;
+            });
+
+        // A festival against last year's: the dashboard's own gathering, for the two windows.
+        owner.UseFestivals((from, to, items) => new DashboardQuery(database).Gather(settings.LaneId, from, to, items));
+
+        return owner;
+    }
+
+    /// <summary>
+    /// Saves the cashiers, and only once they are saved puts them in front of the till: a cashier
+    /// who exists only until a restart would be locked out of their own till the next morning.
+    /// </summary>
+    private string? SaveCashiers(string settingsPath, PosSettings settings, List<CashierSettings> cashiers, string what)
+    {
+        try
+        {
+            SettingsFile.SetCashiers(settingsPath, cashiers);
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("settings", "could not write the cashiers", ex);
+            return $"Not changed: it could not be saved. {ex.Message}";
+        }
+
+        settings.Cashiers = cashiers;
+        _log?.Info("settings", what);
+        return null;
     }
 
     /// <summary>
@@ -555,7 +658,8 @@ public partial class App : Application
                 ? printer.Print(report.ToEscPos(raster: printer.Raster))
                 : new PrintOutcome(PrintStatus.NoPrinterConfigured, "This lane has no printer configured, so there is nothing to print to."),
 
-            post: action => Dispatcher.Invoke(action));
+            post: action => Dispatcher.Invoke(action),
+            offMachine: new OffMachineCopy(Path.Combine(DataDirectory, "backups"), settings.LaneId));
 
     private HardwareViewModel BuildHardwareViewModel(PosSettings settings) =>
         new(

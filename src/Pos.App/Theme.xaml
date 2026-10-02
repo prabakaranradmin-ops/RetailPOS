@@ -9,9 +9,9 @@
   Split out so it can be loaded on its own. App.xaml carries x:Class, which makes it an
   application definition rather than a plain dictionary, and WPF refuses to load one of those into
   anything but the App it belongs to - so while the palette lived there, no test could read the
-  brushes the screen actually uses without starting the whole lane. ThemeContrastTests measures
-  these values, and a colour that stops being legible has to fail a test rather than wait to be
-  noticed on a counter.
+  brushes the screen actually uses without starting the whole lane. The palettes are now in
+  Themes\, one per look; ThemeContrastTests measures every one of them, and a colour that stops
+  being legible has to fail a test rather than wait to be noticed on a counter.
 
   Everything a window is made of is styled here, once, for every window. The owner's screen used to
   carry its own buttons and boxes, and the PIN prompt in front of it - a window of its own - got the
@@ -20,157 +20,12 @@
 -->
 
 
-    <!-- High contrast on a bright shop floor, and legible at arm's length. -->
-    <SolidColorBrush x:Key="Surface" Color="#FF0A0D13" />
-    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF111722" />
-    <SolidColorBrush x:Key="SurfaceHeader" Color="#FF141C2B" />
-    <SolidColorBrush x:Key="Ink" Color="#FFF8FAFC" />
-    <SolidColorBrush x:Key="InkMuted" Color="#FF94A3B8" />
-
     <!--
-      The quietest ink on the screen, and it still has to be legible.
-
-      It was #FF64748B, which reads well enough on a developer's monitor and measures 3.15:1 against
-      a selected row - below the 4.5:1 that normal-size text needs to stay readable on a cheap panel
-      under shop lighting. That mattered because this is not only the line number: it is the MRP
-      column, and a price nobody can quite read is worse than one that was never shown.
-
-      #FF8292A8 is the smallest step that clears 4.5:1 on every background this is drawn against. It
-      sits closer to InkMuted than it used to, which is the cost of the change; the two are still
-      distinguishable, and legibility is worth more here than the width of that gap.
-      ThemeContrastTests holds the figures and fails if either moves back.
+      The colours are not here. Each look - Morning, Noon, Evening and Night - is a palette of its
+      own in Themes\, defining the same names, and one of them is loaded alongside this file
+      (Looks.Apply). Everything below takes its colours by those names as dynamic resources, so
+      changing the look repaints every open window at once.
     -->
-    <SolidColorBrush x:Key="InkDim" Color="#FF8292A8" />
-
-    <SolidColorBrush x:Key="Accent" Color="#FF38BDF8" />
-    <SolidColorBrush x:Key="Positive" Color="#FF10B981" />
-
-    <!--
-      Money off. Was #FFF43F5E, which measured 4.09:1 on a selected row - so the one figure on the
-      line saying a customer is being charged less than the shelf price was the hardest to read on
-      the row the cashier had actually selected. Lightened to clear 4.5:1 everywhere; still
-      unmistakably red, and still never the same colour as money taken.
-    -->
-    <SolidColorBrush x:Key="Negative" Color="#FFF85D76" />
-    <SolidColorBrush x:Key="Line" Color="#FF232B38" />
-
-    <!-- The row a scan just landed on, and the tint that separates one row from the next. -->
-    <SolidColorBrush x:Key="RowActive" Color="#FF16283A" />
-    <SolidColorBrush x:Key="RowAlt" Color="#FF141A25" />
-
-    <!-- A row under the mouse: a breath lighter, well short of the selected row's tint. -->
-    <SolidColorBrush x:Key="RowHover" Color="#0FFFFFFF" />
-
-    <!-- Every other row of a grid that sits on a card: RowAlt's step, laid over the card's gradient
-         rather than painted as a block of its own colour across it. -->
-    <SolidColorBrush x:Key="RowStripe" Color="#08FFFFFF" />
-
-    <!--
-      The edge of a box you type in.
-
-      Boxes used to be edged in the divider colour, 1.26:1 against a card, so an empty one was a
-      rectangle you had to look for. A control's outline has to reach 3:1 to be seen at all on a
-      counter; this is the smallest step that does on the page and on a card, and still sits well
-      below the ink so a box never reads as text. ThemeContrastTests holds it there.
-    -->
-    <SolidColorBrush x:Key="FieldBorder" Color="#FF5B6B82" />
-    <SolidColorBrush x:Key="FieldBorderHover" Color="#FF7A8BA3" />
-    <SolidColorBrush x:Key="FieldFill" Color="#FF0B0F15" />
-
-    <!-- The glow round a box or button that has the keyboard. -->
-    <SolidColorBrush x:Key="AccentGlow" Color="#5938BDF8" />
-
-    <!-- Dark text for a bright face: a button in the accent, the green Pay key. -->
-    <SolidColorBrush x:Key="OnAccent" Color="#FF04121C" />
-
-    <!--
-      What a message is, by colour as well as by word.
-
-      The till used to say everything in one blue - "the receipt did not print" in the same colour as
-      "bill held as H001". Each kind now has an ink that clears 4.5:1 on the dark panels, and a
-      tinted ground to sit on. Red is kept for things that went wrong, amber for things to check.
-    -->
-    <SolidColorBrush x:Key="Danger" Color="#FFF87171" />
-    <SolidColorBrush x:Key="DangerSoft" Color="#FF2A1519" />
-    <SolidColorBrush x:Key="Warning" Color="#FFF5B544" />
-    <SolidColorBrush x:Key="WarningSoft" Color="#FF2B2213" />
-    <SolidColorBrush x:Key="Done" Color="#FF34D399" />
-    <SolidColorBrush x:Key="DoneSoft" Color="#FF0F2A21" />
-    <SolidColorBrush x:Key="InfoSoft" Color="#FF10243A" />
-
-    <!--
-      Money off, from the customer's side: amber, the same on the line, in the bill card and beside
-      the total. It used to be red on the line and green as "Saved" beside the total - one saving in
-      two colours, one of them the colour of a mistake.
-    -->
-    <SolidColorBrush x:Key="Saving" Color="#FFF5B544" />
-
-    <!-- The pane over the billing screen, dimming what is behind it. -->
-    <SolidColorBrush x:Key="Scrim" Color="#E6060910" />
-
-    <!-- Buttons: raised a little off the card, lighter under the mouse. -->
-    <SolidColorBrush x:Key="ButtonFace" Color="#FF1B2636" />
-    <SolidColorBrush x:Key="ButtonFaceHover" Color="#FF243247" />
-    <SolidColorBrush x:Key="ButtonFacePressed" Color="#FF151E2B" />
-    <SolidColorBrush x:Key="ButtonEdge" Color="#FF2A384C" />
-    <SolidColorBrush x:Key="ButtonEdgeHover" Color="#FF3E5068" />
-    <SolidColorBrush x:Key="AccentHover" Color="#FF7DD3FC" />
-
-    <!-- Cards, and the rim that lifts them off the page. -->
-    <SolidColorBrush x:Key="CardEdge" Color="#FF1F2937" />
-    <SolidColorBrush x:Key="IconChip" Color="#FF16283A" />
-
-    <!-- A scrollbar's thumb, which is a control and has to be seen: 3:1 on the panels it runs down. -->
-    <SolidColorBrush x:Key="ScrollThumb" Color="#FF55657C" />
-    <SolidColorBrush x:Key="ScrollThumbHover" Color="#FF7A8BA3" />
-
-    <!--
-      The charts' colours. The first three carry the meanings the rest of the screen already gives
-      them - the accent, money taken, money off - and the rest are told apart by lightness as well as
-      hue, so a legend still works for somebody who confuses red and green.
-    -->
-    <SolidColorBrush x:Key="ChartColour0" Color="#FF38BDF8" />
-    <SolidColorBrush x:Key="ChartColour1" Color="#FF10B981" />
-    <SolidColorBrush x:Key="ChartColour2" Color="#FFF5B544" />
-    <SolidColorBrush x:Key="ChartColour3" Color="#FFA78BFA" />
-    <SolidColorBrush x:Key="ChartColour4" Color="#FFF472B6" />
-    <SolidColorBrush x:Key="ChartColour5" Color="#FF2DD4BF" />
-    <SolidColorBrush x:Key="ChartColour6" Color="#FF94A3B8" />
-    <SolidColorBrush x:Key="ChartGrid" Color="#FF1C2533" />
-    <SolidColorBrush x:Key="ChartAxisLine" Color="#FF333F52" />
-    <SolidColorBrush x:Key="ChartTooltip" Color="#FF0C121C" />
-    <SolidColorBrush x:Key="ChartTooltipEdge" Color="#FF2E3B4F" />
-    <SolidColorBrush x:Key="ChartHeat0" Color="#FF151E2C" />
-    <SolidColorBrush x:Key="ChartHeat1" Color="#FF0E3B57" />
-    <SolidColorBrush x:Key="ChartHeat2" Color="#FF177FB5" />
-    <SolidColorBrush x:Key="ChartHeat3" Color="#FF7DD3FC" />
-
-    <!--
-      Depth. The page darkens a little towards the foot, and a card is lighter at its top edge than
-      its bottom, as if lit from above. Both are slight: enough to separate the layers, not enough to
-      be noticed as an effect.
-    -->
-    <LinearGradientBrush x:Key="AppBackdrop" StartPoint="0,0" EndPoint="0,1">
-      <GradientStop Color="#FF0C1119" Offset="0" />
-      <GradientStop Color="#FF090C12" Offset="1" />
-    </LinearGradientBrush>
-
-    <LinearGradientBrush x:Key="CardFill" StartPoint="0,0" EndPoint="0,1">
-      <GradientStop Color="#FF131A26" Offset="0" />
-      <GradientStop Color="#FF10161F" Offset="1" />
-    </LinearGradientBrush>
-
-    <!-- The grand total's card: a green glow from the corner the figure sits in. -->
-    <RadialGradientBrush x:Key="TotalFill" Center="1,0" GradientOrigin="1,0" RadiusX="1.1" RadiusY="1.4">
-      <GradientStop Color="#FF0D2A24" Offset="0" />
-      <GradientStop Color="#FF09131A" Offset="0.65" />
-      <GradientStop Color="#FF080E16" Offset="1" />
-    </RadialGradientBrush>
-
-    <LinearGradientBrush x:Key="PayFill" StartPoint="0,0" EndPoint="0,1">
-      <GradientStop Color="#FF34D399" Offset="0" />
-      <GradientStop Color="#FF10B981" Offset="1" />
-    </LinearGradientBrush>
 
     <!--
       Figures use a monospaced face so a column of them lines up on the decimal point and a digit
@@ -183,7 +38,7 @@
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <Style TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="FontFamily" Value="Segoe UI" />
       <Setter Property="FontSize" Value="14" />
     </Style>
@@ -193,7 +48,7 @@
       <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
     </Style>
 
     <!--
@@ -206,7 +61,7 @@
       <Setter Property="Control.Template">
         <Setter.Value>
           <ControlTemplate>
-            <Rectangle Margin="-3" RadiusX="7" RadiusY="7" Stroke="{StaticResource Accent}" StrokeThickness="2"
+            <Rectangle Margin="-3" RadiusX="7" RadiusY="7" Stroke="{DynamicResource Accent}" StrokeThickness="2"
                        SnapsToDevicePixels="True" />
           </ControlTemplate>
         </Setter.Value>
@@ -215,9 +70,9 @@
 
     <!-- The stock header template paints itself light, which is illegible on this background. -->
     <Style TargetType="DataGridColumnHeader">
-      <Setter Property="Background" Value="{StaticResource Surface}" />
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Background" Value="{DynamicResource Surface}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
       <Setter Property="BorderThickness" Value="0,0,1,1" />
 
       <!--
@@ -240,10 +95,10 @@
     <Style TargetType="DataGrid">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="RowBackground" Value="Transparent" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="GridLinesVisibility" Value="Horizontal" />
-      <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource Line}" />
+      <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Line}" />
       <Setter Property="HeadersVisibility" Value="Column" />
       <Setter Property="RowHeaderWidth" Value="0" />
     </Style>
@@ -284,10 +139,10 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Hover" Property="Background" Value="{StaticResource RowHover}" />
+                <Setter TargetName="Hover" Property="Background" Value="{DynamicResource RowHover}" />
               </Trigger>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="RowBorder" Property="BorderBrush" Value="{DynamicResource Accent}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -320,7 +175,7 @@
             barcode kept their muted grey and went nearly invisible against bright blue. A tint
             leaves every column the colour it was chosen to be and still says which row is current.
           -->
-          <Setter Property="Background" Value="{StaticResource RowActive}" />
+          <Setter Property="Background" Value="{DynamicResource RowActive}" />
 
           <!--
             And the ink is held as well as the fill, which the tint alone did not do.
@@ -335,7 +190,7 @@
             Setting it here restores those three. The columns with an explicit foreground still win,
             because that is set on the TextBlock itself, so the quiet ones stay quiet.
           -->
-          <Setter Property="Foreground" Value="{StaticResource Ink}" />
+          <Setter Property="Foreground" Value="{DynamicResource Ink}" />
         </Trigger>
       </Style.Triggers>
     </Style>
@@ -354,7 +209,7 @@
     -->
     <Style x:Key="WhyNot" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12" />
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="Margin" Value="0,6,0,0" />
       <Style.Triggers>
@@ -376,14 +231,14 @@
       in the grid. These give it the same structure.
     -->
     <Style x:Key="SectionHeading" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Opacity" Value="0.9" />
     </Style>
 
     <Style x:Key="FieldLabel" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Margin" Value="0,1,10,1" />
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -391,7 +246,7 @@
 
     <!-- Right-aligned and tabular, so a column of figures lines up on the decimal point. -->
     <Style x:Key="FieldValue" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Margin" Value="0,1,0,1" />
       <Setter Property="HorizontalAlignment" Value="Right" />
@@ -407,7 +262,7 @@
       reach through it. This one is drawn here, so a chosen row looks the same in every list.
     -->
     <Style TargetType="ListBoxItem">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="Padding" Value="6,3" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
 
@@ -427,14 +282,14 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowHover}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowHover}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource FieldBorder}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource FieldBorder}" />
               </Trigger>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActive}" />
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActive}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -457,7 +312,7 @@
       the keyboard in the box.
     -->
     <Style x:Key="TintedListItem" TargetType="ListBoxItem">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="Padding" Value="10,6" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Focusable" Value="False" />
@@ -470,8 +325,8 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActive}" />
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActive}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -484,7 +339,7 @@
       rather than down the side, under the one chosen, like a tab.
     -->
     <Style x:Key="SegmentItem" TargetType="ListBoxItem">
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="Padding" Value="8,10" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="Focusable" Value="False" />
@@ -501,12 +356,12 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowHover}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowHover}" />
               </Trigger>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActive}" />
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
-                <Setter Property="Foreground" Value="{StaticResource Ink}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActive}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                <Setter Property="Foreground" Value="{DynamicResource Ink}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -530,9 +385,9 @@
         <!-- Text inside a button takes the button's colour and size: see above. -->
         <Style TargetType="TextBlock" />
       </Style.Resources>
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="Background" Value="{StaticResource ButtonFace}" />
-      <Setter Property="BorderBrush" Value="{StaticResource ButtonEdge}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+      <Setter Property="Background" Value="{DynamicResource ButtonFace}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdge}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Padding" Value="14,7" />
@@ -545,7 +400,7 @@
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Grid>
-              <Border x:Name="Ring" Margin="-3" CornerRadius="10" BorderBrush="{StaticResource Accent}"
+              <Border x:Name="Ring" Margin="-3" CornerRadius="10" BorderBrush="{DynamicResource Accent}"
                       BorderThickness="2" Opacity="0" />
               <Border x:Name="Face" CornerRadius="8" Background="{TemplateBinding Background}"
                       BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
@@ -561,18 +416,18 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource ButtonFaceHover}" />
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource ButtonEdgeHover}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource ButtonFaceHover}" />
+                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ButtonEdgeHover}" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource ButtonFacePressed}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource ButtonFacePressed}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="Ring" Property="Opacity" Value="1" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter TargetName="Face" Property="Opacity" Value="0.45" />
-                <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+                <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
                 <Setter Property="Cursor" Value="Arrow" />
               </Trigger>
             </ControlTemplate.Triggers>
@@ -583,14 +438,14 @@
 
     <!-- The one thing a pane or a dialog is for: the accent face, dark label. -->
     <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-      <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
+      <Setter Property="Background" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="{StaticResource AccentHover}" />
-          <Setter Property="BorderBrush" Value="{StaticResource AccentHover}" />
+          <Setter Property="Background" Value="{DynamicResource AccentHover}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource AccentHover}" />
         </Trigger>
       </Style.Triggers>
     </Style>
@@ -601,15 +456,15 @@
     -->
     <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderBrush" Value="{StaticResource Danger}" />
-      <Setter Property="Foreground" Value="{StaticResource Danger}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+      <Setter Property="Foreground" Value="{DynamicResource Danger}" />
     </Style>
 
     <!-- Quiet: no face until the mouse is on it. For the small buttons on a chart's card. -->
     <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="Padding" Value="8,4" />
       <Setter Property="FontSize" Value="12.5" />
     </Style>
@@ -622,11 +477,11 @@
       is never blurred by it.
     -->
     <Style TargetType="TextBox">
-      <Setter Property="Background" Value="{StaticResource FieldFill}" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
-      <Setter Property="SelectionBrush" Value="{StaticResource Accent}" />
-      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}" />
+      <Setter Property="Background" Value="{DynamicResource FieldFill}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FieldBorder}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -636,7 +491,7 @@
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
             <Grid>
-              <Border x:Name="Glow" Margin="-3" CornerRadius="9" BorderBrush="{StaticResource AccentGlow}"
+              <Border x:Name="Glow" Margin="-3" CornerRadius="9" BorderBrush="{DynamicResource AccentGlow}"
                       BorderThickness="3" Opacity="0" />
               <Border x:Name="Bd" CornerRadius="6" Background="{TemplateBinding Background}"
                       BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
@@ -650,10 +505,10 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource FieldBorderHover}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource FieldBorderHover}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
                 <Setter TargetName="Glow" Property="Opacity" Value="1" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
@@ -666,11 +521,11 @@
     </Style>
 
     <Style TargetType="PasswordBox">
-      <Setter Property="Background" Value="{StaticResource FieldFill}" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
-      <Setter Property="SelectionBrush" Value="{StaticResource Accent}" />
-      <Setter Property="BorderBrush" Value="{StaticResource FieldBorder}" />
+      <Setter Property="Background" Value="{DynamicResource FieldFill}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FieldBorder}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -680,7 +535,7 @@
         <Setter.Value>
           <ControlTemplate TargetType="PasswordBox">
             <Grid>
-              <Border x:Name="Glow" Margin="-3" CornerRadius="9" BorderBrush="{StaticResource AccentGlow}"
+              <Border x:Name="Glow" Margin="-3" CornerRadius="9" BorderBrush="{DynamicResource AccentGlow}"
                       BorderThickness="3" Opacity="0" />
               <Border x:Name="Bd" CornerRadius="6" Background="{TemplateBinding Background}"
                       BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
@@ -692,10 +547,10 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource FieldBorderHover}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource FieldBorderHover}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
                 <Setter TargetName="Glow" Property="Opacity" Value="1" />
               </Trigger>
             </ControlTemplate.Triggers>
@@ -710,7 +565,7 @@
       <Style.Resources>
         <Style TargetType="TextBlock" />
       </Style.Resources>
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -723,13 +578,15 @@
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
               <Grid Width="19" Height="19" VerticalAlignment="Center">
-                <Border x:Name="Ring" Margin="-3" CornerRadius="7" BorderBrush="{StaticResource Accent}"
+                <Border x:Name="Ring" Margin="-3" CornerRadius="7" BorderBrush="{DynamicResource Accent}"
                         BorderThickness="2" Opacity="0" />
-                <Border x:Name="Box" CornerRadius="5" Background="{StaticResource FieldFill}"
-                        BorderBrush="{StaticResource FieldBorder}" BorderThickness="1.5" />
-                <TextBlock x:Name="Tick" Text="{x:Static app:Glyphs.Check}" FontFamily="{StaticResource IconFont}"
-                           FontSize="12" Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Visibility="Collapsed" />
+                <!-- The tick inside its box, so what it is drawn on is what it sits in. -->
+                <Border x:Name="Box" CornerRadius="5" Background="{DynamicResource FieldFill}"
+                        BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1.5">
+                  <TextBlock x:Name="Tick" Text="{x:Static app:Glyphs.Check}" FontFamily="{StaticResource IconFont}"
+                             FontSize="12" Foreground="{DynamicResource OnAccent}" HorizontalAlignment="Center"
+                             VerticalAlignment="Center" Visibility="Collapsed" />
+                </Border>
               </Grid>
               <ContentPresenter Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True">
                 <ContentPresenter.Resources>
@@ -739,11 +596,11 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource FieldBorderHover}" />
+                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource FieldBorderHover}" />
               </Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" />
-                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}" />
+                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
                 <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
@@ -766,7 +623,7 @@
       <Style.Resources>
         <Style TargetType="TextBlock" />
       </Style.Resources>
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -779,9 +636,9 @@
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
               <Grid Width="19" Height="19" VerticalAlignment="Top" Margin="0,1,0,0">
-                <Ellipse x:Name="Halo" Margin="-3" Stroke="{StaticResource Accent}" StrokeThickness="2" Opacity="0" />
-                <Ellipse x:Name="Ring" Fill="{StaticResource FieldFill}" Stroke="{StaticResource FieldBorder}" StrokeThickness="1.5" />
-                <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{StaticResource Accent}" Visibility="Collapsed" />
+                <Ellipse x:Name="Halo" Margin="-3" Stroke="{DynamicResource Accent}" StrokeThickness="2" Opacity="0" />
+                <Ellipse x:Name="Ring" Fill="{DynamicResource FieldFill}" Stroke="{DynamicResource FieldBorder}" StrokeThickness="1.5" />
+                <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{DynamicResource Accent}" Visibility="Collapsed" />
               </Grid>
               <ContentPresenter Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True">
                 <ContentPresenter.Resources>
@@ -791,10 +648,10 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource FieldBorderHover}" />
+                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource FieldBorderHover}" />
               </Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource Accent}" />
+                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
                 <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
@@ -814,7 +671,7 @@
       <Style.Resources>
         <Style TargetType="TextBlock" />
       </Style.Resources>
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -823,7 +680,7 @@
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
             <Grid>
-              <Border x:Name="Ring" Margin="-3" CornerRadius="9" BorderBrush="{StaticResource Accent}"
+              <Border x:Name="Ring" Margin="-3" CornerRadius="9" BorderBrush="{DynamicResource Accent}"
                       BorderThickness="2" Opacity="0" />
               <Border x:Name="Face" CornerRadius="6" Background="Transparent" BorderBrush="Transparent"
                       BorderThickness="1" Padding="{TemplateBinding Padding}">
@@ -836,12 +693,12 @@
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource ButtonFaceHover}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource ButtonFaceHover}" />
               </Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource RowActive}" />
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}" />
-                <Setter Property="Foreground" Value="{StaticResource Ink}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource RowActive}" />
+                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                <Setter Property="Foreground" Value="{DynamicResource Ink}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="Ring" Property="Opacity" Value="1" />
@@ -876,13 +733,13 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Thumb">
-            <Border x:Name="Bd" CornerRadius="4" Background="{StaticResource ScrollThumb}" />
+            <Border x:Name="Bd" CornerRadius="4" Background="{DynamicResource ScrollThumb}" />
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ScrollThumbHover}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ScrollThumbHover}" />
               </Trigger>
               <Trigger Property="IsDragging" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}" />
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -946,9 +803,9 @@
     <!-- ==== Tooltips ==================================================================================== -->
 
     <Style TargetType="ToolTip">
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
-      <Setter Property="Background" Value="{StaticResource ChartTooltip}" />
-      <Setter Property="BorderBrush" Value="{StaticResource ChartTooltipEdge}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+      <Setter Property="Background" Value="{DynamicResource ChartTooltip}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ChartTooltipEdge}" />
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="HasDropShadow" Value="True" />
       <Setter Property="Template">
@@ -960,7 +817,7 @@
                 <ContentPresenter.Resources>
                   <Style TargetType="TextBlock">
                     <Setter Property="TextWrapping" Value="Wrap" />
-                    <Setter Property="Foreground" Value="{StaticResource Ink}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
                     <Setter Property="FontSize" Value="12.5" />
                   </Style>
                 </ContentPresenter.Resources>
@@ -975,7 +832,7 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Separator">
-            <Border Height="1" Background="{StaticResource Line}" SnapsToDevicePixels="True" />
+            <Border Height="1" Background="{DynamicResource Line}" SnapsToDevicePixels="True" />
           </ControlTemplate>
         </Setter.Value>
       </Setter>
@@ -985,8 +842,8 @@
 
     <!-- A card: lit from above, rimmed, rounded. What every panel on the owner's screen sits on. -->
     <Style x:Key="CardPanel" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource CardFill}" />
-      <Setter Property="BorderBrush" Value="{StaticResource CardEdge}" />
+      <Setter Property="Background" Value="{DynamicResource CardFill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
       <Setter Property="Padding" Value="18,16" />
@@ -998,27 +855,27 @@
       <Setter Property="Width" Value="30" />
       <Setter Property="Height" Value="30" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Background" Value="{StaticResource IconChip}" />
+      <Setter Property="Background" Value="{DynamicResource IconChip}" />
       <Setter Property="VerticalAlignment" Value="Top" />
     </Style>
 
     <Style x:Key="CardTitle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="15" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     <Style x:Key="CardSubtitle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12" />
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="Margin" Value="0,2,0,0" />
     </Style>
 
     <Style x:Key="CardCaption" TargetType="TextBlock">
       <Setter Property="FontSize" Value="12" />
-      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkDim}" />
       <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="Margin" Value="0,10,0,0" />
     </Style>
@@ -1062,7 +919,7 @@
                   </StackPanel>
 
                   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
-                    <TextBlock x:Name="NoticeText" Text="{TemplateBinding Notice}" Foreground="{StaticResource Done}"
+                    <TextBlock x:Name="NoticeText" Text="{TemplateBinding Notice}" Foreground="{DynamicResource Done}"
                                FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <Button x:Name="PART_Reset" Style="{StaticResource GhostButton}" Visibility="Collapsed"
                             ToolTip="Show every figure again (0, or double-click the chart)">

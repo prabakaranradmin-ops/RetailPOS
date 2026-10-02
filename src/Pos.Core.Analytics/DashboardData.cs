@@ -99,6 +99,116 @@ public sealed record GstSlab(decimal Rate, decimal TaxableValue, decimal Cgst, d
 
 public sealed record VoidSummary(int Count, decimal Value);
 
+/// <summary>One person's exceptions at the till over the window.</summary>
+/// <param name="Cashier">Who was on the till, or <see cref="TillExceptions.Nobody"/> when nobody had said.</param>
+/// <param name="Refused">Times the owner's PIN was asked for and not given, and sign-ons refused.</param>
+public sealed record CashierExceptions(
+    string Cashier,
+    int Voids,
+    decimal Voided,
+    int Discounts,
+    decimal Discounted,
+    int CashRefunds,
+    decimal CashRefunded,
+    int CashOuts,
+    decimal CashTakenOut,
+    int Refused,
+    int OverKhataLimit = 0,
+    decimal OverKhataLimitValue = 0m)
+{
+    public int Total => Voids + Discounts + CashRefunds + CashOuts + Refused + OverKhataLimit;
+}
+
+/// <summary>
+/// The till's exceptions in the window - voids, discounts typed by hand, cash refunds, cash out and
+/// refused PINs - by who was on the till, and the latest of them one by one.
+/// </summary>
+/// <param name="Latest">The most recent, newest first, at most <see cref="DashboardQuery.LatestExceptions"/>.</param>
+/// <param name="RecordedSince">
+/// When this lane began keeping the record at all, or null when it has nothing in it yet. A window
+/// that starts before then is not a window in which nothing happened.
+/// </param>
+public sealed record TillExceptions(
+    IReadOnlyList<CashierExceptions> ByCashier,
+    IReadOnlyList<Pos.Core.Domain.TillEvent> Latest,
+    DateTimeOffset? RecordedSince)
+{
+    /// <summary>What the record says of a sale made with nobody named on the till.</summary>
+    public const string Nobody = "Nobody named";
+
+    public static TillExceptions None { get; } = new([], [], null);
+
+    public bool Any => ByCashier.Count > 0;
+}
+
+/// <summary>One day-end close: what the drawer should have held, what was counted, and who was on the till.</summary>
+/// <param name="OnTheTill">Everybody who took cash or moved it through the drawer in the day it closed.</param>
+public sealed record ClosedDrawer(
+    long ReportId,
+    DateTimeOffset ClosedAt,
+    decimal Expected,
+    decimal? Counted,
+    string? CountedBy,
+    IReadOnlyList<string> OnTheTill)
+{
+    /// <summary>Counted less expected: over above zero, short below. Null when not counted.</summary>
+    public decimal? Difference => Counted is { } counted ? counted - Expected : null;
+}
+
+/// <summary>
+/// One person's days at the till in the window, and how the drawer came out on them.
+/// </summary>
+/// <remarks>
+/// A day two people worked counts for both of them: the drawer was shared, and the count cannot say
+/// whose hands the difference passed through. A pattern across many days says more than any one.
+/// </remarks>
+public sealed record PersonDrawer(string Name, int Days, int Counted, int ShortDays, decimal Short, int OverDays, decimal Over);
+
+/// <summary>What one department's shelves are worth.</summary>
+public sealed record StockValueByCategory(string Category, int Items, decimal AtCost, decimal AtSellingPrice);
+
+/// <summary>
+/// What the counted shelves are worth now: at cost, at the selling price and at MRP.
+/// </summary>
+/// <remarks>
+/// Counted items with something on the shelf only. A count below zero is the count and the shelf
+/// having parted company, not stock, and is counted apart rather than taken off the value.
+/// </remarks>
+/// <param name="AtCost">At the latest cost price, for the items that have one.</param>
+/// <param name="CostedAtSellingPrice">The same items at their selling price: what <see cref="AtCost"/> would sell for.</param>
+/// <param name="WithoutCost">Counted items on the shelf with no cost price, so not in <see cref="AtCost"/>.</param>
+public sealed record StockValue(
+    int CountedItems,
+    decimal AtCost,
+    decimal CostedAtSellingPrice,
+    decimal AtSellingPrice,
+    decimal AtMrp,
+    int WithoutCost,
+    int BelowZero,
+    IReadOnlyList<StockValueByCategory> Categories)
+{
+    public static StockValue None { get; } = new(0, 0m, 0m, 0m, 0m, 0, 0, []);
+
+    /// <summary>What the costed stock would make if it all sold at today's prices.</summary>
+    public decimal Margin => CostedAtSellingPrice - AtCost;
+}
+
+/// <summary>The drawer at each close in the window, and each person's days, over and short.</summary>
+public sealed record DrawerCounts(IReadOnlyList<ClosedDrawer> Closes, IReadOnlyList<PersonDrawer> ByPerson)
+{
+    public static DrawerCounts None { get; } = new([], []);
+
+    public int CountedCloses => Closes.Count(c => c.Counted is not null);
+
+    public int ShortCloses => Closes.Count(c => c.Difference < 0m);
+
+    public decimal ShortTotal => -Closes.Where(c => c.Difference < 0m).Sum(c => c.Difference!.Value);
+
+    public int OverCloses => Closes.Count(c => c.Difference > 0m);
+
+    public decimal OverTotal => Closes.Where(c => c.Difference > 0m).Sum(c => c.Difference!.Value);
+}
+
 /// <summary>Goods brought back on credit notes in the window, and what was refunded for them.</summary>
 public sealed record ReturnSummary(int Count, decimal Value)
 {
@@ -161,6 +271,12 @@ public sealed record DashboardData
     public IReadOnlyList<Pos.Core.Domain.ExpenseTotal> Expenses { get; init; } = [];
 
     public decimal ExpensesTotal => Expenses.Sum(e => e.Amount);
+
+    /// <summary>Voids, discounts typed by hand, cash refunds, cash out and refused PINs, by who did them.</summary>
+    public TillExceptions Exceptions { get; init; } = TillExceptions.None;
+
+    /// <summary>The drawer counted at each close in the window, over or short, and by who was on the till.</summary>
+    public DrawerCounts Drawers { get; init; } = DrawerCounts.None;
     public required CustomerMix Customers { get; init; }
     public required PointsFlow Points { get; init; }
 
@@ -173,6 +289,9 @@ public sealed record DashboardData
     /// is most likely to act on, and because they are already here.
     /// </remarks>
     public IReadOnlyList<Pos.Core.Domain.StockLevel> LowStock { get; init; } = [];
+
+    /// <summary>What the counted shelves are worth now. Like <see cref="LowStock"/>, about today, not the window.</summary>
+    public StockValue Stock { get; init; } = StockValue.None;
 
     /// <summary>How long the whole gather took. Shown on the page, because it is a promise.</summary>
     public required TimeSpan Elapsed { get; init; }

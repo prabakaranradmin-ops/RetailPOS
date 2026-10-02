@@ -35,6 +35,9 @@ public interface ICreditStore
     /// <summary>What the customer owes now. Negative if the shop owes them.</summary>
     decimal Balance(long customerId);
 
+    /// <summary>When the customer last paid anything back on the khata, or null if they never have.</summary>
+    DateTimeOffset? LastPaid(long customerId);
+
     /// <summary>Everybody who owes something, most first.</summary>
     IReadOnlyList<CustomerBalance> Owing(int limit = 200);
 

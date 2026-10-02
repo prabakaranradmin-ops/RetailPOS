@@ -1,5 +1,5 @@
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Controls;
 
 namespace Pos.App.Views;
 
@@ -27,7 +27,7 @@ public partial class ConfirmDialog : Window
     private ConfirmDialog(string title, string message, string confirm, string? cancel, DialogKind kind)
     {
         InitializeComponent();
-        DarkChrome.Apply(this);
+        TitleBar.Apply(this);
 
         Title = title;
         Heading.Text = title;
@@ -54,8 +54,9 @@ public partial class ConfirmDialog : Window
         };
 
         Symbol.Text = glyph;
-        Symbol.Foreground = (Brush)FindResource(ink);
-        Badge.Background = (Brush)FindResource(ground);
+        // By reference rather than by value, so the dialog follows the look if it changes while open.
+        Symbol.SetResourceReference(TextBlock.ForegroundProperty, ink);
+        Badge.SetResourceReference(Border.BackgroundProperty, ground);
 
         if (kind == DialogKind.Danger)
             Yes.Style = (Style)FindResource("DangerButton");

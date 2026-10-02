@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Pos.App.Input;
+using Pos.Core.Configuration;
 using Pos.Core.Data;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Drawer;
@@ -48,6 +49,12 @@ public enum BillingMode
 
     /// <summary>Giving the customer on the bill a GSTIN and an address: a bill to a business.</summary>
     Business = 12,
+
+    /// <summary>Asking which MRP the pack in hand carries, when older packs are still on the shelf.</summary>
+    ChooseMrp = 13,
+
+    /// <summary>Selling an item not in the catalogue: its name, price and GST slab, typed in.</summary>
+    OpenItem = 14,
 }
 
 /// <summary>The only cells the cashier can type into (SRS 2.2).</summary>
@@ -309,6 +316,10 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             Raise(nameof(IsUsingQuickKeys));
             Raise(nameof(IsTakingOrder));
             Raise(nameof(IsSettingBusiness));
+            Raise(nameof(IsChoosingMrp));
+            Raise(nameof(IsAddingOpenItem));
+            Raise(nameof(IsTypingOpenItem));
+            Raise(nameof(IsChoosingOpenRate));
         }
     }
 
@@ -434,6 +445,54 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
     /// without a separate conversation.
     /// </summary>
     public bool CustomerOwesAnything => _customerOwes > 0m;
+
+    private DateTimeOffset? _customerLastPaid;
+
+    /// <summary>
+    /// Under what they owe: their limit, and how long since they last paid anything back - the two
+    /// things a cashier wants before putting more on it.
+    /// </summary>
+    public string CustomerKhataNote
+    {
+        get
+        {
+            if (_bill.Customer is not { } customer)
+                return string.Empty;
+
+            var parts = new List<string>();
+
+            if (customer.CreditLimit is { } limit)
+                parts.Add($"limit {Show.Money(limit)}");
+
+            if (_customerOwes > 0m)
+            {
+                parts.Add(_customerLastPaid is { } paid
+                    ? (_now().Date - paid.Date).Days switch
+                    {
+                        0 => "last paid today",
+                        1 => "last paid yesterday",
+                        var days => $"last paid {days} days ago",
+                    }
+                    : "nothing paid back yet");
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public bool HasCustomerKhataNote => CustomerKhataNote.Length > 0;
+
+    private DateTimeOffset? SafeLastPaid(Customer customer)
+    {
+        try
+        {
+            return _credit?.LastPaid(customer);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>How a repayment can be taken: money only, never more credit or points.</summary>
     public IReadOnlyList<TenderType> CollectTenders { get; } = [TenderType.Cash, TenderType.Upi, TenderType.Card];
@@ -858,6 +917,13 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
     public void Commit()
     {
+        // The owner's PIN, asked for over whatever was happening: Enter tries it and nothing else.
+        if (IsApproving)
+        {
+            CommitApproval();
+            return;
+        }
+
         ClearPendingNewBill();
 
         // Enter over the key sheet closes it, rather than acting on a screen the cashier cannot see.
@@ -868,9 +934,10 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         }
 
         // Nor does it close the day: that takes the close key itself, a second time, on purpose.
+        // Enter here is the count of the drawer.
         if (IsConfirmingDayClose)
         {
-            StatusMessage = $"{CloseDayKey} again to close the day, {CancelKey} to keep selling.";
+            CommitCount();
             return;
         }
 
@@ -923,6 +990,14 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             case BillingMode.Business:
                 CommitBusiness();
                 return;
+
+            case BillingMode.ChooseMrp:
+                CommitMrp();
+                return;
+
+            case BillingMode.OpenItem:
+                CommitOpenItem();
+                return;
         }
 
         if (IsEditing)
@@ -936,6 +1011,13 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
     public void Cancel()
     {
+        // Backing out of the owner's PIN leaves whatever was underneath it as it was, undone.
+        if (IsApproving)
+        {
+            CancelApproval();
+            return;
+        }
+
         // Esc over the key sheet or the close-the-day pane closes that, and nothing more.
         var wasClosingDay = IsConfirmingDayClose;
         var wasShowingKeys = IsShowingKeys;
@@ -987,6 +1069,14 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
                 BackOutOfBusiness();
                 return;
 
+            case BillingMode.ChooseMrp:
+                BackOutOfMrp();
+                return;
+
+            case BillingMode.OpenItem:
+                BackOutOfOpenItem();
+                return;
+
             case BillingMode.Customer:
             case BillingMode.Reprint:
             case BillingMode.Void:
@@ -1032,6 +1122,12 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             UnpickReturnLine();
             return;
         }
+
+        // Every other pane has a box of its own, and Delete reaches here from it. The bill is behind
+        // the pane, out of sight, and a line taken off it from a GSTIN or an amount box is one the
+        // cashier never saw go - as the quantity and discount keys already refuse.
+        if (Mode != BillingMode.Billing)
+            return;
 
         if (SelectedLine is null)
         {
@@ -1158,6 +1254,14 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             return;
         }
 
+        // On a lane with cashiers set up, money is taken by somebody who has signed on, or the sale
+        // would go down against nobody - which is what the PINs are there to prevent.
+        if (NeedsSignOn)
+        {
+            StatusMessage = $"Sign on before taking money: {SignOnKey}, your name, your PIN.";
+            return;
+        }
+
         _basket = new TenderBasket(_bill.Totals.AmountPayable);
         _pointsRedeemed = 0;
         IsPaperless = false;
@@ -1254,27 +1358,62 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
                 : string.Empty;
 
             PendingDayClose = true;
+            _dayClosePreview = preview;
+            EditBuffer = string.Empty;
+            Raise(nameof(IsCountingDrawer));
 
             var again = $"{CloseDayKey} again to close the day, {CancelKey} to keep selling.";
 
+            // The drawer figure is not said here: it is counted first, then shown.
             StatusMessage = preview.TookNothing && !preview.MovedMoneyWithoutSales
                 ? $"Nothing has been sold since the last close. {again}"
-                : $"{(preview.TookNothing ? "No sales" : Plural.Of(preview.InvoiceCount, "bill"))}, "
-                  + $"{Show.Money(preview.CashExpected)} expected in the drawer. {again}";
+                : $"{(preview.TookNothing ? "No sales" : Plural.Of(preview.InvoiceCount, "bill"))}. "
+                  + $"Count the cash in the drawer and type it, then {CommitKey}. {again}";
 
             return;
         }
 
-        PendingDayClose = false;
+        // The close pane stays up while the owner's PIN is asked for, so they approve the figures they
+        // can see; backing out leaves it up, still unclosed.
+        Guard(
+            Guarded.CloseDay,
+            "close the day",
+            TillEventKind.DayClosed,
+            reference: null,
+            amount: null,
+            FinishCloseDay);
+    }
 
-        var result = _dayClose.Close(_laneId);
-        var message = $"Day closed. Report {result.Day.Id}: {Plural.Of(result.Day.InvoiceCount, "bill")}, {Show.Money(result.Day.NetSales)} net, {Show.Money(result.Day.CashExpected)} expected in the drawer.";
+    private void FinishCloseDay(bool? approved)
+    {
+        if (_dayClose is null)
+            return;
+
+        // Read before the pane is put away, which forgets the count.
+        var counted = _cashCounted;
+        PendingDayClose = false;
+        EditBuffer = string.Empty;
+
+        var result = _dayClose.Close(_laneId, counted, _cashierName);
+
+        _security.Record(_laneId, _now(), TillEventKind.DayClosed, _cashierName,
+            $"Report {result.Day.Id}", result.Day.NetSales, approved,
+            $"{Plural.Of(result.Day.InvoiceCount, "bill")}, {Show.Money(result.Day.CashExpected)} expected in the drawer"
+            + (result.Day.CashDifference is { } d ? $", {Drawer(d)}" : ", not counted"));
+
+        var message = $"Day closed. Report {result.Day.Id}: {Plural.Of(result.Day.InvoiceCount, "bill")}, {Show.Money(result.Day.NetSales)} net, {Show.Money(result.Day.CashExpected)} expected in the drawer";
+
+        message += result.Day.CashDifference is { } difference ? $", {Drawer(difference)}." : ", not counted.";
 
         if (!result.Print.Succeeded && result.Print.Status == PrintStatus.Failed)
             message += " The report did not print — reprint it once the printer is fixed.";
 
         if (!result.Backup.Succeeded)
             message += $" BACKUP FAILED: {result.Backup.Detail}";
+
+        // The pen drive: copied, failed, or overdue - whichever it is, this is when to say it.
+        if (result.Backup.OffMachine is { } offMachine)
+            message += " " + offMachine;
 
         RefreshHeldBills();
         StatusMessage = message;
@@ -1313,6 +1452,19 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         if (Mode == BillingMode.Tender)
         {
             StatusMessage = "Finish or abandon the payment first.";
+            return;
+        }
+
+        // Cashiers can be added or taken off from the owner's screen while the till runs, so which
+        // pane this is is worked out afresh each time.
+        Raise(nameof(UsesCashierPins));
+        Raise(nameof(TypesCashierName));
+        Raise(nameof(NeedsSignOn));
+
+        // A lane with cashiers set up: pick your name and type your own PIN.
+        if (UsesCashierPins)
+        {
+            BeginSignOn();
             return;
         }
 
@@ -1417,7 +1569,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
             if (scanned is not null)
             {
-                AddItem(scanned);
+                AddPicked(scanned);
                 return;
             }
 
@@ -1430,7 +1582,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         // takes their highlighted choice. Anything else is stale and gets re-queried.
         if (IsResultListOpen && _resultsForText == text && SelectedResult is { } chosen)
         {
-            AddItem(chosen);
+            AddPicked(chosen);
             return;
         }
 
@@ -1438,14 +1590,15 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         if (SearchResults.Count == 0)
         {
-            StatusMessage = $"No item matches '{text}'.";
+            // The way on, when the item is on the shelf but not in the catalogue.
+            StatusMessage = $"No item matches '{text}'. If it is on the shelf but not in the catalogue, {OpenItemKey} sells it anyway.";
             SearchRejected?.Invoke(this, EventArgs.Empty);
             return;
         }
 
         if (SearchResults.Count == 1)
         {
-            AddItem(SearchResults[0]);
+            AddPicked(SearchResults[0]);
             return;
         }
 
@@ -1610,10 +1763,25 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
     private void Move(int delta)
     {
+        if (IsApproving)
+            return;
+
         ClearPendingConfirmations();
 
         switch (Mode)
         {
+            case BillingMode.Cashier when UsesCashierPins:
+                MoveInSignOn(delta);
+                return;
+
+            case BillingMode.ChooseMrp:
+                MoveInMrp(delta);
+                return;
+
+            case BillingMode.OpenItem:
+                MoveInOpenItem(delta);
+                return;
+
             case BillingMode.Recall:
                 SelectedHeldBillIndex = Clamp(_selectedHeldBillIndex + delta, HeldBills.Count);
                 return;
@@ -1727,12 +1895,15 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             return;
         }
 
+        if (column == EditableColumn.Discount)
+        {
+            CommitDiscount(_selectedLineIndex, value);
+            return;
+        }
+
         try
         {
-            if (column == EditableColumn.Quantity)
-                _bill.SetQuantity(_selectedLineIndex, value);
-            else
-                _bill.SetDiscount(_selectedLineIndex, value);
+            _bill.SetQuantity(_selectedLineIndex, value);
         }
         catch (ArgumentOutOfRangeException ex)
         {
@@ -1744,6 +1915,68 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         Lines[_selectedLineIndex].Refresh();
         RefreshTotals();
         CancelEdit();
+    }
+
+    /// <summary>
+    /// Money off a line, typed by the cashier. Raising it past the share the owner set waits for the
+    /// owner's PIN; lowering it or taking it off never does.
+    /// </summary>
+    private void CommitDiscount(int index, decimal value)
+    {
+        var line = Lines[index].Line;
+        var before = line.Discount;
+        var share = line.Gross > 0m ? Math.Round(value / line.Gross * 100m, 2) : 0m;
+        var name = line.NameSnapshot;
+
+        if (value <= before)
+        {
+            ApplyDiscount(index, value, before, approved: null);
+            return;
+        }
+
+        Guard(
+            Guarded.Discount,
+            $"take {Show.Money(value)} off {name} ({share:0.##}% of the line)",
+            TillEventKind.Discounted,
+            name,
+            value,
+            approved => ApplyDiscount(index, value, before, approved),
+            share);
+    }
+
+    private void ApplyDiscount(int index, decimal value, decimal before, bool? approved)
+    {
+        // The bill could have changed under an approval only if the till took another key, which it
+        // does not while one is asked for; this is for the line having gone by some other road.
+        if (index < 0 || index >= Lines.Count)
+            return;
+
+        var line = Lines[index].Line;
+
+        try
+        {
+            _bill.SetDiscount(index, value);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            // The edit stays open so the cashier can correct the figure in place.
+            StatusMessage = ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
+            return;
+        }
+
+        if (value != before && value > 0m)
+        {
+            var share = line.Gross > 0m ? value / line.Gross * 100m : 0m;
+            _security.Record(_laneId, _now(), TillEventKind.Discounted, _cashierName, line.NameSnapshot, value, approved,
+                $"{share:0.##}% off {line.NameSnapshot}{(_bill.Customer is { } customer ? $", for {customer.Name ?? customer.MobileNo}" : string.Empty)}");
+        }
+
+        Lines[index].Refresh();
+        RefreshTotals();
+        CancelEdit();
+
+        if (approved == true)
+            StatusMessage = $"{Show.Money(value)} off {line.NameSnapshot}, approved by the owner.";
     }
 
     private void CancelEdit()
@@ -1796,9 +2029,56 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             return;
         }
 
+        // Past the customer's khata limit: the owner's PIN, or no.
+        if (SelectedTenderType == TenderType.StoreCredit && _bill.Customer is { CreditLimit: { } limit } buyer
+            && _customerOwes + TenderedCredit + amount > limit)
+        {
+            OverKhataLimit(buyer, limit, amount);
+            return;
+        }
+
+        AddTender(SelectedTenderType, amount);
+    }
+
+    /// <summary>
+    /// A sale on the khata that would take the customer past the limit the owner set: it waits for
+    /// the owner's PIN, and on a lane with no owner's PIN it is refused.
+    /// </summary>
+    private void OverKhataLimit(Customer buyer, decimal limit, decimal amount)
+    {
+        var who = buyer.Name ?? buyer.MobileNo;
+        var after = _customerOwes + TenderedCredit + amount;
+
+        if (!_security.CanApprove)
+        {
+            StatusMessage = $"{who}'s khata limit is {Show.Money(limit)}, and this would make it {Show.Money(after)}. "
+                + "Take some of it another way, or the owner can raise the limit on the owner's screen, Customers.";
+            return;
+        }
+
+        Guard(
+            Guarded.OverKhataLimit,
+            $"put {Show.Money(amount)} on {who}'s khata, past their limit of {Show.Money(limit)}: they would owe {Show.Money(after)}",
+            TillEventKind.OverKhataLimit,
+            who,
+            amount,
+            approved =>
+            {
+                _security.Record(_laneId, _now(), TillEventKind.OverKhataLimit, _cashierName, who, amount, approved,
+                    $"{who} owes {Show.Money(after)} against a limit of {Show.Money(limit)}");
+
+                AddTender(TenderType.StoreCredit, amount);
+            });
+    }
+
+    private void AddTender(TenderType type, decimal amount)
+    {
+        if (_basket is null)
+            return;
+
         try
         {
-            _basket.Add(SelectedTenderType, amount);
+            _basket.Add(type, amount);
         }
         catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
         {
@@ -1900,6 +2180,9 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         CheckoutResult result;
 
+        // Taken before the sale, which clears the bill they are read from.
+        var olderMrpSold = OlderMrpSold();
+
         try
         {
             result = _checkout.Complete(_laneId, _bill, _basket, _pointsRedeemed, _recalledFromToken, printReceipt: !_paperless);
@@ -1911,6 +2194,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
         }
 
         LastSale = result;
+        CountOlderMrpSold(olderMrpSold);
 
         var message = $"{result.Invoice.InvoiceNo} settled for {Show.Money(result.Invoice.GrandTotal)}.";
 
@@ -2168,33 +2452,18 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
 
         var typed = EditBuffer.Trim();
 
-        // Second press on the same invoice: do it.
+        // Second press on the same invoice: do it - with the owner's PIN first, on a lane that asks.
         if (_pendingVoidInvoiceNo is { } confirmed && (typed.Length == 0 || typed == confirmed))
         {
-            _pendingVoidInvoiceNo = null;
+            var amount = _invoices.FindByInvoiceNo(confirmed)?.GrandTotal;
 
-            try
-            {
-                var result = _checkout.VoidSale(confirmed, reason: null);
-
-                var message = $"{result.Invoice.InvoiceNo} voided for {Show.Money(result.Invoice.GrandTotal)}.";
-
-                if (result.LoyaltyReversed)
-                    message += $" Points put back, balance {result.NewLoyaltyBalance}.";
-
-                if (result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.Cash))
-                    message += " Return the cash from the drawer.";
-
-                EditBuffer = string.Empty;
-                Mode = BillingMode.Billing;
-                RefreshCustomer();
-                StatusMessage = message;
-            }
-            catch (InvalidOperationException ex)
-            {
-                EditBuffer = string.Empty;
-                StatusMessage = ex.Message;
-            }
+            Guard(
+                Guarded.Void,
+                $"void {confirmed}{(amount is { } total ? $" for {Show.Money(total)}" : string.Empty)}",
+                TillEventKind.Voided,
+                confirmed,
+                amount,
+                approved => Void(confirmed, approved));
 
             return;
         }
@@ -2231,8 +2500,46 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
             $"{Plural.Of(invoice.Sale.Lines.Count, "line")}? {CommitKey} again to confirm.";
     }
 
+    /// <summary>Cancels a confirmed sale, and writes down who did it and whether the owner approved.</summary>
+    private void Void(string invoiceNo, bool? approved)
+    {
+        _pendingVoidInvoiceNo = null;
+
+        try
+        {
+            var result = _checkout.VoidSale(invoiceNo, reason: null);
+
+            _security.Record(_laneId, _now(), TillEventKind.Voided, _cashierName,
+                result.Invoice.InvoiceNo, result.Invoice.GrandTotal, approved);
+
+            var message = $"{result.Invoice.InvoiceNo} voided for {Show.Money(result.Invoice.GrandTotal)}.";
+
+            if (result.LoyaltyReversed)
+                message += $" Points put back, balance {result.NewLoyaltyBalance}.";
+
+            if (result.Invoice.Sale.Payments.Any(p => p.Type == TenderType.Cash))
+                message += " Return the cash from the drawer.";
+
+            EditBuffer = string.Empty;
+            Mode = BillingMode.Billing;
+            RefreshCustomer();
+            StatusMessage = message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            EditBuffer = string.Empty;
+            StatusMessage = ex.Message;
+        }
+    }
+
     private void CommitCashier()
     {
+        if (UsesCashierPins)
+        {
+            CommitSignOn();
+            return;
+        }
+
         var typed = EditBuffer.Trim();
 
         CashierName = typed;
@@ -2297,6 +2604,7 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
     private void ClearBill()
     {
         _bill.Clear();
+        _olderMrpLines.Clear();
         Lines.Clear();
         SelectedLineIndex = -1;
         _recalledFromToken = null;
@@ -2354,9 +2662,12 @@ public sealed partial class BillingViewModel : ObservableObject, IBillingActions
     private void RefreshCustomer()
     {
         _customerOwes = _bill.Customer is { } customer && _credit is not null ? SafeOwed(customer) : 0m;
+        _customerLastPaid = _bill.Customer is { } payer && _credit is not null && _customerOwes > 0m ? SafeLastPaid(payer) : null;
 
         Raise(nameof(CustomerOwes));
         Raise(nameof(CustomerOwesAnything));
+        Raise(nameof(CustomerKhataNote));
+        Raise(nameof(HasCustomerKhataNote));
         Raise(nameof(Customer));
         Raise(nameof(CustomerLabel));
         Raise(nameof(LoyaltyBalance));

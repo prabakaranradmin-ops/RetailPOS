@@ -191,6 +191,35 @@ public sealed record PurchaseRecorded(
 /// <summary>A supplier the shop owes something to, for the list of who is owed what.</summary>
 public sealed record SupplierBalance(Supplier Supplier, decimal Owed, DateOnly? LastBill);
 
+/// <summary>A line of a supplier's bill, as far as sending it back goes: how much came, and how much has gone back.</summary>
+public sealed record ReturnablePurchaseLine(int LineNo, long ItemId, string Name, UnitType Unit, decimal Bought, decimal SentBack, decimal LineTotal)
+{
+    /// <summary>How much of it can still go back.</summary>
+    public decimal Left => Bought - SentBack;
+}
+
+/// <summary>Goods going back to the supplier: which line of their bill, and how many.</summary>
+public sealed record SupplierReturnPick(int LineNo, decimal Quantity);
+
+/// <summary>
+/// A debit note: goods sent back to a supplier, priced as their bill charged for them, and taken off
+/// what the shop owes them.
+/// </summary>
+/// <param name="NotCounted">Items the shop does not count, so the shelf was not touched for them.</param>
+public sealed record SupplierReturn(
+    long Id,
+    string Number,
+    long PurchaseId,
+    string SupplierName,
+    string BillNo,
+    DateTimeOffset ReturnedAt,
+    string Reason,
+    decimal TaxableValue,
+    decimal Tax,
+    decimal Total,
+    int Lines,
+    IReadOnlyList<string> NotCounted);
+
 /// <summary>A payment to a supplier.</summary>
 public sealed record SupplierPayment(
     long Id,
@@ -249,4 +278,13 @@ public interface IPurchaseStore
 
     /// <summary>The supplier's account, newest first, each line with what was owed after it.</summary>
     IReadOnlyList<CreditMovement> History(long supplierId, int limit = 50);
+
+    /// <summary>Each line of a bill, with how much of it has already gone back.</summary>
+    IReadOnlyList<ReturnablePurchaseLine> Returnable(long purchaseId);
+
+    /// <summary>
+    /// Sends goods back to the supplier on a debit note, in one transaction: the note and its lines,
+    /// the shelf count of every counted item, and what the shop owes the supplier.
+    /// </summary>
+    SupplierReturn SendBack(long purchaseId, IReadOnlyList<SupplierReturnPick> picks, string reason, string laneId, DateTimeOffset at);
 }

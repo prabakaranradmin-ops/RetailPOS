@@ -21,7 +21,7 @@ public partial class PinPrompt : Window
     private PinPrompt(PinCredential credential)
     {
         InitializeComponent();
-        DarkChrome.Apply(this);
+        TitleBar.Apply(this);
         _credential = credential;
         Loaded += (_, _) => Entry.Focus();
     }

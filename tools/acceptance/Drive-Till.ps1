@@ -561,6 +561,15 @@ function Invoke-TillWalkthrough {
             -Passed ($shot -ne '') -Shot $shot `
             -Detail 'It asks twice, because a close cannot be undone.'
 
+        # The drawer counted and typed before the till shows what it expects. 500 is not what this
+        # run's drawer holds, on purpose: the pane has to say by how much it is out.
+        Send-Keys '500{ENTER}' 1200
+        $shot = Save-Shot 'till-13b-counted'
+        Add-Result -Kind Positive -Feature 'Day close' -Name 'The drawer is counted before the expected figure is shown' `
+            -Expected 'the count, the cash expected, and the drawer over or short by the difference' -Actual 'captured' `
+            -Passed ($shot -ne '') -Shot $shot `
+            -Detail 'A count made with the answer on screen is a copy. The expected figure appears only once the count is in.'
+
         Send-Keys '+{F12}' 2000
         $shot = Save-Shot 'till-14-closed'
         Add-Result -Kind Positive -Feature 'Day close' -Name 'The day closes and the Z-report prints' `
@@ -815,6 +824,32 @@ function Invoke-TillWalkthrough {
         Send-Keys '%w' 700
         Send-Keys '^a' 300
         Send-Keys '10{ENTER}' 1500
+
+        # How the screens look: each look by its key, seen on the real window - title bar included -
+        # and proved in the file, since the choice has to outlast a restart.
+        foreach ($look in @(
+                @{ Key = '%o'; Name = 'Noon'; Shot = 'owner-06e-look-noon'; What = 'the brightest look: cool white, the darkest text' },
+                @{ Key = '%m'; Name = 'Morning'; Shot = 'owner-06f-look-morning'; What = 'the warm light look: a cream page' },
+                @{ Key = '%e'; Name = 'Evening'; Shot = 'owner-06g-look-evening'; What = 'the dim slate look for dusk' },
+                @{ Key = '%t'; Name = 'ByTimeOfDay'; Shot = 'owner-06h-look-by-time'; What = 'the look for the hour it is now' })) {
+            Send-Keys $look.Key 1500
+            $shot = Save-Shot $look.Shot -Foreground
+            $saved = Get-Content (Join-Path $Workspace 'settings.json') -Raw -Encoding UTF8
+            $pattern = '"screenTheme"\s*:\s*"' + $look.Name + '"'
+            Add-Result -Kind Positive -Feature 'Owner screen' -Name "The owner picks the $($look.Name) look" `
+                -Expected "$($look.What), on every screen at once, and `"screenTheme`": `"$($look.Name)`" in settings.json" `
+                -Actual $(if ($saved -match $pattern) { "saved as $($look.Name)" } else { 'not in settings.json' }) `
+                -Passed ($saved -match $pattern) -Shot $shot
+        }
+
+        # Back to the night look, so the rest of the run's pictures are as they always were. Alt+N:
+        # Night was Alt+G until this run found Chrome takes Alt+G for the whole desktop.
+        Send-Keys '%n' 1500
+        $saved = Get-Content (Join-Path $Workspace 'settings.json') -Raw -Encoding UTF8
+        Add-Result -Kind Positive -Feature 'Owner screen' -Name 'The night look can be chosen again' `
+            -Expected '"screenTheme": "Night" in settings.json' `
+            -Actual $(if ($saved -match '"screenTheme"\s*:\s*"Night"') { 'saved as Night' } else { 'not switched back' }) `
+            -Passed ($saved -match '"screenTheme"\s*:\s*"Night"')
 
         # --- Maintenance ---------------------------------------------------------------------
         Send-Keys '^6' 1200

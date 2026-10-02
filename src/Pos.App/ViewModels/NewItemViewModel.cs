@@ -27,6 +27,7 @@ public sealed class NewItemViewModel : ObservableObject
     private string _sku = string.Empty;
     private string _barcode = string.Empty;
     private string _name = string.Empty;
+    private string _nameTa = string.Empty;
     private string _hsnCode = string.Empty;
     private string _gstRate = string.Empty;
     private string _mrp = string.Empty;
@@ -91,6 +92,16 @@ public sealed class NewItemViewModel : ObservableObject
             Suggest();
             Raise(nameof(CanSave));
         }
+    }
+
+    /// <summary>
+    /// The name in Tamil, as customers ask for it. Optional; the till finds the item by it, typed in
+    /// Tamil or spelled in English.
+    /// </summary>
+    public string NameTa
+    {
+        get => _nameTa;
+        set => Set(ref _nameTa, value);
     }
 
     public string Sku
@@ -290,11 +301,40 @@ public sealed class NewItemViewModel : ObservableObject
         }
 
         Status = $"{_name.Trim()} added. The till can sell it straight away.";
+        LastAddedSku = _sku.Trim();
 
         Clear(keepCategory: true);
         Added?.Invoke(this, EventArgs.Empty);
 
         return true;
+    }
+
+    /// <summary>The code the last item was added under, for whoever is told it was <see cref="Added"/>.</summary>
+    public string? LastAddedSku { get; private set; }
+
+    /// <summary>
+    /// Fills the form from something sold at the till that is not in the catalogue: its name,
+    /// barcode, price and slab as the cashier had them. The owner gives it a code, checks the rest,
+    /// and adds it.
+    /// </summary>
+    public void StartFrom(OpenItemSale sale)
+    {
+        ArgumentNullException.ThrowIfNull(sale);
+
+        Clear(keepCategory: true);
+
+        var price = sale.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+        Name = sale.Name;
+        Barcode = sale.Barcode ?? string.Empty;
+        Mrp = price;
+        SellingPrice = price;
+        GstRate = HsnDirectory.Rate(sale.GstRate);
+        HsnCode = sale.Hsn;
+
+        Status = sale.Hsn.Trim().Length == 0
+            ? $"From the till: {sale.Name}, sold with no HSN code. Pick a code below, give it your own SKU, check the MRP, and add it."
+            : $"From the till: {sale.Name}. Give it your own SKU, check the MRP and the code, and add it.";
     }
 
     /// <summary>
@@ -309,6 +349,7 @@ public sealed class NewItemViewModel : ObservableObject
         Sku = string.Empty;
         Barcode = string.Empty;
         Name = string.Empty;
+        NameTa = string.Empty;
         HsnCode = string.Empty;
         GstRate = string.Empty;
         Mrp = string.Empty;
@@ -345,7 +386,7 @@ public sealed class NewItemViewModel : ObservableObject
     {
         var csv = new StringBuilder();
 
-        csv.AppendLine("sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed,category,cost_price,stock_qty,reorder_level");
+        csv.AppendLine("sku,barcode,name,hsn_code,unit,mrp,selling_price,gst_rate,is_weighed,category,cost_price,stock_qty,reorder_level,name_ta");
 
         csv.AppendLine(string.Join(',',
             Quote(_sku),
@@ -360,7 +401,8 @@ public sealed class NewItemViewModel : ObservableObject
             Quote(_category),
             Quote(_costPrice),
             Quote(_stockQty),
-            Quote(_reorderLevel)));
+            Quote(_reorderLevel),
+            Quote(_nameTa)));
 
         return csv.ToString();
     }

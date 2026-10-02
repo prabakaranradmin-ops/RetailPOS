@@ -43,14 +43,21 @@ public sealed class DayCloseRepository : IDayCloseStore
     /// makes an old Z-report reproducible — the invoices it covered are still identifiable years
     /// later, whatever anyone later decides a "day" means.
     /// </remarks>
-    public DayCloseSummary Close(string laneId, DateTimeOffset closedAt)
+    public DayCloseSummary Close(string laneId, DateTimeOffset closedAt, decimal? cashCounted = null, string? countedBy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
+
+        if (cashCounted is < 0m)
+            throw new ArgumentOutOfRangeException(nameof(cashCounted), cashCounted, "A drawer cannot hold less than nothing.");
 
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction(deferred: false);
 
-        var summary = Compute(connection, transaction, laneId, closedAt, 0);
+        var summary = Compute(connection, transaction, laneId, closedAt, 0) with
+        {
+            CashCounted = cashCounted,
+            CountedBy = cashCounted is null || string.IsNullOrWhiteSpace(countedBy) ? null : countedBy.Trim(),
+        };
         var id = InsertHeader(connection, transaction, summary);
 
         InsertTenders(connection, transaction, id, summary.Tenders);
@@ -132,7 +139,7 @@ public sealed class DayCloseRepository : IDayCloseStore
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, closed_at, opened_at, invoice_count, net_sales, cash_expected
+            SELECT id, closed_at, opened_at, invoice_count, net_sales, cash_expected, cash_counted, counted_by
             FROM day_closes
             WHERE lane_id = $lane
             ORDER BY closed_at DESC, id DESC
@@ -152,7 +159,9 @@ public sealed class DayCloseRepository : IDayCloseStore
                 reader.IsDBNull(2) ? null : reader.GetDateTimeOffset(2),
                 reader.GetInt32(3),
                 reader.GetDecimal(4),
-                reader.GetDecimal(5)));
+                reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7)));
         }
 
         return entries;
@@ -559,12 +568,14 @@ public sealed class DayCloseRepository : IDayCloseStore
               (lane_id, closed_at, opened_at, invoice_count, gross_sales, total_discount, net_sales,
                taxable_value, total_cgst, total_sgst, total_igst, cash_expected, points_redeemed,
                points_earned, voided_count, voided_value, credit_collected, credit_collected_cash,
-               cash_paid_out, cash_paid_in, returns_count, returns_value, returns_tax)
+               cash_paid_out, cash_paid_in, returns_count, returns_value, returns_tax,
+               cash_counted, counted_by)
             VALUES
               ($lane, $closedAt, $openedAt, $count, $gross, $discount, $net,
                $taxable, $cgst, $sgst, $igst, $cash, $redeemed,
                $earned, $voidedCount, $voidedValue, $collected, $collectedCash,
-               $paidOut, $paidIn, $returnsCount, $returnsValue, $returnsTax);
+               $paidOut, $paidIn, $returnsCount, $returnsValue, $returnsTax,
+               $counted, $countedBy);
             SELECT last_insert_rowid();
             """;
 
@@ -591,6 +602,8 @@ public sealed class DayCloseRepository : IDayCloseStore
         command.Parameters.AddWithValue("$returnsCount", summary.ReturnsCount);
         command.Parameters.AddWithValue("$returnsValue", summary.ReturnsValue);
         command.Parameters.AddWithValue("$returnsTax", summary.ReturnsTax);
+        command.Parameters.AddWithValue("$counted", (object?)summary.CashCounted ?? DBNull.Value);
+        command.Parameters.AddWithValue("$countedBy", (object?)summary.CountedBy ?? DBNull.Value);
 
         return Convert.ToInt64(command.ExecuteScalar());
     }
@@ -646,7 +659,7 @@ public sealed class DayCloseRepository : IDayCloseStore
                        net_sales, taxable_value, total_cgst, total_sgst, total_igst, cash_expected,
                        points_redeemed, points_earned, voided_count, voided_value,
                        credit_collected, credit_collected_cash, cash_paid_out, cash_paid_in,
-                       returns_count, returns_value, returns_tax
+                       returns_count, returns_value, returns_tax, cash_counted, counted_by
                 FROM day_closes WHERE id = $id;
                 """;
             command.Parameters.AddWithValue("$id", id);
@@ -687,7 +700,9 @@ public sealed class DayCloseRepository : IDayCloseStore
                 CashPaidIn: reader.GetDecimal(19),
                 ReturnsCount: reader.GetInt32(20),
                 ReturnsValue: reader.GetDecimal(21),
-                ReturnsTax: reader.GetDecimal(22));
+                ReturnsTax: reader.GetDecimal(22),
+                CashCounted: reader.IsDBNull(23) ? null : reader.GetDecimal(23),
+                CountedBy: reader.IsDBNull(24) ? null : reader.GetString(24));
         }
 
         // Recomputed from the invoices this close stamped, rather than stored a second time. The

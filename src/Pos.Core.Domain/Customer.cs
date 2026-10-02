@@ -26,5 +26,11 @@ public sealed class Customer
     /// <summary>Where a business customer is, as their bills print it.</summary>
     public string? Address { get; init; }
 
+    /// <summary>
+    /// The most they may owe on the khata, or null for no limit. Set by the owner, customer by
+    /// customer; a sale that would take them past it waits for the owner's PIN.
+    /// </summary>
+    public decimal? CreditLimit { get; init; }
+
     public bool IsBusiness => Gstin is not null;
 }

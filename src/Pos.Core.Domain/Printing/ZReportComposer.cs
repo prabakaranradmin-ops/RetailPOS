@@ -238,6 +238,35 @@ public sealed class ZReportComposer
         report.Text(Labels.CashInDrawerShouldBe, TextAlignment.Center);
         report.Text(Amount(day.CashExpected), TextAlignment.Center, bold: true, widthMultiplier: 2, heightMultiplier: 2);
         report.Blank();
+
+        // What was counted, typed before the till showed the figure above, and the difference in
+        // words a cashier reads at a glance. A reprint keeps it: the count belongs to the close.
+        if (day.CashCounted is { } counted)
+        {
+            report.Columns($"  {Labels.CashCounted}", Amount(counted));
+
+            if (day.CountedBy is { } who)
+                report.Columns($"  {Labels.CountedBy}", who.Length > 20 ? who[..19] + "…" : who);
+
+            var difference = day.CashDifference!.Value;
+
+            report.Text(
+                difference switch
+                {
+                    > 0m => $"{Labels.DrawerOverBy} {Amount(difference)}",
+                    < 0m => $"{Labels.DrawerShortBy} {Amount(-difference)}",
+                    _ => Labels.DrawerExactlyRight,
+                },
+                TextAlignment.Center,
+                bold: true);
+        }
+        else if (day.Id > 0)
+        {
+            // A close made without a count says so. A preview is not a close, and has nothing to say.
+            report.Text(Labels.DrawerNotCounted, TextAlignment.Center);
+        }
+
+        report.Blank();
         report.Columns($"  {Labels.CashTaken}", Amount(day.TotalOf(TenderType.Cash)));
         report.Columns($"  {Labels.ChangeGiven}", Amount(day.ChangeGiven));
 

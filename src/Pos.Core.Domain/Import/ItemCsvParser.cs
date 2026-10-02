@@ -61,6 +61,12 @@ public static class ItemCsvParser
     private const string ReorderLevel = "reorder_level";
     private const string FullLevel = "full_level";
 
+    /// <summary>The name in Tamil, as the customer asks for it. The till finds the item by it.</summary>
+    private const string NameTa = "name_ta";
+
+    /// <summary>As long as a Tamil name may be: a long one, with the pack size, is under half this.</summary>
+    public const int MaxNameTaLength = 120;
+
     private static readonly string[] RequiredColumns =
         [Sku, Barcode, Name, Hsn, Unit, Mrp, SellingPrice, GstRate, IsWeighed];
 
@@ -235,6 +241,16 @@ public static class ItemCsvParser
         // let the counts decide, which is what nearly every row wants.
         decimal? full = fullText.Length > 0 ? ParseQuantity(fullText, FullLevel, line, problems) : null;
 
+        // Optional like the others: blank is no Tamil name, and on a re-import leaves the one the
+        // item already has.
+        var nameTa = Field(row, header, NameTa);
+
+        if (nameTa.Length > MaxNameTaLength)
+        {
+            problems.Add(new ImportProblem(line, NameTa, $"the Tamil name is {nameTa.Length} characters long; {MaxNameTaLength} is the most."));
+            return null;
+        }
+
         if (unit is null || weighed is null || mrp is null || sellingPrice is null || gstRate is null)
             return null;
 
@@ -252,6 +268,7 @@ public static class ItemCsvParser
             Sku = sku,
             Barcode = barcode.Length == 0 ? null : barcode,
             Name = name,
+            NameTa = nameTa.Length == 0 ? null : nameTa,
             HsnCode = hsn,
             Mrp = mrp.Value,
             SellPrice = sellingPrice.Value,

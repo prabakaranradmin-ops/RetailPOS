@@ -2,7 +2,7 @@
 
 The importer reads a CSV. Give this page to whoever produces the store's item export.
 
-Columns may be in **any order** and **any case**. The first nine must be present; the last two are
+Columns may be in **any order** and **any case**. The first nine must be present; the rest are
 optional and may be left out altogether.
 
 | Column | Required | Notes |
@@ -21,6 +21,7 @@ optional and may be left out altogether.
 | `stock_qty` | no | How many are on the shelf now. Leave blank for anything you do not count. |
 | `reorder_level` | no | Warn when the shelf reaches this. Needs a `stock_qty` beside it. Leave it blank to warn at a share of full instead — see **Counting stock**. |
 | `full_level` | no | What "full" is for this item. Leave it blank and the counts decide: the most the shelf has been stocked to. |
+| `name_ta` | no | The name in Tamil, as customers ask for it — `துவரம் பருப்பு` for Toor Dal. The till finds the item by it, typed in Tamil or spelled in English (`paruppu`, `thuvaram paruppu`). At most 120 characters. See **Finding items by their Tamil names**. |
 
 ## Units
 
@@ -99,7 +100,7 @@ A price of "₹30 a muzham" has no printed MRP, so `mrp` is the price the shop c
 
 ## The optional columns
 
-`category`, `cost_price`, `stock_qty`, `reorder_level` and `full_level` may be left out of the file entirely, and a
+`category`, `cost_price`, `stock_qty`, `reorder_level`, `full_level` and `name_ta` may be left out of the file entirely, and a
 catalogue written before they existed imports unchanged. Individual cells may be blank too — a blank
 means *you have not said*, which is not the same as zero and is treated differently everywhere it
 matters.
@@ -176,6 +177,24 @@ Adding them to a catalogue that is already loaded is an ordinary re-import:
 pos import-items --file catalogue.csv --update
 ```
 
+### Finding items by their Tamil names
+
+A customer asks for *paruppu*, not *Toor Dal*. Give an item its Tamil name in `name_ta` (or on the
+add-one-item form) and the cashier finds it by either name, typed in Tamil or spelled in English
+the way it is said:
+- **Tamil script.** `பருப்பு` and `துவரம்` both find துவரம் பருப்பு.
+- **English spellings.** `paruppu`, `baruppu`, `thuvaram paruppu` and `parupu` all find it too.
+  The same goes for the others: `jeeragam`, `seeragam` and `cheeragam`; `vazhaipazham` and
+  `valaipalam`; `ennai` and `yennai`.
+- **English names said in Tamil.** An item named in English letters is found the same way: one
+  called *Kadalai Maavu* is found by `gadalai mavu`.
+
+What is typed is matched exactly first, then by how it sounds. A name that matches as typed is
+always above one that only sounds like it. Three letters is the least it matches on.
+
+A re-import with `name_ta` blank, or without the column, **keeps** the Tamil names the items already
+have; a name in the cell replaces it. The bill still prints the English `name`.
+
 ## What gets rejected
 
 The import is **all or nothing**. If anything is wrong, nothing is written and you get the full
@@ -196,6 +215,7 @@ list of problems with line numbers — fix the file and run it again.
   a sale, not something a spreadsheet declares.
 - A `reorder_level` with no `stock_qty` beside it — there is nothing to compare it against, so it
   would never fire, and a half-filled row is nearly always a mistake rather than a choice.
+- A `name_ta` longer than 120 characters.
 - A `cost_price` above the `selling_price`. Either it is a typo, or the shop is losing money on
   every scan of that item — and both are worth stopping the import over rather than finding in a
   margin report months later. A negative cost is refused for the same reason.

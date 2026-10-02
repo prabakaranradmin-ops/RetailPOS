@@ -41,7 +41,7 @@ public class MaintenanceTests : IDisposable
 
     private static readonly StoreProfile Store = new() { Name = "Sri Lakshmi Stores", Gstin = "33AABCS1429B1ZX" };
 
-    private MaintenanceViewModel Screen() => new(
+    private MaintenanceViewModel Screen(OffMachineCopy? offMachine = null) => new(
         _temp.Database,
         DataDirectory,
         Closes,
@@ -57,7 +57,21 @@ public class MaintenanceTests : IDisposable
         },
 
         // Tests have no dispatcher, so "back to the UI thread" is "right here".
-        post: action => action());
+        post: action => action(),
+        offMachine: offMachine);
+
+    /// <summary>The pen drives "plugged in": folders standing in for them.</summary>
+    private readonly List<CopyDrive> _plugged = [];
+
+    private OffMachineCopy Copier() => new(BackupDirectory, Lane, () => _plugged);
+
+    private CopyDrive PlugIn(string name)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(DataDirectory, "drives", name)).FullName;
+        var drive = new CopyDrive(root, $"{name} (E:)");
+        _plugged.Add(drive);
+        return drive;
+    }
 
     private void SeedCatalogue() => _temp.Items.AddRange(
     [
@@ -127,6 +141,124 @@ public class MaintenanceTests : IDisposable
 
         Assert.Equal(2, screen.Snapshots.Count);
         Assert.True(screen.Snapshots[0].TakenAt >= screen.Snapshots[1].TakenAt);
+    }
+
+    // ---- Off this computer -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task TheBooksAreCopiedToThePenDriveAndCanBeRestoredFromIt()
+    {
+        SeedCatalogue();
+        Sell();
+        var drive = PlugIn("SHOP");
+        var screen = Screen(Copier());
+
+        Assert.True(screen.CanCopyOff);
+
+        await screen.CopyToPenDrive();
+
+        Assert.Contains("Copied to SHOP (E:)", screen.Summary);
+
+        // A fresh snapshot here, and the same file on the drive.
+        var local = Assert.Single(screen.Snapshots, s => s.KeptOn == "This computer");
+        var onDrive = Assert.Single(screen.Snapshots, s => s.KeptOn == "SHOP (E:)");
+        Assert.Equal(File.ReadAllBytes(local.Path), File.ReadAllBytes(onDrive.Path));
+
+        Assert.False(screen.OffMachineOverdue);
+        Assert.Contains("Last copied to a pen drive", screen.OffMachineStatus);
+        Assert.Contains("SHOP (E:), is plugged in", screen.OffMachineStatus);
+    }
+
+    [Fact]
+    public async Task WithNoPenDriveInNothingIsCopiedAndTheScreenSaysWhatToDo()
+    {
+        var screen = Screen(Copier());
+
+        await screen.CopyToPenDrive();
+
+        Assert.Contains("No pen drive found", screen.Summary);
+        Assert.Empty(screen.Snapshots);
+    }
+
+    /// <summary>Two drives in and neither the shop's yet: the screen will not guess which to write to.</summary>
+    [Fact]
+    public async Task TwoStrangeDrivesAreNotWrittenTo()
+    {
+        PlugIn("ONE");
+        PlugIn("TWO");
+        var screen = Screen(Copier());
+
+        await screen.CopyToPenDrive();
+
+        Assert.Contains("none is the shop's backup drive", screen.Summary);
+        Assert.Empty(Directory.GetDirectories(Path.Combine(DataDirectory, "drives", "ONE")));
+    }
+
+    [Fact]
+    public void ALaneThatHasNeverCopiedIsToldAsSoonAsTheScreenOpens()
+    {
+        var screen = Screen(Copier());
+
+        Assert.True(screen.OffMachineOverdue);
+        Assert.Contains("never been copied", screen.OffMachineStatus);
+        Assert.Contains("Alt+P", screen.OffMachineStatus);
+    }
+
+    [Fact]
+    public void ALaneWiredWithoutAPenDriveDoesNotOfferOne()
+    {
+        var screen = Screen();
+
+        Assert.False(screen.CanCopyOff);
+        Assert.Equal(string.Empty, screen.OffMachineStatus);
+    }
+
+    // ---- The copy at the day close ---------------------------------------------------------------
+
+    [Fact]
+    public void TheCloseCopiesToTheShopsDriveWhenItIsPluggedIn()
+    {
+        var drive = PlugIn("SHOP");
+        Directory.CreateDirectory(Path.Combine(drive.Root, OffMachineCopy.FolderName));
+
+        var service = new DatabaseBackupService(new DatabaseBackup(_temp.Database, BackupDirectory), offMachine: Copier());
+        var outcome = service.Create(DateTimeOffset.Now);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Equal("Copied to SHOP (E:), checked.", outcome.OffMachine);
+        Assert.Single(Copier().CopiesOn(drive));
+    }
+
+    /// <summary>A pen drive that has never been the shop's is not filled by the close on its own.</summary>
+    [Fact]
+    public void TheCloseLeavesAnyOtherDriveAlone()
+    {
+        var stranger = PlugIn("CUSTOMER");
+
+        var outcome = new DatabaseBackupService(new DatabaseBackup(_temp.Database, BackupDirectory), offMachine: Copier())
+            .Create(DateTimeOffset.Now);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Empty(Directory.GetFileSystemEntries(stranger.Root));
+        Assert.Contains("never been copied", outcome.OffMachine);
+        Assert.Contains("Plug in the backup pen drive", outcome.OffMachine);
+    }
+
+    /// <summary>A copy made this week: nothing to nag about, so nothing is said.</summary>
+    [Fact]
+    public void TheCloseSaysNothingWhenTheLastCopyIsRecent()
+    {
+        var copier = Copier();
+        var drive = PlugIn("SHOP");
+        var snapshot = new DatabaseBackup(_temp.Database, BackupDirectory).Create(DateTimeOffset.Now.AddDays(-2));
+        copier.Copy(snapshot.Path, drive, DateTimeOffset.Now.AddDays(-2));
+        _plugged.Clear();
+
+        var outcome = new DatabaseBackupService(new DatabaseBackup(_temp.Database, BackupDirectory), offMachine: copier)
+            .Create(DateTimeOffset.Now);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Null(outcome.OffMachine);
     }
 
     // ---- Checking and compacting -----------------------------------------------------------------

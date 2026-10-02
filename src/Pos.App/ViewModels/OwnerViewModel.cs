@@ -33,7 +33,7 @@ public sealed record RankedRow(string Name, string Detail, string Amount, double
 /// feature. The command-line versions stay for support and for the acceptance run, but nothing here
 /// requires them.
 /// </remarks>
-public sealed class OwnerViewModel : ObservableObject
+public sealed partial class OwnerViewModel : ObservableObject
 {
     private static readonly CultureInfo Indian = CultureInfo.GetCultureInfo("en-IN");
 
@@ -47,6 +47,7 @@ public sealed class OwnerViewModel : ObservableObject
     private readonly Func<IReadOnlyList<ExpiryWarning>>? _expiring;
     private readonly Func<IReadOnlyList<DeadStockItem>>? _deadStock;
     private readonly Func<string?, string?>? _applyUpiId;
+    private readonly Func<ScreenTheme, string?>? _applyScreenTheme;
     private string _upiIdText;
     private readonly string _laneId;
     private bool _showExpiring;
@@ -91,7 +92,11 @@ public sealed class OwnerViewModel : ObservableObject
 
         // The shop's UPI ID for the code with the amount, and how to change it for the lane.
         string? upiId = null,
-        Func<string?, string?>? applyUpiId = null)
+        Func<string?, string?>? applyUpiId = null,
+
+        // How the screens look, and how to change it for the lane.
+        ScreenTheme screenTheme = ScreenTheme.Night,
+        Func<ScreenTheme, string?>? applyScreenTheme = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
         ArgumentNullException.ThrowIfNull(gather);
@@ -106,6 +111,8 @@ public sealed class OwnerViewModel : ObservableObject
         _expiring = expiring;
         _deadStock = deadStock;
         _applyUpiId = applyUpiId;
+        _applyScreenTheme = applyScreenTheme;
+        ScreenTheme = screenTheme;
         UpiId = string.IsNullOrWhiteSpace(upiId) ? null : upiId.Trim();
         _upiIdText = UpiId ?? string.Empty;
         _gather = () => gather(_days);
@@ -493,6 +500,45 @@ public sealed class OwnerViewModel : ObservableObject
         return refused;
     }
 
+    /// <summary>How the screens look: one of the four looks, or following the time of day.</summary>
+    public ScreenTheme ScreenTheme { get; private set; }
+
+    /// <summary>Whether the look can be changed from here at all.</summary>
+    public bool CanChooseScreenTheme => _applyScreenTheme is not null;
+
+    /// <summary>
+    /// Changes how every screen looks, at once - the till behind this screen included - and keeps
+    /// the choice for the next time the lane starts.
+    /// </summary>
+    /// <returns>Null when it worked, or why it did not.</returns>
+    public string? SetScreenTheme(ScreenTheme theme)
+    {
+        if (theme == ScreenTheme)
+            return null;
+
+        if (_applyScreenTheme is null)
+            return "This lane has nowhere to save how the screens look.";
+
+        var refused = _applyScreenTheme(theme);
+
+        ScreenTheme = theme;
+        Raise(nameof(ScreenTheme));
+
+        static string Clock(TimeOnly time) => time.ToString("h tt", CultureInfo.InvariantCulture).ToLowerInvariant();
+
+        Status = refused ?? theme switch
+        {
+            ScreenTheme.ByTimeOfDay =>
+                $"The screens follow the time of day: the morning look from {Clock(ScreenThemes.MorningFrom)}, noon from {Clock(ScreenThemes.NoonFrom)}, evening from {Clock(ScreenThemes.EveningFrom)} and night from {Clock(ScreenThemes.NightFrom)}.",
+            ScreenTheme.Morning => "The screens are in the morning look: light and warm, for the early daylight.",
+            ScreenTheme.Noon => "The screens are in the noon look: the brightest and crispest, for sunlight on the screen.",
+            ScreenTheme.Evening => "The screens are in the evening look: dim, for dusk.",
+            _ => "The screens are in the night look: dark, for the shop's own lights.",
+        };
+
+        return refused;
+    }
+
     /// <summary>Sets, changes or clears the PIN in front of this screen.</summary>
     public string? SetPin(string? pin)
     {
@@ -505,6 +551,7 @@ public sealed class OwnerViewModel : ObservableObject
 
             IsPinSet = false;
             Raise(nameof(IsPinSet));
+            RaiseApprovals();
             Status = "The PIN has been removed. Anyone at this till can open this screen.";
             return null;
         }
@@ -519,6 +566,7 @@ public sealed class OwnerViewModel : ObservableObject
 
         IsPinSet = true;
         Raise(nameof(IsPinSet));
+        RaiseApprovals();
         Status = "Saved. This screen will ask for the PIN from now on.";
         return null;
     }
@@ -571,6 +619,9 @@ public sealed class OwnerViewModel : ObservableObject
         FillMargins(d);
         FillExpenses(d);
         FillVoids(d);
+        FillExceptions(d);
+        FillDrawers(d);
+        FillStockValue(d);
         FillCustomers(d);
         FillPoints(d);
         FillCharts(d);

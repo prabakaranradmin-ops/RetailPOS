@@ -235,6 +235,11 @@ so a change goes into the next build: send this page back with the rest of the s
 | Day-end report | பில் நிறுத்தி வைக்கப்பட்டுள்ளது | bill still held | ☐ | |
 | Day-end report | ஆர்டர் காத்திருக்கிறது | order waiting | ☐ | |
 | Day-end report | தேதி சரிபார்க்கவும் (காலாவதி) | check the dates | ☐ | |
+| Day-end report | எண்ணிய ரொக்கம் | cash counted | ☐ | |
+| Day-end report | எண்ணியவர் | counted by | ☐ | |
+| Day-end report | கூடுதல் / குறைவு | over by / short by | ☐ | |
+| Day-end report | சரியாக உள்ளது | counted exactly right | ☐ | |
+| Day-end report | முடிக்கும்போது எண்ணப்படவில்லை | not counted at the close | ☐ | |
 | Customer's screen | வணக்கம் | welcome | ☐ | |
 | Customer's screen | நன்றி — மீண்டும் வருக | thank you, please visit again | ☐ | |
 | Customer's screen | உங்கள் மீதம் | your change | ☐ | |

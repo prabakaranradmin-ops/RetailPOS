@@ -8,7 +8,7 @@
         Title="RetailPOS — Billing"
         Language="en-IN"
         WindowState="Maximized"
-        Background="{StaticResource AppBackdrop}"
+        Background="{DynamicResource AppBackdrop}"
         FontFamily="Segoe UI">
 
   <Window.Resources>
@@ -28,12 +28,12 @@
 
     <!-- The printed price, which is context rather than the figure being charged. -->
     <Style x:Key="MutedNumericCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
-      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkDim}" />
     </Style>
 
     <!-- What this line comes to: the figure a customer follows down the screen. -->
     <Style x:Key="TotalCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
-      <Setter Property="Foreground" Value="{StaticResource Positive}" />
+      <Setter Property="Foreground" Value="{DynamicResource Positive}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
@@ -43,7 +43,7 @@
       colour of a mistake.
     -->
     <Style x:Key="DiscountCell" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
-      <Setter Property="Foreground" Value="{StaticResource Saving}" />
+      <Setter Property="Foreground" Value="{DynamicResource Saving}" />
     </Style>
 
     <!--
@@ -52,8 +52,8 @@
       and the figures and the UPI code in a pane are the last things to soften.
     -->
     <Style x:Key="PaneCard" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource CardFill}" />
-      <Setter Property="BorderBrush" Value="{StaticResource CardEdge}" />
+      <Setter Property="Background" Value="{DynamicResource CardFill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="14" />
       <Setter Property="Padding" Value="26,24" />
@@ -65,7 +65,7 @@
     -->
     <sys:Double x:Key="PaneInset">0</sys:Double>
     <Style TargetType="v:PaneScrim">
-      <Setter Property="Background" Value="{StaticResource Scrim}" />
+      <Setter Property="Background" Value="{DynamicResource Scrim}" />
       <Setter Property="BottomInset" Value="{DynamicResource PaneInset}" />
     </Style>
 
@@ -76,7 +76,7 @@
     <Style x:Key="PaneKeys" TargetType="TextBlock">
       <Setter Property="Margin" Value="0,14,0,0" />
       <Setter Property="FontSize" Value="12" />
-      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkDim}" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
@@ -85,7 +85,7 @@
       <Setter Property="Width" Value="36" />
       <Setter Property="Height" Value="36" />
       <Setter Property="CornerRadius" Value="10" />
-      <Setter Property="Background" Value="{StaticResource IconChip}" />
+      <Setter Property="Background" Value="{DynamicResource IconChip}" />
       <Setter Property="Margin" Value="0,0,14,0" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -103,23 +103,23 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Face" Background="#14FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1"
+            <Border x:Name="Face" Background="{DynamicResource ChipFill}" BorderBrush="{DynamicResource Line}" BorderThickness="1"
                     CornerRadius="6" Padding="6,4,9,4">
               <ContentPresenter />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource ButtonFaceHover}" />
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource ButtonEdgeHover}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource ButtonFaceHover}" />
+                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ButtonEdgeHover}" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource RowActive}" />
-                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource RowActive}" />
+                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource Accent}" />
               </Trigger>
               <!-- Closing the day cannot be undone: its key is in the danger colour, set apart from "New". -->
               <DataTrigger Binding="{Binding IsDanger}" Value="True">
                 <Setter TargetName="Face" Property="BorderBrush" Value="#80F87171" />
-                <Setter TargetName="Face" Property="Background" Value="{StaticResource DangerSoft}" />
+                <Setter TargetName="Face" Property="Background" Value="{DynamicResource DangerSoft}" />
               </DataTrigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -137,19 +137,19 @@
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="12,7" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Background" Value="{StaticResource InfoSoft}" />
+      <Setter Property="Background" Value="{DynamicResource InfoSoft}" />
       <Setter Property="BorderBrush" Value="#4038BDF8" />
       <Style.Triggers>
         <DataTrigger Binding="{Binding StatusKind}" Value="Done">
-          <Setter Property="Background" Value="{StaticResource DoneSoft}" />
+          <Setter Property="Background" Value="{DynamicResource DoneSoft}" />
           <Setter Property="BorderBrush" Value="#4034D399" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Warning">
-          <Setter Property="Background" Value="{StaticResource WarningSoft}" />
+          <Setter Property="Background" Value="{DynamicResource WarningSoft}" />
           <Setter Property="BorderBrush" Value="#59F5B544" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Error">
-          <Setter Property="Background" Value="{StaticResource DangerSoft}" />
+          <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
           <Setter Property="BorderBrush" Value="#66F87171" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusMessage}" Value="">
@@ -159,16 +159,16 @@
     </Style>
 
     <Style x:Key="MessageInk" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
       <Style.Triggers>
         <DataTrigger Binding="{Binding StatusKind}" Value="Done">
-          <Setter Property="Foreground" Value="{StaticResource Done}" />
+          <Setter Property="Foreground" Value="{DynamicResource Done}" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Warning">
-          <Setter Property="Foreground" Value="{StaticResource Warning}" />
+          <Setter Property="Foreground" Value="{DynamicResource Warning}" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Error">
-          <Setter Property="Foreground" Value="{StaticResource Danger}" />
+          <Setter Property="Foreground" Value="{DynamicResource Danger}" />
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -180,15 +180,15 @@
       <Style.Triggers>
         <DataTrigger Binding="{Binding StatusKind}" Value="Done">
           <Setter Property="Text" Value="{x:Static app:Glyphs.Done}" />
-          <Setter Property="Foreground" Value="{StaticResource Done}" />
+          <Setter Property="Foreground" Value="{DynamicResource Done}" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Warning">
           <Setter Property="Text" Value="{x:Static app:Glyphs.Warning}" />
-          <Setter Property="Foreground" Value="{StaticResource Warning}" />
+          <Setter Property="Foreground" Value="{DynamicResource Warning}" />
         </DataTrigger>
         <DataTrigger Binding="{Binding StatusKind}" Value="Error">
           <Setter Property="Text" Value="{x:Static app:Glyphs.Error}" />
-          <Setter Property="Foreground" Value="{StaticResource Danger}" />
+          <Setter Property="Foreground" Value="{DynamicResource Danger}" />
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -196,7 +196,7 @@
     <Style x:Key="IndexCell" TargetType="TextBlock">
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
-      <Setter Property="Foreground" Value="{StaticResource InkDim}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkDim}" />
     </Style>
 
     <Style x:Key="NameCell" TargetType="TextBlock">
@@ -208,7 +208,7 @@
 
     <!-- Codes: present when wanted, quiet when not. -->
     <Style x:Key="DimCell" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkMuted}" />
       <Setter Property="FontFamily" Value="{StaticResource FigureFont}" />
       <Setter Property="FontSize" Value="13" />
     </Style>
@@ -239,26 +239,27 @@
               <GradientStop Color="#FF10B981" Offset="1" />
             </LinearGradientBrush>
           </Border.Background>
+          <!-- The mark is the same in every look, so its glyph is too: dark on the sky-to-green. -->
           <TextBlock Text="{x:Static app:Glyphs.Till}" Style="{StaticResource Glyph}" FontSize="13"
-                     Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center" />
+                     Foreground="#FF04121C" HorizontalAlignment="Center" />
         </Border>
         <TextBlock x:Name="ShopName" Text="" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <TextBlock Text="RetailPOS" Foreground="{StaticResource InkDim}" FontSize="12"
+        <TextBlock Text="RetailPOS" Foreground="{DynamicResource InkDim}" FontSize="12"
                    Margin="10,1,0,0" VerticalAlignment="Center" />
         <Border Background="#1438BDF8" BorderBrush="#4038BDF8" BorderThickness="1"
                 CornerRadius="5" Padding="7,1" VerticalAlignment="Center" Margin="12,0,0,0">
           <TextBlock x:Name="BuildChip" Text="GST" FontSize="10.5" FontWeight="Bold"
-                     Foreground="{StaticResource Accent}" />
+                     Foreground="{DynamicResource Accent}" />
         </Border>
       </StackPanel>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-        <Border Background="#14FFFFFF" CornerRadius="5" Padding="8,2" VerticalAlignment="Center">
-          <TextBlock x:Name="LaneLabel" Text="" Foreground="{StaticResource InkMuted}" FontSize="11.5" />
+        <Border Background="{DynamicResource ChipFill}" CornerRadius="5" Padding="8,2" VerticalAlignment="Center">
+          <TextBlock x:Name="LaneLabel" Text="" Foreground="{DynamicResource InkMuted}" FontSize="11.5" />
         </Border>
-        <Ellipse Width="7" Height="7" Fill="{StaticResource Positive}" Margin="14,0,7,0"
+        <Ellipse Width="7" Height="7" Fill="{DynamicResource Positive}" Margin="14,0,7,0"
                  VerticalAlignment="Center" />
-        <TextBlock Text="Works offline · nothing leaves this machine" Foreground="{StaticResource InkMuted}"
+        <TextBlock Text="Works offline · nothing leaves this machine" Foreground="{DynamicResource InkMuted}"
                    FontSize="11.5" VerticalAlignment="Center" />
       </StackPanel>
     </Grid>
@@ -266,20 +267,20 @@
     <!-- Search: one box for both typed queries and scanner bursts (SRS 2.1). -->
     <Border Grid.Row="1" Style="{StaticResource CardPanel}" Padding="14,10,14,12" CornerRadius="10">
       <StackPanel>
-        <TextBlock Text="Scan or search" Foreground="{StaticResource InkMuted}" FontSize="12" />
+        <TextBlock Text="Scan or search" Foreground="{DynamicResource InkMuted}" FontSize="12" />
         <Grid Margin="0,5,0,0">
           <TextBox x:Name="SearchBox"
                    Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                    FontSize="24"
                    Padding="44,6,8,6"
-                   Foreground="{StaticResource Ink}"
-                   CaretBrush="{StaticResource Accent}"
+                   Foreground="{DynamicResource Ink}"
+                   CaretBrush="{DynamicResource Accent}"
                    AutomationProperties.Name="Scan or search" />
           <TextBlock Text="{x:Static app:Glyphs.Search}" Style="{StaticResource Glyph}" FontSize="19"
-                     Foreground="{StaticResource InkMuted}" Margin="16,0,0,0" HorizontalAlignment="Left"
+                     Foreground="{DynamicResource InkMuted}" Margin="16,0,0,0" HorizontalAlignment="Left"
                      IsHitTestVisible="False" />
           <TextBlock Text="Scan a barcode, or type part of a name" Margin="46,0,0,0" FontSize="17"
-                     Foreground="{StaticResource InkDim}" VerticalAlignment="Center" IsHitTestVisible="False">
+                     Foreground="{DynamicResource InkDim}" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock.Style>
               <Style TargetType="TextBlock">
                 <Setter Property="Visibility" Value="Collapsed" />
@@ -297,8 +298,8 @@
         <ListBox AutomationProperties.Name="Items matching the search" x:Name="ResultList"
                  Margin="0,8,0,0"
                  MaxHeight="180"
-                 Background="{StaticResource Surface}"
-                 BorderBrush="{StaticResource Line}"
+                 Background="{DynamicResource Surface}"
+                 BorderBrush="{DynamicResource Line}"
                  Focusable="False"
                  ItemsSource="{Binding SearchResults}"
                  SelectedIndex="{Binding SelectedResultIndex, Mode=TwoWay}"
@@ -311,8 +312,11 @@
                   <ColumnDefinition Width="140" />
                   <ColumnDefinition Width="100" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding Name}" />
-                <TextBlock Grid.Column="1" Text="{Binding Sku}" Foreground="{StaticResource InkMuted}" />
+                <!-- The Tamil name beside the English, so an item found by it shows why it was found. -->
+                <TextBlock Grid.Column="0" TextTrimming="CharacterEllipsis">
+                  <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding NameTa, Mode=OneWay}" Foreground="{DynamicResource InkMuted}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" Text="{Binding Sku}" Foreground="{DynamicResource InkMuted}" />
                 <TextBlock Grid.Column="2" Text="{Binding SellPrice, StringFormat={}{0:N2}}"
                            HorizontalAlignment="Right" />
               </Grid>
@@ -342,11 +346,11 @@
                 GridLinesVisibility="Horizontal"
                 Background="Transparent"
                 RowBackground="Transparent"
-                Foreground="{StaticResource Ink}"
+                Foreground="{DynamicResource Ink}"
                 BorderThickness="0"
-                HorizontalGridLinesBrush="{StaticResource Line}"
+                HorizontalGridLinesBrush="{DynamicResource Line}"
                 AlternationCount="2"
-                AlternatingRowBackground="{StaticResource RowStripe}"
+                AlternatingRowBackground="{DynamicResource RowStripe}"
                 FontSize="14"
                 RowHeight="28"
                 ItemsSource="{Binding Lines}"
@@ -451,14 +455,14 @@
             </Style.Triggers>
           </Style>
         </StackPanel.Style>
-        <Border Width="72" Height="72" CornerRadius="36" Background="{StaticResource IconChip}" HorizontalAlignment="Center">
+        <Border Width="72" Height="72" CornerRadius="36" Background="{DynamicResource IconChip}" HorizontalAlignment="Center">
           <TextBlock Text="{x:Static app:Glyphs.Cart}" Style="{StaticResource Glyph}" FontSize="30"
                      HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
         <TextBlock Text="Ready for the first item" FontSize="17" FontWeight="SemiBold" Margin="0,16,0,0"
                    HorizontalAlignment="Center" />
         <TextBlock Text="Scan a barcode, or type part of a name in the box above." FontSize="13"
-                   Foreground="{StaticResource InkMuted}" Margin="0,6,0,0" HorizontalAlignment="Center" />
+                   Foreground="{DynamicResource InkMuted}" Margin="0,6,0,0" HorizontalAlignment="Center" />
       </StackPanel>
       </Grid>
       </Border>
@@ -476,24 +480,24 @@
 
             <!-- NFR-02: the grand total is the one figure that must read across the counter, so it
                  takes the top of the panel rather than whatever the other sections leave over. -->
-            <Border Background="{StaticResource TotalFill}" BorderBrush="#6610B981" BorderThickness="1"
+            <Border Background="{DynamicResource TotalFill}" BorderBrush="#6610B981" BorderThickness="1"
                     CornerRadius="10" Padding="14,11" Margin="0,0,0,10">
               <StackPanel>
                 <Grid>
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <TextBlock Text="{x:Static app:Glyphs.Cart}" Style="{StaticResource Glyph}" FontSize="12"
-                               Foreground="{StaticResource Positive}" Margin="0,0,7,0" />
-                    <TextBlock Text="TOTAL" Style="{StaticResource SectionHeading}" Foreground="{StaticResource InkMuted}"
+                               Foreground="{DynamicResource Positive}" Margin="0,0,7,0" />
+                    <TextBlock Text="TOTAL" Style="{StaticResource SectionHeading}" Foreground="{DynamicResource InkMuted}"
                                VerticalAlignment="Center" />
                   </StackPanel>
-                  <Border Background="#22FFFFFF" CornerRadius="9" Padding="8,1" HorizontalAlignment="Right">
+                  <Border Background="{DynamicResource ChipFillStrong}" CornerRadius="9" Padding="8,1" HorizontalAlignment="Right">
                     <TextBlock Text="{Binding Totals.LineCount, StringFormat={}{0} lines}"
-                               Foreground="{StaticResource InkMuted}" FontSize="11" />
+                               Foreground="{DynamicResource InkMuted}" FontSize="11" />
                   </Border>
                 </Grid>
 
                 <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
-                           Foreground="{StaticResource Positive}"
+                           Foreground="{DynamicResource Positive}"
                            FontFamily="{StaticResource FigureFont}"
                            FontSize="38"
                            FontWeight="Bold"
@@ -514,18 +518,18 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
-                  <TextBlock Text="Before rounding" Foreground="{StaticResource InkDim}" FontSize="11.5" HorizontalAlignment="Left" />
-                  <TextBlock Foreground="{StaticResource InkDim}" FontSize="11.5" HorizontalAlignment="Right"
+                  <TextBlock Text="Before rounding" Foreground="{DynamicResource InkDim}" FontSize="11.5" HorizontalAlignment="Left" />
+                  <TextBlock Foreground="{DynamicResource InkDim}" FontSize="11.5" HorizontalAlignment="Right"
                              FontFamily="{StaticResource FigureFont}"
                              Text="{Binding TotalBeforeRounding, Mode=OneWay, StringFormat={}{0:N2}}" />
-                  <TextBlock Grid.Row="1" Text="Round off" Foreground="{StaticResource InkDim}" FontSize="11.5" HorizontalAlignment="Left" />
-                  <TextBlock Grid.Row="1" Foreground="{StaticResource InkDim}" FontSize="11.5" HorizontalAlignment="Right"
+                  <TextBlock Grid.Row="1" Text="Round off" Foreground="{DynamicResource InkDim}" FontSize="11.5" HorizontalAlignment="Left" />
+                  <TextBlock Grid.Row="1" Foreground="{DynamicResource InkDim}" FontSize="11.5" HorizontalAlignment="Right"
                              FontFamily="{StaticResource FigureFont}"
                              Text="{Binding RoundOff, Mode=OneWay, StringFormat={}{0:+0.00;−0.00}}" />
                 </Grid>
 
                 <Grid Margin="0,3,0,0">
-                  <TextBlock x:Name="TaxNote" Text="Incl. all taxes" Foreground="{StaticResource InkDim}"
+                  <TextBlock x:Name="TaxNote" Text="Incl. all taxes" Foreground="{DynamicResource InkDim}"
                              FontSize="11.5" HorizontalAlignment="Left" VerticalAlignment="Center"
                              TextTrimming="CharacterEllipsis" />
                   <Border HorizontalAlignment="Right" CornerRadius="9" Padding="8,1" Background="#1FF5B544">
@@ -538,7 +542,7 @@
                         </Style.Triggers>
                       </Style>
                     </Border.Style>
-                    <TextBlock Foreground="{StaticResource Saving}" FontSize="11.5" FontWeight="SemiBold"
+                    <TextBlock Foreground="{DynamicResource Saving}" FontSize="11.5" FontWeight="SemiBold"
                                Text="{Binding SavingsLabel}" />
                   </Border>
                 </Grid>
@@ -550,7 +554,7 @@
             Who is on the till, docked to the bottom so a shift change is always in view.
           -->
           <StackPanel DockPanel.Dock="Bottom">
-            <Separator Margin="0,9" Background="{StaticResource Line}" />
+            <Separator Margin="0,9" Background="{DynamicResource Line}" />
 
             <TextBlock Text="LANE" Style="{StaticResource SectionHeading}" Margin="0,0,0,5" />
 
@@ -579,9 +583,15 @@
                    mentioned is while they are standing at the counter. -->
               <TextBlock Grid.Row="1" Grid.Column="0" Text="Owes on khata" Style="{StaticResource FieldLabel}"
                          Visibility="{Binding CustomerOwesAnything, Converter={StaticResource BoolToVisibility}}" />
-              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CustomerOwes, StringFormat={}{0:N2}}"
-                         Style="{StaticResource FieldValue}" FontSize="15" Foreground="{StaticResource Negative}"
-                         Visibility="{Binding CustomerOwesAnything, Converter={StaticResource BoolToVisibility}}" />
+              <StackPanel Grid.Row="1" Grid.Column="1"
+                          Visibility="{Binding CustomerOwesAnything, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding CustomerOwes, StringFormat={}{0:N2}}"
+                           Style="{StaticResource FieldValue}" FontSize="15" Foreground="{DynamicResource Negative}" />
+                <!-- Their limit and when they last paid: what to know before putting more on it. -->
+                <TextBlock Text="{Binding CustomerKhataNote}" Foreground="{DynamicResource InkMuted}" FontSize="12"
+                           HorizontalAlignment="Right" TextWrapping="Wrap" TextAlignment="Right"
+                           Visibility="{Binding HasCustomerKhataNote, Converter={StaticResource BoolToVisibility}}" />
+              </StackPanel>
 
               <TextBlock Grid.Row="2" Grid.Column="0" Text="Cashier" Style="{StaticResource FieldLabel}" />
               <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CashierLabel}"
@@ -656,14 +666,14 @@
 
               <TextBlock Grid.Column="0" Text="Discount" Style="{StaticResource FieldLabel}" />
               <TextBlock Grid.Column="1" Style="{StaticResource FieldValue}"
-                         Foreground="{StaticResource Saving}"
+                         Foreground="{DynamicResource Saving}"
                          Text="{Binding Totals.TotalDiscount, StringFormat={}−{0:N2}}" />
             </Grid>
             </StackPanel>
 
             <!-- PAYMENT -->
             <StackPanel x:Name="PaymentSection" Visibility="{Binding HasPayments, Converter={StaticResource BoolToVisibility}}">
-            <Separator Margin="0,10" Background="{StaticResource Line}" />
+            <Separator Margin="0,10" Background="{DynamicResource Line}" />
             <TextBlock Text="PAYMENT" Style="{StaticResource SectionHeading}" Margin="0,0,0,6" />
 
             <Grid>
@@ -695,7 +705,7 @@
 
               <TextBlock Grid.Row="2" Grid.Column="0" Text="Change" Style="{StaticResource FieldLabel}" />
               <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource FieldValue}"
-                         Foreground="{StaticResource Positive}"
+                         Foreground="{DynamicResource Positive}"
                          Text="{Binding ChangeDue, StringFormat={}{0:N2}}" />
             </Grid>
             </StackPanel>
@@ -728,11 +738,11 @@
     <StackPanel Grid.Row="3">
       <!-- In-place editor for the two editable cells. -->
       <Border Margin="0,12,0,0" Padding="14,10"
-              Style="{StaticResource CardPanel}" BorderBrush="{StaticResource Accent}"
+              Style="{StaticResource CardPanel}" BorderBrush="{DynamicResource Accent}"
               Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
         <StackPanel Orientation="Horizontal">
           <TextBlock Text="{Binding EditingColumn}" FontSize="18" VerticalAlignment="Center"
-                     Foreground="{StaticResource Accent}" />
+                     Foreground="{DynamicResource Accent}" />
           <TextBox x:Name="EditBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
                    AutomationProperties.Name="{Binding EditingColumn, StringFormat='The line: new {0}'}"
@@ -742,7 +752,7 @@
 
       <!-- What an order asked for that is not on the bill, kept in view until the order is saved or Esc. -->
       <Border x:Name="OrderMissesPanel" Margin="0,12,0,0" Padding="14,9" CornerRadius="10" BorderThickness="1"
-              Background="{StaticResource WarningSoft}" BorderBrush="#59F5B544"
+              Background="{DynamicResource WarningSoft}" BorderBrush="#59F5B544"
               Visibility="{Binding HasOrderMisses, Converter={StaticResource BoolToVisibility}}"
               AutomationProperties.Name="{Binding OrderMissesLine, StringFormat='Not on the bill from the order: {0}'}">
         <Grid>
@@ -751,13 +761,13 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
-          <TextBlock Text="{x:Static app:Glyphs.Warning}" Style="{StaticResource Glyph}" Foreground="{StaticResource Warning}"
+          <TextBlock Text="{x:Static app:Glyphs.Warning}" Style="{StaticResource Glyph}" Foreground="{DynamicResource Warning}"
                      FontSize="14" Margin="0,2,10,0" VerticalAlignment="Top" />
-          <TextBlock Grid.Column="1" TextWrapping="Wrap" FontSize="14" Foreground="{StaticResource Warning}">
+          <TextBlock Grid.Column="1" TextWrapping="Wrap" FontSize="14" Foreground="{DynamicResource Warning}">
             <Run Text="Not on the bill from the order:" FontWeight="SemiBold" /> <Run Text="{Binding OrderMissesLine, Mode=OneWay}" />
           </TextBlock>
           <TextBlock Grid.Column="2" Text="{Binding CancelKey, StringFormat='{}{0} hides this'}" FontSize="12"
-                     Foreground="{StaticResource InkDim}" Margin="12,2,0,0" VerticalAlignment="Top" />
+                     Foreground="{DynamicResource InkDim}" Margin="12,2,0,0" VerticalAlignment="Top" />
         </Grid>
       </Border>
     </StackPanel>
@@ -788,7 +798,7 @@
         not wipe it before anybody has acted on it.
       -->
       <Border x:Name="StandingNotePanel" Margin="0,10,0,0" Padding="12,6" CornerRadius="8" BorderThickness="1"
-              Background="{StaticResource WarningSoft}" BorderBrush="#59F5B544"
+              Background="{DynamicResource WarningSoft}" BorderBrush="#59F5B544"
               Visibility="{Binding ShowsStandingNote, Converter={StaticResource BoolToVisibility}}"
               AutomationProperties.Name="{Binding StandingNote, StringFormat='From the last sale: {0}'}">
         <Grid>
@@ -796,10 +806,10 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
-          <TextBlock Text="{x:Static app:Glyphs.Warning}" Style="{StaticResource Glyph}" Foreground="{StaticResource Warning}"
+          <TextBlock Text="{x:Static app:Glyphs.Warning}" Style="{StaticResource Glyph}" Foreground="{DynamicResource Warning}"
                      FontSize="13" Margin="0,2,10,0" VerticalAlignment="Top" />
           <TextBlock Grid.Column="1" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="40" FontSize="13"
-                     Foreground="{StaticResource Warning}">
+                     Foreground="{DynamicResource Warning}">
             <Run Text="Last sale:" FontWeight="SemiBold" /> <Run Text="{Binding StandingNote, Mode=OneWay}" />
           </TextBlock>
         </Grid>
@@ -843,18 +853,18 @@
                 <Button Style="{StaticResource KeyPillButton}" Click="KeyPill_Click" ToolTip="{Binding Label}"
                         AutomationProperties.Name="{Binding Spoken}">
                   <StackPanel Orientation="Horizontal">
-                    <Border Background="#FF1E293B" BorderBrush="#FF2E3B4F" BorderThickness="1,1,1,2" CornerRadius="4" Padding="5,0">
-                      <TextBlock x:Name="Cap" Text="{Binding Key}" Foreground="{StaticResource Accent}"
+                    <Border Background="{DynamicResource KeyCapFill}" BorderBrush="{DynamicResource KeyCapEdge}" BorderThickness="1,1,1,2" CornerRadius="4" Padding="5,0">
+                      <TextBlock x:Name="Cap" Text="{Binding Key}" Foreground="{DynamicResource Accent}"
                                  FontFamily="{StaticResource FigureFont}" FontSize="11" FontWeight="Bold" />
                     </Border>
-                    <TextBlock x:Name="What" Text="{Binding Label}" Foreground="{StaticResource InkMuted}"
+                    <TextBlock x:Name="What" Text="{Binding Label}" Foreground="{DynamicResource InkMuted}"
                                FontSize="12" FontWeight="SemiBold" Margin="7,0,0,0" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding IsDanger}" Value="True">
-                    <Setter TargetName="Cap" Property="Foreground" Value="{StaticResource Danger}" />
-                    <Setter TargetName="What" Property="Foreground" Value="{StaticResource Danger}" />
+                    <Setter TargetName="Cap" Property="Foreground" Value="{DynamicResource Danger}" />
+                    <Setter TargetName="What" Property="Foreground" Value="{DynamicResource Danger}" />
                   </DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
@@ -867,7 +877,7 @@
                   AutomationProperties.Name="F12, Pay and print">
             <Button.Template>
               <ControlTemplate TargetType="Button">
-                <Border x:Name="Face" Background="{StaticResource PayFill}" CornerRadius="8" Padding="10,7,14,7">
+                <Border x:Name="Face" Background="{DynamicResource PayFill}" CornerRadius="8" Padding="10,7,14,7">
                   <ContentPresenter />
                 </Border>
                 <ControlTemplate.Triggers>
@@ -879,10 +889,10 @@
             </Button.Template>
             <StackPanel Orientation="Horizontal">
               <Border Background="#33FFFFFF" CornerRadius="4" Padding="6,1">
-                <TextBlock Text="F12" Foreground="{StaticResource OnAccent}" FontFamily="{StaticResource FigureFont}"
+                <TextBlock Text="F12" Foreground="{DynamicResource OnAccent}" FontFamily="{StaticResource FigureFont}"
                            FontSize="12" FontWeight="Bold" />
               </Border>
-              <TextBlock Text="Pay &amp; Print" Foreground="{StaticResource OnAccent}" FontSize="14"
+              <TextBlock Text="Pay &amp; Print" Foreground="{DynamicResource OnAccent}" FontSize="14"
                          FontWeight="Bold" Margin="9,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
@@ -904,7 +914,7 @@
               <TextBlock Text="Payment" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-              <TextBlock Text="DUE" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkMuted}"
+              <TextBlock Text="DUE" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource InkMuted}"
                          VerticalAlignment="Center" Margin="0,4,10,0" />
               <TextBlock FontSize="28" FontWeight="Bold" FontFamily="{StaticResource FigureFont}"
                          Text="{Binding AmountDue, StringFormat={}{0:N2}}" />
@@ -913,8 +923,8 @@
 
           <!-- Tender types. Arrows move; typing an amount and committing takes the payment. -->
           <ListBox AutomationProperties.Name="Tenders" Margin="0,18,0,0"
-                   Background="{StaticResource FieldFill}"
-                   BorderBrush="{StaticResource CardEdge}"
+                   Background="{DynamicResource FieldFill}"
+                   BorderBrush="{DynamicResource CardEdge}"
                    Padding="2,4,2,0"
                    Focusable="False"
                    ItemContainerStyle="{StaticResource SegmentItem}"
@@ -953,7 +963,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding SelectedTenderType, Converter={StaticResource TenderLabel}}"
                            FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" MinWidth="110" MaxWidth="150"
-                           Foreground="{StaticResource Accent}" TextWrapping="Wrap" Margin="0,0,14,0" />
+                           Foreground="{DynamicResource Accent}" TextWrapping="Wrap" Margin="0,0,14,0" />
                 <TextBox x:Name="TenderBox" Grid.Column="1" MaxWidth="260" HorizontalAlignment="Left" MinWidth="200"
                          Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
                          AutomationProperties.Name="{Binding SelectedTenderType, Converter={StaticResource TenderLabel}, StringFormat='Amount by {0}'}"
@@ -961,7 +971,7 @@
               </Grid>
 
               <!-- The points line only for points: it read under every tender, as if cash were counted in points. -->
-              <TextBlock Margin="0,8,0,0" FontSize="12.5" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}">
+              <TextBlock Margin="0,8,0,0" FontSize="12.5" TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}">
                 <TextBlock.Style>
                   <Style TargetType="TextBlock">
                     <Setter Property="Text" Value="Leave blank to take the whole balance." />
@@ -975,14 +985,14 @@
               </TextBlock>
 
               <!-- Taken on the phone instead of paper: said plainly, so nobody waits for a bill to print. -->
-              <Border Margin="0,12,0,0" Padding="12,8" CornerRadius="8" Background="{StaticResource DoneSoft}"
-                      BorderBrush="{StaticResource Positive}" BorderThickness="1"
+              <Border Margin="0,12,0,0" Padding="12,8" CornerRadius="8" Background="{DynamicResource DoneSoft}"
+                      BorderBrush="{DynamicResource Positive}" BorderThickness="1"
                       Visibility="{Binding IsPaperless, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding PaperlessLine, Mode=OneWay}" Foreground="{StaticResource Positive}"
+                <TextBlock Text="{Binding PaperlessLine, Mode=OneWay}" Foreground="{DynamicResource Positive}"
                            FontSize="14" TextWrapping="Wrap" />
               </Border>
 
-              <TextBlock Margin="0,12,0,0" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}"
+              <TextBlock Margin="0,12,0,0" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}"
                          Text="{Binding UpiHint, Mode=OneWay}"
                          Visibility="{Binding HasUpiHint, Converter={StaticResource BoolToVisibility}}" />
 
@@ -997,10 +1007,10 @@
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
                       <TextBlock Grid.Column="0" Margin="0,0,10,0">
-                        <Run Text="{x:Static app:Glyphs.Check}" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource Positive}" FontSize="11" />
+                        <Run Text="{x:Static app:Glyphs.Check}" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource Positive}" FontSize="11" />
                         <Run Text=" " /><Run Text="{Binding Type, Converter={StaticResource TenderLabel}, Mode=OneWay}" />
                       </TextBlock>
-                      <TextBlock Grid.Column="1" Text="{Binding ReferenceNo}" Foreground="{StaticResource InkMuted}"
+                      <TextBlock Grid.Column="1" Text="{Binding ReferenceNo}" Foreground="{DynamicResource InkMuted}"
                                  TextTrimming="CharacterEllipsis" />
                       <TextBlock Grid.Column="2" Text="{Binding Amount, StringFormat={}{0:N2}}" Margin="10,0,0,0"
                                  FontFamily="{StaticResource FigureFont}" HorizontalAlignment="Right" />
@@ -1009,7 +1019,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <Separator Margin="0,12" Background="{StaticResource Line}" />
+              <Separator Margin="0,12" Background="{DynamicResource Line}" />
 
               <Grid x:Name="PaneTotals">
                 <Grid.ColumnDefinitions>
@@ -1017,17 +1027,17 @@
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                  <TextBlock Text="STILL DUE" Foreground="{StaticResource InkMuted}" FontSize="11" FontWeight="Bold" />
+                  <TextBlock Text="STILL DUE" Foreground="{DynamicResource InkMuted}" FontSize="11" FontWeight="Bold" />
                   <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left" Height="42">
                     <TextBlock Text="{Binding AmountRemaining, StringFormat={}{0:N2}}" FontSize="32" FontWeight="Bold"
                                FontFamily="{StaticResource FigureFont}" />
                   </Viewbox>
                 </StackPanel>
                 <StackPanel Grid.Column="1">
-                  <TextBlock Text="CHANGE" Foreground="{StaticResource InkMuted}" FontSize="11" FontWeight="Bold" TextAlignment="Right" />
+                  <TextBlock Text="CHANGE" Foreground="{DynamicResource InkMuted}" FontSize="11" FontWeight="Bold" TextAlignment="Right" />
                   <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Right" Height="42">
                     <TextBlock Text="{Binding ChangeDue, StringFormat={}{0:N2}}" FontSize="32" FontWeight="Bold"
-                               FontFamily="{StaticResource FigureFont}" Foreground="{StaticResource Positive}" />
+                               FontFamily="{StaticResource FigureFont}" Foreground="{DynamicResource Positive}" />
                   </Viewbox>
                 </StackPanel>
               </Grid>
@@ -1078,7 +1088,7 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Customer" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="{Binding CustomerPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding CustomerPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="12" Margin="0,12,0,0" />
           <TextBox x:Name="CustomerBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
@@ -1095,7 +1105,7 @@
                    Visibility="{Binding HasCustomerMatches, Converter={StaticResource BoolToVisibility}}"
                    Focusable="False" Margin="0,10,0,0" MaxHeight="230"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid>
@@ -1134,7 +1144,7 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Reprint a bill" FontSize="22" FontWeight="Bold" />
-          <TextBlock Foreground="{StaticResource InkMuted}" FontSize="13" Margin="0,8,0,0"
+          <TextBlock Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,8,0,0"
                      TextWrapping="Wrap"
                      Text="Leave blank for the last bill on this lane, or type an invoice number or the customer's mobile number." />
           <TextBox x:Name="ReprintBox"
@@ -1158,10 +1168,10 @@
     <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
             Visibility="{Binding IsVoiding, Converter={StaticResource BoolToVisibility}}">
       <Border Width="620" VerticalAlignment="Center" HorizontalAlignment="Center"
-              Style="{StaticResource PaneCard}" BorderBrush="{StaticResource Danger}" BorderThickness="2">
+              Style="{StaticResource PaneCard}" BorderBrush="{DynamicResource Danger}" BorderThickness="2">
         <StackPanel>
-          <TextBlock Text="Void a sale" FontSize="22" FontWeight="Bold" Foreground="{StaticResource Danger}" />
-          <TextBlock Foreground="{StaticResource InkMuted}" FontSize="13" Margin="0,8,0,0"
+          <TextBlock Text="Void a sale" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Danger}" />
+          <TextBlock Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,8,0,0"
                      TextWrapping="Wrap"
                      Text="Leave blank for the last bill, or type the invoice number. The bill stays in the books marked cancelled, its number stays used, and any loyalty points go back." />
           <TextBox x:Name="VoidBox"
@@ -1188,22 +1198,52 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Cashier" FontSize="22" FontWeight="Bold" />
-          <TextBlock Foreground="{StaticResource InkMuted}" FontSize="13" Margin="0,8,0,0"
+          <TextBlock Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,8,0,0"
                      TextWrapping="Wrap"
                      Text="Every sale from here on is recorded against this name, so the day-end report can attribute takings." />
-          <TextBox x:Name="CashierBox"
-                   Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
-                   AutomationProperties.Name="Cashier's name"
-                   FontSize="24" Padding="8,6" Margin="0,12,0,0" />
 
-          <TextBlock Style="{StaticResource PaneKeys}">
-            <TextBlock.Text>
-              <MultiBinding StringFormat="{}{0} saves the name  ·  {1} back">
-                <Binding Path="CommitKey" />
-                <Binding Path="CancelKey" />
-              </MultiBinding>
-            </TextBlock.Text>
-          </TextBlock>
+          <!-- A lane with no cashiers set up: the name, typed. -->
+          <StackPanel Visibility="{Binding TypesCashierName, Converter={StaticResource BoolToVisibility}}">
+            <TextBox x:Name="CashierBox"
+                     Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Cashier's name"
+                     FontSize="24" Padding="8,6" Margin="0,12,0,0" />
+
+            <TextBlock Style="{StaticResource PaneKeys}">
+              <TextBlock.Text>
+                <MultiBinding StringFormat="{}{0} saves the name  ·  {1} back">
+                  <Binding Path="CommitKey" />
+                  <Binding Path="CancelKey" />
+                </MultiBinding>
+              </TextBlock.Text>
+            </TextBlock>
+          </StackPanel>
+
+          <!-- A lane with cashiers set up: your name from the list, and your own PIN. -->
+          <StackPanel Visibility="{Binding UsesCashierPins, Converter={StaticResource BoolToVisibility}}">
+            <ListBox x:Name="CashierList" ItemsSource="{Binding CashierChoices}" SelectedIndex="{Binding SelectedCashierIndex, Mode=OneWay}"
+                     AutomationProperties.Name="Cashiers" Focusable="False" MaxHeight="220" Margin="0,12,0,0"
+                     Background="Transparent" BorderThickness="0">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding}" FontSize="18" Padding="6,4" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock Text="PIN" Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,12,0,4" />
+            <PasswordBox x:Name="CashierPinBox" AutomationProperties.Name="Your PIN"
+                         FontSize="24" Padding="8,6" PasswordChanged="CashierPin_Changed" />
+
+            <TextBlock Style="{StaticResource PaneKeys}">
+              <TextBlock.Text>
+                <MultiBinding StringFormat="↑ ↓ your name  ·  type your PIN  ·  {0} signs you on  ·  {1} back">
+                  <Binding Path="CommitKey" />
+                  <Binding Path="CancelKey" />
+                </MultiBinding>
+              </TextBlock.Text>
+            </TextBlock>
+          </StackPanel>
         </StackPanel>
       </Border>
     </v:PaneScrim>
@@ -1224,7 +1264,7 @@
 
             <StackPanel Grid.Column="0">
               <TextBlock Text="Khata payment" FontSize="22" FontWeight="Bold" />
-              <TextBlock Text="{Binding CollectPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+              <TextBlock Text="{Binding CollectPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                          FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
               <TextBox x:Name="CollectBox"
                        Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
@@ -1237,7 +1277,7 @@
                        Visibility="{Binding HasCustomerMatches, Converter={StaticResource BoolToVisibility}}"
                        Focusable="False" Margin="0,10,0,0" MaxHeight="230"
                        ItemContainerStyle="{StaticResource TintedListItem}"
-                       Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                       Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
                     <Grid>
@@ -1260,7 +1300,7 @@
                        Visibility="{Binding IsCollectingAmount, Converter={StaticResource BoolToVisibility}}"
                        Focusable="False" Margin="0,10,0,0"
                        ItemContainerStyle="{StaticResource TintedListItem}"
-                       Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                       Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
                     <TextBlock FontSize="15" Text="{Binding Converter={StaticResource TenderLabel}}" />
@@ -1268,7 +1308,7 @@
                 </ListBox.ItemTemplate>
               </ListBox>
 
-              <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}"
+              <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}"
                          Visibility="{Binding IsCollectingAmount, Converter={StaticResource BoolToVisibility}}"
                          Text="Ctrl+K prints their khata statement. Ctrl+Q prints the UPI code." />
             </StackPanel>
@@ -1281,8 +1321,8 @@
                     Visibility="{Binding IsCollectingAmount, Converter={StaticResource BoolToVisibility}}">
               <Border.Style>
                 <Style TargetType="Border">
-                  <Setter Property="Background" Value="{StaticResource FieldFill}" />
-                  <Setter Property="BorderBrush" Value="{StaticResource CardEdge}" />
+                  <Setter Property="Background" Value="{DynamicResource FieldFill}" />
+                  <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
                   <Setter Property="BorderThickness" Value="1" />
                   <Style.Triggers>
                     <!-- Black on white whatever the theme: a phone camera reads that best. -->
@@ -1296,7 +1336,7 @@
               <Grid>
                 <!-- Empty while the code shows. -->
                 <TextBlock x:Name="CollectUpiNote" Text="{Binding CollectUpiNote, Mode=OneWay}" FontSize="13"
-                           TextWrapping="Wrap" Foreground="{StaticResource InkMuted}" VerticalAlignment="Center" />
+                           TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}" VerticalAlignment="Center" />
 
                 <Grid Visibility="{Binding ShowsUpiQr, Converter={StaticResource BoolToVisibility}}">
                   <Grid.ColumnDefinitions>
@@ -1340,7 +1380,7 @@
           <TextBlock Text="{Binding ReturnBillLabel, Mode=OneWay}" FontSize="14" Margin="0,6,0,0"
                      FontFamily="{StaticResource FigureFont}"
                      Visibility="{Binding IsPickingReturn, Converter={StaticResource BoolToVisibility}}" />
-          <TextBlock Text="{Binding ReturnPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding ReturnPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
           <TextBox x:Name="ReturnBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
@@ -1358,7 +1398,7 @@
                    HorizontalContentAlignment="Stretch"
                    Focusable="False" Margin="0,10,0,0" MaxHeight="300"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid Margin="2,3">
@@ -1370,10 +1410,10 @@
                     <ColumnDefinition Width="80" />
                     <ColumnDefinition Width="90" />
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" FontSize="14" Foreground="{StaticResource InkDim}" Text="{Binding LineNo}" />
+                  <TextBlock Grid.Column="0" FontSize="14" Foreground="{DynamicResource InkDim}" Text="{Binding LineNo}" />
                   <StackPanel Grid.Column="1">
                     <TextBlock FontSize="15" TextTrimming="CharacterEllipsis" Text="{Binding Name}" />
-                    <TextBlock FontSize="12" Foreground="{StaticResource InkMuted}" Text="{Binding Note}" />
+                    <TextBlock FontSize="12" Foreground="{DynamicResource InkMuted}" Text="{Binding Note}" />
                   </StackPanel>
                   <TextBlock Grid.Column="2" FontSize="14" Style="{StaticResource MutedNumericCell}">
                     <Run Text="sold" /> <Run Text="{Binding Sold, Mode=OneWay, StringFormat={}{0:0.###}}" /> <Run Text="{Binding Unit, Mode=OneWay}" />
@@ -1381,7 +1421,7 @@
                   <TextBlock Grid.Column="3" FontSize="15" FontWeight="SemiBold" Style="{StaticResource NumericCell}"
                              Text="{Binding Returning, StringFormat={}{0:0.###}}" />
                   <TextBlock Grid.Column="4" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center"
-                             Foreground="{StaticResource Negative}" Text="damaged">
+                             Foreground="{DynamicResource Negative}" Text="damaged">
                     <TextBlock.Style>
                       <Style TargetType="TextBlock">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1409,7 +1449,7 @@
                    Visibility="{Binding IsChoosingRefund, Converter={StaticResource BoolToVisibility}}"
                    Focusable="False" Margin="0,10,0,0"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock FontSize="15" Text="{Binding Label}" />
@@ -1436,7 +1476,7 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Order" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="{Binding OrderPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding OrderPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
           <!-- Several lines for a pasted message: Shift+Enter starts a new one, Enter reads them. -->
           <TextBox x:Name="OrderBox"
@@ -1450,7 +1490,7 @@
                    Visibility="{Binding IsSavingOrder, Converter={StaticResource BoolToVisibility}}"
                    Focusable="False" Margin="0,10,0,0"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock FontSize="15" Text="{Binding}" />
@@ -1477,13 +1517,13 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Bill to a business" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="{Binding BusinessPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding BusinessPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
           <TextBox x:Name="BusinessBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
                    AutomationProperties.Name="{Binding BusinessPrompt, Mode=OneWay}"
                    TextWrapping="Wrap" MaxHeight="120" FontSize="22" Padding="8,6" Margin="0,6,0,0" />
-          <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource InkMuted}"
+          <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}"
                      Text="The GSTIN is checked as it is saved, and decides the state their bills are taxed in." />
 
           <TextBlock Style="{StaticResource PaneKeys}">
@@ -1505,7 +1545,7 @@
               Style="{StaticResource PaneCard}">
         <StackPanel>
           <TextBlock Text="Loose items" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="{Binding QuickKeyPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding QuickKeyPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
           <TextBox x:Name="QuickKeyBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
@@ -1517,7 +1557,7 @@
                    Focusable="False" Margin="0,12,0,0" MaxHeight="420"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemsPanel>
               <ItemsPanelTemplate>
                 <WrapPanel />
@@ -1531,10 +1571,10 @@
                     <ColumnDefinition Width="*" />
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="{Binding Key}" FontSize="22" FontWeight="Bold"
-                             Foreground="{StaticResource Accent}" VerticalAlignment="Center" />
+                             Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
                   <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Price}" FontSize="12" Foreground="{StaticResource InkMuted}"
+                    <TextBlock Text="{Binding Price}" FontSize="12" Foreground="{DynamicResource InkMuted}"
                                FontFamily="{StaticResource FigureFont}" />
                   </StackPanel>
                 </Grid>
@@ -1562,7 +1602,7 @@
         <StackPanel>
           <!-- A title per step: "Cash in and out" stayed up while it was asking what an expense was for. -->
           <TextBlock Text="{Binding DrawerTitle, Mode=OneWay}" FontSize="22" FontWeight="Bold" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding DrawerPrompt, Mode=OneWay}" Foreground="{StaticResource InkMuted}"
+          <TextBlock Text="{Binding DrawerPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
                      FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" />
           <TextBox x:Name="DrawerBox"
                    Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
@@ -1575,7 +1615,7 @@
                    Visibility="{Binding IsChoosingDrawerKind, Converter={StaticResource BoolToVisibility}}"
                    Focusable="False" Margin="0,10,0,0"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock FontSize="15" Text="{Binding}" />
@@ -1589,7 +1629,7 @@
                    Visibility="{Binding IsChoosingExpenseCategory, Converter={StaticResource BoolToVisibility}}"
                    Focusable="False" Margin="0,10,0,0" MaxHeight="300"
                    ItemContainerStyle="{StaticResource TintedListItem}"
-                   Background="{StaticResource FieldFill}" BorderBrush="{StaticResource CardEdge}">
+                   Background="{DynamicResource FieldFill}" BorderBrush="{DynamicResource CardEdge}">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock FontSize="15" Text="{Binding}" />
@@ -1628,8 +1668,8 @@
             of the same customer's bills apart. The note has a line of its own under the name instead.
           -->
           <ListBox AutomationProperties.Name="Held bills" Margin="0,14,0,0" MaxHeight="330"
-                   Background="{StaticResource FieldFill}"
-                   BorderBrush="{StaticResource CardEdge}"
+                   Background="{DynamicResource FieldFill}"
+                   BorderBrush="{DynamicResource CardEdge}"
                    Focusable="False"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    HorizontalContentAlignment="Stretch"
@@ -1648,17 +1688,17 @@
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="{Binding Token}" FontWeight="Bold" FontFamily="{StaticResource FigureFont}" />
                   <TextBlock Grid.Column="1" Text="{Binding HeldAt, Converter={StaticResource Show}, ConverterParameter=dayTime}"
-                             Foreground="{StaticResource InkMuted}" />
+                             Foreground="{DynamicResource InkMuted}" />
                   <StackPanel Grid.Column="2" Margin="0,0,8,0">
                     <TextBlock Text="{Binding CustomerLabel}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
                     <!-- An order says so, with where it is going or when, so it is not mistaken for a
                          bill somebody held to fetch their wallet. -->
-                    <TextBlock Text="{Binding OrderLine}" FontSize="12" Foreground="{StaticResource Accent}"
+                    <TextBlock Text="{Binding OrderLine}" FontSize="12" Foreground="{DynamicResource Accent}"
                                TextWrapping="Wrap" Margin="0,2,0,0"
                                Visibility="{Binding IsOrder, Converter={StaticResource BoolToVisibility}}" />
                   </StackPanel>
                   <TextBlock Grid.Column="3" Text="{Binding ItemCount, Converter={StaticResource Plural}, ConverterParameter=item}"
-                             HorizontalAlignment="Right" Foreground="{StaticResource InkMuted}" />
+                             HorizontalAlignment="Right" Foreground="{DynamicResource InkMuted}" />
                   <TextBlock Grid.Column="4" Text="{Binding GrandTotal, StringFormat={}{0:N2}}"
                              HorizontalAlignment="Right" FontFamily="{StaticResource FigureFont}" FontWeight="SemiBold" />
                 </Grid>
@@ -1685,18 +1725,18 @@
     <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
             Visibility="{Binding IsConfirmingDayClose, Converter={StaticResource BoolToVisibility}}">
       <Border x:Name="DayClosePane" Width="560" VerticalAlignment="Center" HorizontalAlignment="Center"
-              Style="{StaticResource PaneCard}" BorderBrush="{StaticResource Warning}">
+              Style="{StaticResource PaneCard}" BorderBrush="{DynamicResource Warning}">
         <StackPanel>
           <StackPanel Orientation="Horizontal">
-            <Border Style="{StaticResource PaneBadge}" Background="{StaticResource WarningSoft}">
+            <Border Style="{StaticResource PaneBadge}" Background="{DynamicResource WarningSoft}">
               <TextBlock Text="{x:Static app:Glyphs.Lock}" Style="{StaticResource Glyph}" FontSize="17"
-                         Foreground="{StaticResource Warning}" HorizontalAlignment="Center" />
+                         Foreground="{DynamicResource Warning}" HorizontalAlignment="Center" />
             </Border>
             <TextBlock Text="Close the day?" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
           </StackPanel>
 
           <TextBlock Text="{Binding DayCloseNote}" Margin="0,12,0,0" FontSize="14" TextWrapping="Wrap"
-                     Foreground="{StaticResource InkMuted}">
+                     Foreground="{DynamicResource InkMuted}">
             <TextBlock.Style>
               <Style TargetType="TextBlock">
                 <Style.Triggers>
@@ -1711,9 +1751,9 @@
           <ItemsControl ItemsSource="{Binding DayCloseRows}" Margin="0,14,0,0" Focusable="False">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Border x:Name="Row" Padding="0,7" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+                <Border x:Name="Row" Padding="0,7" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
                   <Grid>
-                    <TextBlock x:Name="Label" Text="{Binding Label}" Foreground="{StaticResource InkMuted}" FontSize="15" />
+                    <TextBlock x:Name="Label" Text="{Binding Label}" Foreground="{DynamicResource InkMuted}" FontSize="15" />
                     <TextBlock x:Name="Value" Text="{Binding Value}" HorizontalAlignment="Right"
                                FontFamily="{StaticResource FigureFont}" FontSize="16" />
                   </Grid>
@@ -1722,17 +1762,26 @@
                   <DataTrigger Binding="{Binding Emphasis}" Value="True">
                     <Setter TargetName="Row" Property="BorderThickness" Value="0" />
                     <Setter TargetName="Row" Property="Padding" Value="0,12,0,0" />
-                    <Setter TargetName="Label" Property="Foreground" Value="{StaticResource Ink}" />
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Ink}" />
                     <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
                     <Setter TargetName="Label" Property="VerticalAlignment" Value="Center" />
                     <Setter TargetName="Value" Property="FontSize" Value="24" />
                     <Setter TargetName="Value" Property="FontWeight" Value="Bold" />
-                    <Setter TargetName="Value" Property="Foreground" Value="{StaticResource Positive}" />
+                    <Setter TargetName="Value" Property="Foreground" Value="{DynamicResource Positive}" />
                   </DataTrigger>
                 </DataTemplate.Triggers>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+
+          <!-- The count, typed before the till says what it expects. -->
+          <StackPanel Margin="0,14,0,0">
+            <TextBlock Text="Cash counted in the drawer" Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,0,0,4" />
+            <TextBox x:Name="CloseCountBox"
+                     Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Cash counted in the drawer"
+                     FontFamily="{StaticResource FigureFont}" FontSize="22" Padding="8,4" />
+          </StackPanel>
 
           <TextBlock Style="{StaticResource PaneKeys}" Text="{Binding DayCloseKeys}" />
         </StackPanel>
@@ -1767,9 +1816,9 @@
                     <ColumnDefinition Width="150" />
                     <ColumnDefinition Width="*" />
                   </Grid.ColumnDefinitions>
-                  <Border HorizontalAlignment="Left" Background="#FF1E293B" BorderBrush="#FF2E3B4F" BorderThickness="1,1,1,2"
+                  <Border HorizontalAlignment="Left" Background="{DynamicResource KeyCapFill}" BorderBrush="{DynamicResource KeyCapEdge}" BorderThickness="1,1,1,2"
                           CornerRadius="4" Padding="6,0">
-                    <TextBlock Text="{Binding Keys}" Foreground="{StaticResource Accent}" FontFamily="{StaticResource FigureFont}"
+                    <TextBlock Text="{Binding Keys}" Foreground="{DynamicResource Accent}" FontFamily="{StaticResource FigureFont}"
                                FontSize="12" FontWeight="Bold" />
                   </Border>
                   <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="13.5" VerticalAlignment="Center"
@@ -1780,6 +1829,116 @@
           </ItemsControl>
 
           <TextBlock x:Name="KeySheetFooter" Style="{StaticResource PaneKeys}" />
+        </StackPanel>
+      </Border>
+    </v:PaneScrim>
+
+    <!--
+      An item on the shelf but not in the catalogue: what it is, its price, its GST slab. One box for
+      the name and the price in turn, then the slabs as a list with nothing picked until the cashier
+      picks it.
+    -->
+    <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
+            Visibility="{Binding IsAddingOpenItem, Converter={StaticResource BoolToVisibility}}">
+      <Border x:Name="OpenItemPane" Width="680" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Style="{StaticResource PaneCard}">
+        <StackPanel>
+          <TextBlock Text="An item not in the catalogue" FontSize="22" FontWeight="Bold" />
+          <TextBlock Text="{Binding OpenItemSoFar, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
+                     Margin="0,8,0,0" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding OpenItemPrompt, Mode=OneWay}" Foreground="{DynamicResource InkMuted}"
+                     FontSize="13" Margin="0,8,0,0" TextWrapping="Wrap" />
+          <TextBox x:Name="OpenItemBox"
+                   Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
+                   AutomationProperties.Name="{Binding OpenItemPrompt, Mode=OneWay}"
+                   Visibility="{Binding IsTypingOpenItem, Converter={StaticResource BoolToVisibility}}"
+                   FontSize="22" Padding="8,6" Margin="0,6,0,0" />
+          <ListBox x:Name="OpenRateList" ItemsSource="{Binding OpenItemRates}" SelectedIndex="{Binding SelectedOpenRateIndex}"
+                   AutomationProperties.Name="GST slabs for the item"
+                   Visibility="{Binding IsChoosingOpenRate, Converter={StaticResource BoolToVisibility}}"
+                   Margin="0,8,0,0" MaxHeight="300" Background="Transparent" BorderThickness="0"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" FontSize="15" Padding="6,5" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}"
+                     Text="It is sold as typed and nothing comes off any shelf count. The owner sees it on the Catalogue tab, to add it properly." />
+
+          <TextBlock Style="{StaticResource PaneKeys}">
+            <TextBlock.Text>
+              <MultiBinding StringFormat="↑ ↓ the slab  ·  {0} next  ·  {1} a step back">
+                <Binding Path="CommitKey" />
+                <Binding Path="CancelKey" />
+              </MultiBinding>
+            </TextBlock.Text>
+          </TextBlock>
+        </StackPanel>
+      </Border>
+    </v:PaneScrim>
+
+    <!--
+      One barcode, two MRPs on the shelf: which one is printed on the pack in hand. Only the cashier
+      can tell, so the till asks rather than charge a pack more than it says.
+    -->
+    <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
+            Visibility="{Binding IsChoosingMrp, Converter={StaticResource BoolToVisibility}}">
+      <Border x:Name="MrpPane" Width="620" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Style="{StaticResource PaneCard}">
+        <StackPanel>
+          <TextBlock Text="Which MRP is on the pack?" FontSize="22" FontWeight="Bold" />
+          <TextBlock Text="{Binding MrpQuestion}" Foreground="{DynamicResource InkMuted}" FontSize="13"
+                     Margin="0,8,0,0" TextWrapping="Wrap" />
+          <ListBox x:Name="MrpList" ItemsSource="{Binding MrpChoices}" SelectedIndex="{Binding SelectedMrpIndex}"
+                   AutomationProperties.Name="The MRPs on the shelf" Margin="0,12,0,0"
+                   Background="Transparent" BorderThickness="0">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" FontSize="17" Padding="6,6" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <TextBlock Style="{StaticResource PaneKeys}">
+            <TextBlock.Text>
+              <MultiBinding StringFormat="↑ ↓ the MRP on the pack  ·  {0} puts it on the bill  ·  {1} back, nothing added">
+                <Binding Path="CommitKey" />
+                <Binding Path="CancelKey" />
+              </MultiBinding>
+            </TextBlock.Text>
+          </TextBlock>
+        </StackPanel>
+      </Border>
+    </v:PaneScrim>
+
+    <!--
+      The owner's PIN, over whatever asked for it - last in the file so it is drawn on top of every
+      other pane. The thing being approved is named with its amount, so the owner approves that
+      and not merely a screen.
+    -->
+    <v:PaneScrim Grid.Row="0" Grid.RowSpan="6"
+            Visibility="{Binding IsApproving, Converter={StaticResource BoolToVisibility}}">
+      <Border x:Name="ApprovalPane" Width="560" VerticalAlignment="Center" HorizontalAlignment="Center"
+              Style="{StaticResource PaneCard}" BorderBrush="{DynamicResource Warning}" BorderThickness="2">
+        <StackPanel>
+          <TextBlock Text="The owner's PIN" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Warning}" />
+          <TextBlock Text="{Binding ApprovalWhat, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"
+                     TextWrapping="Wrap" Margin="0,10,0,0" />
+          <TextBlock Foreground="{DynamicResource InkMuted}" FontSize="13" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="This lane asks the owner before this is done. Whether it was approved is recorded, with who was on the till." />
+          <PasswordBox x:Name="ApprovalBox" AutomationProperties.Name="The owner's PIN"
+                       FontSize="24" Padding="8,6" Margin="0,14,0,0" PasswordChanged="ApprovalPin_Changed" />
+
+          <TextBlock Style="{StaticResource PaneKeys}">
+            <TextBlock.Text>
+              <MultiBinding StringFormat="{}{0} approves  ·  {1} back, nothing done">
+                <Binding Path="CommitKey" />
+                <Binding Path="CancelKey" />
+              </MultiBinding>
+            </TextBlock.Text>
+          </TextBlock>
         </StackPanel>
       </Border>
     </v:PaneScrim>

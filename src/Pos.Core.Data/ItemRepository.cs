@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Pos.Core.Domain;
+using Pos.Core.Domain.Catalogue;
 
 namespace Pos.Core.Data;
 
@@ -17,7 +18,7 @@ public sealed class ItemRepository : IItemStore
 
     private const string SelectColumns =
         "id, sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active, " +
-        "category, cost_price, stock_qty, reorder_level, full_qty";
+        "category, cost_price, stock_qty, reorder_level, full_qty, older_mrp, older_price, older_left, name_ta";
 
     private readonly PosDatabase _database;
 
@@ -132,7 +133,52 @@ public sealed class ItemRepository : IItemStore
                 return results;
         }
 
+        // Last, how it sounds: paruppu for பருப்பு, jeeragam for seeragam. After every match on the
+        // text as typed, so an exact name never sits below one that only sounds like it.
+        var sound = SoundKey.Of(trimmed);
+
+        if (sound.Length < SoundKey.MinLength)
+            return results;
+
+        foreach (var item in MatchSound(connection, sound, limit))
+        {
+            if (seen.Add(item.Id))
+                results.Add(item);
+
+            if (results.Count == limit)
+                return results;
+        }
+
         return results;
+    }
+
+    /// <summary>
+    /// Items whose English or Tamil name sounds like what was typed, both folded by
+    /// <see cref="SoundKey"/>.
+    /// </summary>
+    /// <remarks>
+    /// The matching is done on the sound index alone, which holds both keys beside the active flag,
+    /// and only the rows that match are fetched. Asked for directly with an ORDER BY on the name,
+    /// the planner may walk the name index instead and fetch every row in the catalogue to read its
+    /// keys - the same trap the SKU search avoids.
+    /// </remarks>
+    private static List<Item> MatchSound(SqliteConnection connection, string sound, int limit)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {SelectColumns}
+            FROM items
+            WHERE id IN (
+                SELECT id FROM items INDEXED BY ix_items_active_sound
+                WHERE is_active = 1
+                  AND (sound_name LIKE $contains ESCAPE '\' OR sound_ta LIKE $contains ESCAPE '\')
+                LIMIT $limit)
+            ORDER BY name;
+            """;
+        command.Parameters.AddWithValue("$contains", "%" + EscapeLikePattern(sound) + "%");
+        command.Parameters.AddWithValue("$limit", limit);
+
+        return ReadAll(command);
     }
 
     /// <summary>
@@ -308,14 +354,20 @@ public sealed class ItemRepository : IItemStore
             command.CommandText = """
                 INSERT INTO items
                   (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
-                   category, cost_price, stock_qty, reorder_level, full_qty)
+                   category, cost_price, stock_qty, reorder_level, full_qty, name_ta, sound_name, sound_ta)
                 VALUES
                   ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
-                   $category, $cost, $stock, $reorder, $fullInitial)
+                   $category, $cost, $stock, $reorder, $fullInitial, $nameTa, $soundName, $soundTa)
                 ON CONFLICT (sku) DO UPDATE SET
                   barcode = excluded.barcode,
                   hsn_code = excluded.hsn_code,
                   name = excluded.name,
+                  sound_name = excluded.sound_name,
+
+                  -- A file with no Tamil name for an item leaves the one it has, as an empty stock
+                  -- cell leaves the count: a price revision is not the shop taking its names back.
+                  name_ta = COALESCE(excluded.name_ta, items.name_ta),
+                  sound_ta = CASE WHEN excluded.name_ta IS NULL THEN items.sound_ta ELSE excluded.sound_ta END,
                   mrp = excluded.mrp,
                   sell_price = excluded.sell_price,
                   gst_rate = excluded.gst_rate,
@@ -350,7 +402,7 @@ public sealed class ItemRepository : IItemStore
                      {
                          "$sku", "$barcode", "$hsn", "$name", "$mrp",
                          "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
-                         "$stock", "$reorder", "$full", "$fullInitial",
+                         "$stock", "$reorder", "$full", "$fullInitial", "$nameTa", "$soundName", "$soundTa",
                      })
             {
                 command.Parameters.Add(new SqliteParameter(name, null));
@@ -381,10 +433,10 @@ public sealed class ItemRepository : IItemStore
         command.CommandText = """
             INSERT INTO items
               (sku, barcode, hsn_code, name, mrp, sell_price, gst_rate, is_tax_inclusive, unit_type, is_active,
-               category, cost_price, stock_qty, reorder_level, full_qty)
+               category, cost_price, stock_qty, reorder_level, full_qty, name_ta, sound_name, sound_ta)
             VALUES
               ($sku, $barcode, $hsn, $name, $mrp, $sellPrice, $gstRate, $taxInclusive, $unitType, $active,
-               $category, $cost, $stock, $reorder, $fullInitial);
+               $category, $cost, $stock, $reorder, $fullInitial, $nameTa, $soundName, $soundTa);
             SELECT last_insert_rowid();
             """;
 
@@ -392,7 +444,7 @@ public sealed class ItemRepository : IItemStore
                  {
                      "$sku", "$barcode", "$hsn", "$name", "$mrp",
                      "$sellPrice", "$gstRate", "$taxInclusive", "$unitType", "$active", "$category", "$cost",
-                     "$stock", "$reorder", "$full", "$fullInitial",
+                     "$stock", "$reorder", "$full", "$fullInitial", "$nameTa", "$soundName", "$soundTa",
                  })
         {
             command.Parameters.Add(new SqliteParameter(name, null));
@@ -419,6 +471,54 @@ public sealed class ItemRepository : IItemStore
         // What the file said about full, and what a new item starts with: that, or its first count.
         command.Parameters["$full"].Value = (object?)item.FullLevel ?? DBNull.Value;
         command.Parameters["$fullInitial"].Value = (object?)(item.FullLevel ?? (item.StockQty is > 0m ? item.StockQty : null)) ?? DBNull.Value;
+
+        // How each name sounds, for the search: worked out here, on the one way into the table.
+        var nameTa = string.IsNullOrWhiteSpace(item.NameTa) ? null : item.NameTa.Trim();
+        command.Parameters["$nameTa"].Value = (object?)nameTa ?? DBNull.Value;
+        command.Parameters["$soundName"].Value = SoundKey.Of(item.Name);
+        command.Parameters["$soundTa"].Value = nameTa is null ? DBNull.Value : SoundKey.Of(nameTa);
+    }
+
+    /// <summary>
+    /// Works out how each name sounds for every item that has no key yet: the whole catalogue, the
+    /// first time the till starts after the keys were added, and nothing at all after that.
+    /// </summary>
+    /// <returns>How many items were given keys.</returns>
+    public static int FillSoundKeys(SqliteConnection connection)
+    {
+        var missing = new List<(long Id, string Name, string? NameTa)>();
+
+        using (var read = connection.CreateCommand())
+        {
+            read.CommandText = "SELECT id, name, name_ta FROM items WHERE sound_name IS NULL OR (name_ta IS NOT NULL AND sound_ta IS NULL);";
+
+            using var reader = read.ExecuteReader();
+
+            while (reader.Read())
+                missing.Add((reader.GetInt64(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
+        }
+
+        if (missing.Count == 0)
+            return 0;
+
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var write = connection.CreateCommand();
+        write.Transaction = transaction;
+        write.CommandText = "UPDATE items SET sound_name = $name, sound_ta = $ta WHERE id = $id;";
+        var name = write.Parameters.Add("$name", SqliteType.Text);
+        var ta = write.Parameters.Add("$ta", SqliteType.Text);
+        var id = write.Parameters.Add("$id", SqliteType.Integer);
+
+        foreach (var item in missing)
+        {
+            name.Value = SoundKey.Of(item.Name);
+            ta.Value = item.NameTa is null ? DBNull.Value : SoundKey.Of(item.NameTa);
+            id.Value = item.Id;
+            write.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+        return missing.Count;
     }
 
     /// <summary>
@@ -451,5 +551,58 @@ public sealed class ItemRepository : IItemStore
         StockQty = reader.IsDBNull(13) ? null : reader.GetDecimal(13),
         ReorderLevel = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
         FullLevel = reader.IsDBNull(15) ? null : reader.GetDecimal(15),
+        OlderMrp = reader.FieldCount > 16 && !reader.IsDBNull(16) ? reader.GetDecimal(16) : null,
+        OlderPrice = reader.FieldCount > 17 && !reader.IsDBNull(17) ? reader.GetDecimal(17) : null,
+        OlderLeft = reader.FieldCount > 18 && !reader.IsDBNull(18) ? reader.GetDecimal(18) : null,
+        NameTa = reader.FieldCount > 19 && !reader.IsDBNull(19) ? reader.GetString(19) : null,
     };
+
+    /// <summary>
+    /// Counts packs sold at the older MRP off what is left of them, and forgets the older MRP once
+    /// they are gone - after which the till stops asking.
+    /// </summary>
+    /// <returns>How many older packs are left, or null when there are none now.</returns>
+    public decimal? SoldAtOlderMrp(long itemId, decimal mrp, decimal quantity)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+
+        decimal? left;
+
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT older_mrp, older_left FROM items WHERE id = $id;";
+            read.Parameters.AddWithValue("$id", itemId);
+
+            using var reader = read.ExecuteReader();
+
+            if (!reader.Read() || reader.IsDBNull(0) || reader.IsDBNull(1) || reader.GetDecimal(0) != mrp)
+                return null;
+
+            left = reader.GetDecimal(1) - quantity;
+        }
+
+        using (var write = connection.CreateCommand())
+        {
+            write.Transaction = transaction;
+
+            if (left > 0m)
+            {
+                write.CommandText = "UPDATE items SET older_left = $left WHERE id = $id;";
+                write.Parameters.AddWithValue("$left", left.Value);
+            }
+            else
+            {
+                write.CommandText = "UPDATE items SET older_mrp = NULL, older_price = NULL, older_left = NULL WHERE id = $id;";
+                left = null;
+            }
+
+            write.Parameters.AddWithValue("$id", itemId);
+            write.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+        return left;
+    }
 }

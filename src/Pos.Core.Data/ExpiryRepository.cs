@@ -26,7 +26,10 @@ public sealed class ExpiryRepository(PosDatabase database) : IExpiryStore
         using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT i.id, i.sku, i.name, i.unit_type, i.stock_qty,
-                   pl.batch_no, pl.expiry_date, p.bill_date, s.name, pl.quantity
+                   pl.batch_no, pl.expiry_date, p.bill_date, s.name, pl.quantity,
+                   (SELECT group_concat(rl.quantity, '|')
+                    FROM supplier_return_lines rl JOIN supplier_returns r ON r.id = rl.return_id
+                    WHERE r.purchase_id = p.id AND rl.purchase_line_no = pl.line_no)
             FROM purchase_lines pl
             JOIN purchases p ON p.id = pl.purchase_id
             JOIN suppliers s ON s.id = p.supplier_id
@@ -70,12 +73,23 @@ public sealed class ExpiryRepository(PosDatabase database) : IExpiryStore
                 item = (reader.GetString(1), reader.GetString(2), (UnitType)reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetDecimal(4));
             }
 
+            // What went back to the supplier from this delivery is not on the shelf to expire. The
+            // quantities are added here, exactly, rather than summed by SQLite as floating point.
+            var sentBack = reader.IsDBNull(10)
+                ? 0m
+                : reader.GetString(10).Split('|').Sum(q => decimal.Parse(q, NumberStyles.Number, CultureInfo.InvariantCulture));
+
+            var delivered = reader.GetDecimal(9) - sentBack;
+
+            if (delivered <= 0m)
+                continue;
+
             deliveries.Add(new Expiry.Delivery(
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.IsDBNull(6) ? null : DateOnly.ParseExact(reader.GetString(6), "yyyy-MM-dd", CultureInfo.InvariantCulture),
                 DateOnly.ParseExact(reader.GetString(7), "yyyy-MM-dd", CultureInfo.InvariantCulture),
                 reader.GetString(8),
-                reader.GetDecimal(9)));
+                delivered));
         }
 
         Flush();

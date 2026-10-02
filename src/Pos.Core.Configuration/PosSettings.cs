@@ -107,6 +107,19 @@ public sealed class PosSettings
     public decimal LowStockPercent { get; set; } = LowStock.DefaultPercent;
 
     /// <summary>
+    /// How the screens look: <c>Morning</c>, <c>Noon</c>, <c>Evening</c> or <c>Night</c>, or
+    /// <c>ByTimeOfDay</c> to change between them through the day. <c>Night</c>, the dark look, unless
+    /// the owner chooses another.
+    /// </summary>
+    /// <remarks>
+    /// Changed from the owner's screen, Settings, and applied at once to every window. A look this
+    /// build does not know is read as Night rather than stopping the lane.
+    /// </remarks>
+    [JsonPropertyName("screenTheme")]
+    [JsonConverter(typeof(ScreenThemeConverter))]
+    public ScreenTheme ScreenTheme { get; set; } = ScreenTheme.Night;
+
+    /// <summary>
     /// How many days an order is meant to last: the order list suggests enough of each item to sell
     /// for this long at the rate it has been selling. 14 unless the owner says otherwise.
     /// </summary>
@@ -176,6 +189,26 @@ public sealed class PosSettings
     [JsonPropertyName("security")]
     public SecuritySettings Security { get; set; } = new();
 
+    /// <summary>
+    /// The people who work the till, each with their own PIN. Empty by default, and then the till
+    /// takes a typed name as it always has: a one-person shop should not have to sign in.
+    /// </summary>
+    /// <remarks>Changed from the owner's screen, Settings.</remarks>
+    [JsonPropertyName("cashiers")]
+    public List<CashierSettings> Cashiers { get; set; } = [];
+
+    /// <summary>Which of the till's riskier actions wait for the owner's PIN. None unless the owner says.</summary>
+    /// <remarks>Changed from the owner's screen, Settings.</remarks>
+    [JsonPropertyName("approvals")]
+    public ApprovalSettings Approvals { get; set; } = new();
+
+    /// <summary>
+    /// The ledger names the day book for the accountant uses. Plain names by default; set to match
+    /// the accountant's own books, once.
+    /// </summary>
+    [JsonPropertyName("dayBook")]
+    public DayBookLedgers DayBook { get; set; } = new();
+
     public TimeSpan SearchDebounce => TimeSpan.FromMilliseconds(SearchDebounceMs);
 
     public TimeSpan ScannerMaxKeystrokeGap => TimeSpan.FromMilliseconds(ScannerMaxKeystrokeGapMs);
@@ -229,6 +262,24 @@ public sealed class PosSettings
 
         if (!Reorder.IsValidCoverDays(settings.OrderCoverDays))
             throw new InvalidOperationException($"The settings file at '{path}' has an orderCoverDays of {settings.OrderCoverDays}. An order covers between 1 and 120 days.");
+
+        settings.Cashiers ??= [];
+        settings.Approvals ??= new ApprovalSettings();
+        settings.DayBook ??= new DayBookLedgers();
+
+        if (settings.DayBook.Problem() is { } dayBookProblem)
+            throw new InvalidOperationException($"The settings file at '{path}' has a dayBook section that cannot be used: {dayBookProblem}");
+
+        if (CashierRules.Problem(settings.Cashiers) is { } cashierProblem)
+            throw new InvalidOperationException($"The settings file at '{path}' has a cashiers list that cannot be used: {cashierProblem}");
+
+        if (settings.Approvals.Problem() is { } approvalProblem)
+            throw new InvalidOperationException($"The settings file at '{path}' has an approvals section that cannot be used: {approvalProblem}");
+
+        // A look the file numbers but this build does not know - one written by a later build -
+        // is shown as the ordinary dark look. How the screen looks is never a reason not to bill.
+        if (!Enum.IsDefined(settings.ScreenTheme))
+            settings.ScreenTheme = ScreenTheme.Night;
 
         // Surfaces an unworkable loyalty scheme here rather than at the moment a cashier tries to
         // redeem against it.

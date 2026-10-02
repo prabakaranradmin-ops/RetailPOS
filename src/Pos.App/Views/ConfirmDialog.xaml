@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="RetailPOS" SizeToContent="Height" Width="520"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
-        Background="{StaticResource Surface}" FontFamily="Segoe UI">
+        Background="{DynamicResource Surface}" FontFamily="Segoe UI">
 
   <!--
     A question before something that changes the books, in the till's own colours, with buttons that
@@ -21,7 +21,7 @@
     </Grid.RowDefinitions>
 
     <StackPanel Orientation="Horizontal">
-      <Border x:Name="Badge" Width="36" Height="36" CornerRadius="10" Background="{StaticResource InfoSoft}"
+      <Border x:Name="Badge" Width="36" Height="36" CornerRadius="10" Background="{DynamicResource InfoSoft}"
               VerticalAlignment="Center" Margin="0,0,14,0">
         <TextBlock x:Name="Symbol" Style="{StaticResource Glyph}" FontSize="18" HorizontalAlignment="Center" />
       </Border>
@@ -30,7 +30,7 @@
     </StackPanel>
 
     <TextBlock x:Name="Message" Grid.Row="1" Margin="0,16,0,0" FontSize="14" LineHeight="21"
-               TextWrapping="Wrap" Foreground="{StaticResource InkMuted}" />
+               TextWrapping="Wrap" Foreground="{DynamicResource InkMuted}" />
 
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
       <Button x:Name="No" Padding="18,8" Margin="0,0,10,0" IsCancel="True" Click="No_Click" />

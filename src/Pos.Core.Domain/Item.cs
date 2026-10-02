@@ -14,6 +14,12 @@ public sealed record Item
     public required string HsnCode { get; init; }
     public required string Name { get; init; }
 
+    /// <summary>
+    /// The name in Tamil, as the customer asks for it - துவரம் பருப்பு for Toor Dal - or null when the
+    /// shop has not given one. The till finds the item by it, typed in Tamil or spelled in English.
+    /// </summary>
+    public string? NameTa { get; init; }
+
     /// <summary>Printed maximum retail price, tax inclusive.</summary>
     public decimal Mrp { get; init; }
 
@@ -96,4 +102,27 @@ public sealed record Item
     public bool IsOutOfStock => StockQty is { } have && have <= 0m;
 
     public bool IsActive { get; init; } = true;
+
+    /// <summary>
+    /// The MRP printed on packs still on the shelf from before the MRP went up, or null when there
+    /// is only one. Those packs may not be sold for more than it.
+    /// </summary>
+    public decimal? OlderMrp { get; init; }
+
+    /// <summary>The price those older packs sell at: the selling price from before the rise.</summary>
+    public decimal? OlderPrice { get; init; }
+
+    /// <summary>How many of the older packs are left, as far as the count can say.</summary>
+    public decimal? OlderLeft { get; init; }
+
+    /// <summary>
+    /// True while packs at a lower, older MRP are still on the shelf, so the till asks which a pack
+    /// carries. An older MRP at or above today's is no choice at all: every pack sells at today's.
+    /// </summary>
+    public bool HasOlderMrp => OlderMrp is { } older && older < Mrp && OlderPrice is not null && OlderLeft is > 0m;
+
+    /// <summary>The item as the older packs sell: at their MRP and price, with only the one MRP.</summary>
+    public Item AtOlderMrp() => HasOlderMrp
+        ? this with { Mrp = OlderMrp!.Value, SellPrice = OlderPrice!.Value, OlderMrp = null, OlderPrice = null, OlderLeft = null }
+        : this;
 }

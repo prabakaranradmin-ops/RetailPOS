@@ -58,8 +58,24 @@ public interface IBillingActions
     /// <summary>A GSTIN for the customer on the bill.</summary>
     void SetBusiness();
 
+    /// <summary>An item not in the catalogue, typed in.</summary>
+    void AddOpenItem();
+
     /// <summary>The key sheet: open it, or close it again.</summary>
     void ShowKeys();
+
+    /// <summary>
+    /// True while the till takes only Enter and Esc - the owner's PIN being asked for - so no other
+    /// key can step round it.
+    /// </summary>
+    bool HoldsTheKeyboard => false;
+
+    /// <summary>
+    /// True while the till takes only Up, Down, Enter and Esc - a question about the item in hand -
+    /// so no key edits the bill behind the question or walks away from it. Typing still reaches the
+    /// pane's own box.
+    /// </summary>
+    bool TakesOnlyAChoice => false;
 }
 
 /// <summary>
@@ -107,6 +123,14 @@ public sealed class KeyboardRouter
 
     private void Dispatch(PosAction action)
     {
+        // Swallowed, not passed on: a key that opened something else while the owner's PIN was
+        // asked for would be a way round the question.
+        if (_target.HoldsTheKeyboard && action is not (PosAction.Commit or PosAction.Cancel))
+            return;
+
+        if (_target.TakesOnlyAChoice && action is not (PosAction.MoveUp or PosAction.MoveDown or PosAction.Commit or PosAction.Cancel))
+            return;
+
         switch (action)
         {
             case PosAction.FocusSearch: _target.FocusSearch(); break;
@@ -138,6 +162,7 @@ public sealed class KeyboardRouter
             case PosAction.KhataStatement: _target.PrintKhataStatement(); break;
             case PosAction.DigitalBill: _target.SendDigitalBill(); break;
             case PosAction.BusinessCustomer: _target.SetBusiness(); break;
+            case PosAction.OpenItem: _target.AddOpenItem(); break;
             case PosAction.ShowKeys: _target.ShowKeys(); break;
 
             // Reached only if a new PosAction is added without wiring it here. Failing loudly in a

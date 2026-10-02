@@ -222,14 +222,33 @@ rather than an error.
 
 ## 6d. The screens — theme and charts
 
-**One theme.** Every colour, gradient, control style and the chart card template are in
-`Pos.App/Theme.xaml`, merged by the app and by the UI tests alike. Views name tokens (`Ink`,
-`FieldBorder`, `CardFill`, `ChartColour0`…) and never set a colour of their own, so
-`ThemeContrastTests` can read the real file and hold every pairing to WCAG: 4.5:1 for text, 3:1
-for field edges and chart series. Text on a gradient is checked against each of its stops. Glyphs come
-from Segoe Fluent Icons (falling back to Segoe MDL2 Assets), named in `Glyphs.cs`. Windows'
-dark title bar is asked for through `DwmSetWindowAttribute`, and on older builds that ignore it the
-title bar simply stays light.
+**One theme, four looks.** Every control style and the chart card template are in
+`Pos.App/Theme.xaml`. The colours are not: each look (Morning, Noon, Evening, Night) is a palette
+of its own in `Pos.App/Themes/`. Every palette defines the same names (`Ink`, `FieldBorder`,
+`CardFill`, `ChartColour0`…) plus `IsDarkTheme`. One palette is merged ahead of `Theme.xaml`, by
+the app and by the UI tests alike.
+- **How a look is applied.** Views take every colour by name as a `DynamicResource` and never set
+  one of their own. `Looks.Apply` swaps the palette in place, so the till, the owner's screen and
+  any open dialog repaint at once, with nothing reopened and no bill touched.
+- **What is told separately.** The charts draw from `ChartPalette.Current` in `OnRender`, so they
+  are asked to draw again. The title bar is Windows', so `TitleBar.Paint` asks
+  `DwmSetWindowAttribute` for dark or light mode and for the palette's caption, text and border
+  colours. Older builds that ignore those calls simply keep the default title bar.
+- **Following the clock.** `Looks.Follow` handles following the time of day: morning from 06:00,
+  noon from 11:00, evening from 16:00, night from 19:00 (`ScreenThemes.At`). It checks the clock
+  once a minute.
+- **Where the choice is kept.** The owner picks the look on the Settings tab. It is kept as
+  `screenTheme` in `settings.json`, and a value the build does not know reads as Night rather than
+  stopping the lane.
+- **What the tests hold every look to.** `ThemeContrastTests` runs once per palette, reading the
+  real files. It holds every pairing to WCAG: 4.5:1 for text, and 3:1 for field edges, chart
+  series and the ranked bars. Text on a gradient is checked against each of its stops.
+  `PaletteTests` checks three more things: every look defines the same names, `Theme.xaml` holds no
+  colour of its own, and no view takes a palette colour statically.
+  `LayoutFitTests.EveryWordIsReadableInEveryLook` draws the till and every owner tab in each look
+  and measures each piece of text against what is really painted behind it.
+
+Glyphs come from Segoe Fluent Icons (falling back to Segoe MDL2 Assets), named in `Glyphs.cs`.
 
 **Messages have kinds.** `MessageKinds.Classify` reads the till's message: refused (red), held up
 (amber), done (green) or next step (the accent). It works from the fixed phrases the till already
@@ -271,6 +290,353 @@ Axes step in 1, 2, 2.5 or 5 × 10ⁿ (`NiceScale`). Rupees are grouped the India
 to K, L and Cr on an axis (`ChartFormat`). `OwnerCharts` only reshapes `DashboardData`; it counts
 nothing, so a chart cannot disagree with the figure printed beside it or with the saved web page.
 Entrance animation is skipped when Windows has client-area animation turned off.
+
+## 6e. Backups, and the copy off this computer
+
+`DatabaseBackup` takes snapshots with `VACUUM INTO` and checks each one before calling it a
+backup. Snapshots go in `backups\` beside the database, the newest 30 are kept, and every day close
+takes one.
+
+A snapshot on the same disk does not survive the disk, so `OffMachineCopy` puts one on a pen drive:
+- **Which drive.** It uses removable drives only. A drive becomes *the shop's* the first time it
+  is copied to, which creates a `RetailPOS backups` folder on it.
+- **When.** `DatabaseBackupService` copies the close's snapshot to the shop's drive whenever that
+  drive is plugged in. Any other drive is left alone. The owner can also copy at any time from
+  Maintenance (`Alt+P`), and that copy picks the shop's drive, or the only drive when there is one.
+- **How it is checked.** Each copy is written under a `.part` name, checked against the snapshot
+  with SHA-256, then renamed. It is not opened as a database, because opening one writes to it. The
+  drive keeps each lane's newest 14, in a folder of its own.
+- **The reminder.** Every copy is recorded in `backups\copied-off-this-computer.txt`. Once the last
+  copy is 7 days old, or there has never been one, the close message and the Maintenance tab say so.
+- **Restoring.** The restore list shows the drive's copies beside the local ones, so a new PC can
+  be restored from the drive without a command prompt.
+
+Nothing here touches a network.
+
+## 6f. Cashiers, the owner's approval, and the till's record
+
+**Cashiers.** `settings.cashiers` holds each person's name and PIN as a salted PBKDF2 hash, the same
+as the owner's dashboard PIN (`DashboardLock`). With any listed:
+- **Signing on.** `Ctrl+U` shows the names, and the cashier signs on with their own PIN.
+- **Payment.** `BillingViewModel.Tender` refuses until somebody has signed on.
+- **Startup.** The till starts with nobody on it, ignoring `defaultCashierName`.
+
+With none listed, the typed name works as before.
+
+**Approvals.** `settings.approvals` (`ApprovalSettings`) names the guarded actions: a void, a
+discount typed by hand above a share of the line, a cash refund, cash out of the drawer or an
+expense from it, and closing the day. `TillSecurity.Needs` is true only when the owner's PIN is
+set, because an approval nobody can give would stop the till.
+
+`BillingViewModel.Guard` runs at the last moment, when the action is about to happen. It either
+runs the action at once or puts up the approval pane with the action and its amount in words, and
+then:
+- **The keyboard.** `HoldsTheKeyboard` makes `KeyboardRouter` swallow every action but Commit and
+  Cancel, so nothing can be opened round the question.
+- **Approving.** The right PIN runs the action, told it was approved.
+- **Refusing.** Three wrong PINs, or `Esc`, leave everything as it was and record a refusal.
+
+The view carries the typed PIN from a `PasswordBox` to the view model by hand, since a password
+box will not bind, and empties it after every try.
+
+**The record.** The `till_events` table (migration 020, `TillEventRepository`) gets one row per
+void, discount typed by hand, cash refund, cash out, day close and sign-on. Each row records who
+was on the till, what it was about, the amount, and whether the owner approved it:
+- `approved` is 1 when the owner approved, 0 when the PIN was asked for and not given, and null
+  when the lane did not ask.
+- Rows are written as things happen and never changed afterwards.
+- A row that cannot be written is never a reason to report the action itself as failed.
+
+**The exceptions report.** `DashboardQuery` reads the exceptions in the window into
+`DashboardData.Exceptions`, so the figures tab and the saved web page cannot disagree:
+- **Which kinds.** Voids, discounts typed by hand, cash refunds, cash out and refused PINs. Sign-ons
+  and closes are not exceptions and are left out.
+- **What it gives.** The totals by who was on the till, and the latest 50 one by one. The amounts
+  are added as decimals in C#, not summed by SQLite as floating point.
+- **Before the record began.** `RecordedSince` says when this lane's record began, so a period that
+  starts before then is not shown as one in which nothing happened. A lane that has recorded
+  nothing yet says so; the web page leaves the table out entirely.
+
+**Live changes.** `TillSecurity` reads the settings at each question, so the owner's screen changes
+cashiers and approvals without a restart. The settings are saved first and changed in memory only
+once saved: a cashier who existed only until the next restart would be locked out the following
+morning.
+
+## 6g. The count at closing
+
+The close pane (`Shift+F12`) shows the bills and net sales, but leaves the drawer figure off until
+the cashier has counted the drawer and typed the count. A count made with the answer on screen is a
+copy. `Enter` takes the count (`BillingViewModel.CommitCount`), and only then shows the expected
+figure and the difference. A second count replaces the first. The second `Shift+F12` closes as
+before, which kept the two-press close every script and habit relies on.
+
+The count and who counted are stored with the close: `day_closes.cash_counted` and `counted_by`,
+migration 021. The difference is not stored, because it is the count less `cash_expected`, both
+already there. `DayCloseSummary` and `DayCloseEntry` carry it as `CashDifference`.
+- **The report.** `ZReportComposer` prints the count, who counted, and OVER BY, SHORT BY or
+  exactly right, under the drawer figure. Reprints print the same.
+- **A close without a count.** It still closes, and the report says it was not counted. A preview
+  says nothing either way.
+- **The `pos` tool.** `pos close-day` takes `--counted`, and `--list` shows each close's count and
+  difference.
+
+**Over and short as a trend.** `DashboardQuery` reads the closes in the window into
+`DashboardData.Drawers`, oldest first. Each close has its expected and counted cash, who counted,
+and who was on the till.
+- **Who was on the till.** Everybody named on a bill paid in cash, or on a cash movement, among
+  those the close stamped. Somebody who only took UPI never touched the drawer.
+- **By person.** Each person gets the days they were on, the days counted, and the days short and
+  over, with the amounts. A day two people worked counts for both, and the screen says so: the
+  drawer was shared, and the count cannot say whose hands a difference passed through.
+- **Where it shows.** The figures tab draws it as a chart, over in green above the line and short in
+  rose below it. Under the chart are the table by person and the closes one by one. The web page
+  carries the summary and the table.
+
+## 6h. The khata limit
+
+The owner sets a limit on each customer's record (`customers.credit_limit`, migration 022). Null
+means no limit, which is every customer until the owner sets one.
+- **At the till.** When a khata tender would take the customer past their limit,
+  `BillingViewModel.OverKhataLimit` asks for the owner's PIN through the same `Guard` as the other
+  approvals (`Guarded.OverKhataLimit`). That one is always asked rather than switched, because the
+  owner set the limit, so going past it is theirs to say. On a lane with no owner's PIN it is
+  refused, and the cashier is told to take the rest another way.
+- **The record and the report.** An approved one is recorded as `OverKhataLimit`, and the exceptions
+  report has a column for it.
+- **What the cashier sees.** Under what the customer owes, the side panel shows their limit and
+  when they last paid anything back (`ICreditStore.LastPaid`). The owner's Customers tab shows the
+  same, with the box that sets the limit.
+
+## 6i. Goods sent back to suppliers
+
+A debit note (`supplier_returns` and its lines, migration 023) records goods sent back against
+the purchase bill they came on. The owner picks lines and quantities, and
+`PurchaseRepository.SendBack` prices them from that bill rather than from anything typed:
+- **Pricing.** Part of a line is priced in proportion, each figure rounded half-to-even to the
+  paisa like the tax engine. The last of a line takes exactly what remains of it, so a line sent
+  back in any number of parts adds up to the bill to the paisa.
+- **Numbering.** Notes are numbered `DN/{year}/{lane}-{n}` in their own series, like the customer
+  credit notes.
+- **One transaction.** The note, its lines, and the shelf count of each counted item go together,
+  through `StockReason.SupplierReturn`.
+- **Knock-on effects.**
+  - What the shop owes a supplier is now bills less payments less debit notes.
+  - The supplier's account lists each note.
+  - Expiry alerts net out what went back of each delivery.
+  - A bill with a note against it cannot be cancelled.
+- **The GST return.** It lists the month's notes (`GstReturnData.SentBack`) with the input tax on
+  them to take off the claim, warns about them, and writes them as a CSV of their own.
+
+## 6j. What the shelves are worth
+
+`DashboardQuery.ReadStockValue` values the counted shelves as they stand now, into
+`DashboardData.Stock`:
+- **What it adds up.** Each active, counted item with something on the shelf, at its latest cost
+  price, its selling price and its MRP. Each line is rounded to the paisa and added up as decimals.
+- **What it leaves out, and says so.** An item with no cost price is in the selling and MRP values
+  but not the value at cost, and the margin is worked only over items that have one. A count
+  below zero is left out and counted apart.
+- **Departments.** The value is split by department, case-insensitively.
+- **Where it shows.** The Stock tab shows the value in two lines, and the saved web page shows it
+  with the departments.
+
+## 6k. One barcode, two MRPs
+
+When an MRP goes up, the packs already on the shelf still carry the old MRP printed on them, and
+may not be sold above it. A scanner reads the same barcode off both, so only the cashier can tell
+them apart.
+- **What is kept.** Migration 024 adds `older_mrp`, `older_price` and `older_left` to `items`.
+  - **On a rise.** `tr_items_mrp_rose` fills them on any rise in MRP, whether from the item editor,
+    a re-import or the price sheet. It keeps the MRP and price from before the rise, and the shelf
+    count at that moment.
+  - **Counted items only.** The trigger fires only when the item is counted with stock above
+    zero. An uncounted item has no figure to say when the old packs are gone, and a question asked
+    for ever is one the cashier learns to answer without looking.
+  - **On a fall.** `tr_items_mrp_fell` forgets the older MRP when the MRP comes back down to it or
+    below: every pack then sells at the one price. A fall that stays above the older MRP keeps it.
+  - **A second rise.** It keeps only the MRP just before it. The till offers two MRPs, never three.
+- **At the till.** `BillingViewModel.AddPicked` stands between every scan or search pick and the
+  bill.
+  - **The question.** For an item with older packs left (`Item.HasOlderMrp`), the till asks which
+    MRP is on the pack (`BillingMode.ChooseMrp`). The newer MRP is offered first. A later pack of
+    the same item is offered whichever was chosen last, so a run of the same packs is `Enter`,
+    `Enter`.
+  - **The keys.** While it asks, the till takes only `↑`, `↓`, `Enter` and `Esc`
+    (`IBillingActions.TakesOnlyAChoice`). No key edits the bill behind the question, and nothing
+    walks away from the pack in hand. `Esc` adds nothing.
+  - **The older pack.** It goes on as `Item.AtOlderMrp()`: the older MRP and price, with GST worked
+    from that price like any other line.
+- **Counting them off.** When the sale goes through, each line taken at the older MRP is counted off
+  `older_left` (`ItemRepository.SoldAtOlderMrp`). It matches on the MRP, so a sale against an MRP
+  the item no longer holds counts nothing. Once none are left, the older MRP is forgotten and the
+  till stops asking. A failure to count never fails the sale; the till only asks a little longer.
+- **What it does not do.**
+  - A void or a return of an older-MRP sale does not put the pack back into `older_left`.
+  - An older pack on a bill that was held and recalled is not counted off.
+  - In both cases the till asks a little longer than it needs to, and the cashier picks the newer
+    MRP, so neither costs the customer or the books anything.
+
+## 6l. Items not in the catalogue
+
+An item on the shelf but not in the catalogue is sold as a line typed in at the till, so the queue
+does not wait, and listed for the owner to add properly.
+- **The line.** `OpenItem.For` makes an `Item` with id 0, which no catalogue item has (ids start
+  at 1).
+  - **What it carries.** It is sold as typed: tax-inclusive, one price as both MRP and selling price,
+    in pieces. `InvoiceLine.IsOpen()` tells it apart.
+  - **The tax.** The GST engine prices it like any other line. Nothing in the tax path knows the
+    difference.
+  - **What it leaves alone.** No catalogue row means `StockRepository.WriteIn` finds nothing to
+    move, on a sale, a void or a return. No offer carries item id 0, so only bill-wide offers reach
+    it.
+  - **Elsewhere.** Held bills and credit notes keep it like any line, from its snapshots.
+- **What may be typed.**
+  - **The name.** 2 to 60 characters.
+  - **The price.** Above nothing, to the paisa, at most ₹1,00,000. Anything dearer is to be
+    catalogued first.
+  - **The slab.** Must be one the importer accepts.
+- **At the till.** `Ctrl+I` (`BillingMode.OpenItem`) takes three steps in one pane: the name, the
+  price, the slab.
+  - **What is carried in.** Words in the search box become the name. A scan that matched nothing
+    (8 to 14 digits) is kept as the line's barcode, for the owner.
+  - **The slab list.** It offers the shop's own items' HSN code and slab for a similar name first,
+    through the same `HsnSuggester` as the owner's form, then the slabs in force since
+    22 September 2025 with no code.
+  - **Nothing is picked for the cashier.** The list starts with nothing highlighted, and `Enter`
+    refuses until a slab is picked: a guessed slab would be tax charged wrong with nobody having
+    decided it.
+  - **A bill of supply** has no slab step.
+  - **The keys.** While the pane is open, only typing, the arrows, `Enter` and `Esc` work
+    (`TakesOnlyAChoice`). `Esc` goes back a step.
+  - **The prompt.** "No item matches" now names the key.
+- **The owner's list.** `IOpenItemStore.Waiting` reads the open lines on bills that stand and have not
+  been dealt with (migration 025: `open_item_reviews`, and a partial index on `item_id = 0`).
+  - **Grouping.** `OpenItemGroup.Of` groups them: the same barcode, or with none, the same name
+    however spaced or capitalised.
+  - **Where it shows.** The Catalogue tab lists them above the add-one-item form. The figures tab
+    shows a notice while any wait.
+  - **Adding one.** It fills that form from the till (`NewItemViewModel.StartFrom`), so an item
+    added this way meets every check the CSV importer makes. Only once the form has added it is
+    the group marked dealt with, under the SKU it was given.
+  - **Taking one off.** The owner can take a group off the list without adding it. The invoice
+    lines themselves never change.
+- **The GST return.** A line with no HSN code gets a warning of its own, saying what it is. It is no
+  longer listed among the codes shorter than four digits.
+
+## 6m. Finding an item by what the customer calls it
+
+A customer asks for paruppu, not Toor Dal. The catalogue keeps each item's name in Tamil, and the
+search finds an item by how its names sound.
+- **What is kept.** Migration 026 adds `name_ta`, and two keys the search reads: `sound_name`,
+  folded from the English name, and `sound_ta`, folded from the Tamil name.
+  - **Where the Tamil name comes from.** The catalogue file's optional `name_ta` column, or the
+    owner's add-one-item form.
+  - **On a re-import.** A blank `name_ta` keeps the Tamil name the item has, with its key, as a blank
+    stock cell keeps the count.
+- **The key** (`SoundKey.Of`).
+  - **Tamil script** is written out in Latin letters. Each consonant carries its a unless a vowel
+    sign or the pulli says otherwise. Tamil digits become 0 to 9. The text is NFC-normalised first,
+    so a letter typed in two parts matches the composed one.
+  - **The folding**, applied to every word, on both sides:
+    - zh is l, and ch, sh and j are s.
+    - An h after a consonant goes, so th is t.
+    - g, d, b, w, f, z and c become k, t, p, v, p, s and k.
+    - ee is i and oo is u, as English spellings use them.
+    - Doubled letters are single, and so is a long vowel.
+    - A final -ey, -ei or -ay is -ai, and an initial ye- is e-.
+  - **The result.** paruppu, baruppu and பருப்பு are one key, and so are jeeragam, seeragam and
+    சீரகம்.
+  - **Long e and o** in Tamil are written single (e, o), so that English ee and oo, which mean i and
+    u, are not confused with them.
+- **Where the keys are worked out.** In code, on the way into the table: `BindInsert`, for both
+  `AddRange` and `UpsertRange`. A migration cannot run code, so `PosDatabase.EnsureMigrated` fills
+  any missing key (`ItemRepository.FillSoundKeys`). After the upgrade that is the whole catalogue,
+  once; after that, nothing.
+- **The search.** A fourth branch, after the barcode, the SKU prefix and the name substring:
+  - **What it matches.** The typed text's key, if it is at least 3 letters, as a substring of
+    either key.
+  - **Where it ranks.** An exact name never ranks below one that only sounds like it.
+  - **Why it errs wide.** It finds too much rather than too little (பால், milk, and பல், a clove,
+    share a key), because the cashier picks from the list and a missed item costs more at a counter.
+  - **The cost.** §7.2.
+- **At the till.** The results list shows the Tamil name beside the English, so an item found by it
+  shows why.
+- **What it does not do yet.** The bill still prints the English name. Printing the Tamil name on a
+  Tamil bill is a separate change, for the receipt and its sign-off.
+
+## 6n. The day book for the accountant
+
+`DayBookQuery` reads a period of the books into balanced vouchers (`DayBookVoucher`, in
+Pos.Core.Domain), and `DayBookFiles` writes them out.
+- **What each voucher is.**
+
+  | Kind | From | Entries |
+  |---|---|---|
+  | Sales | each bill that stands | Dr each tender (cash less change, card, UPI, the customer's khata, loyalty points); Cr each rate's sales ledger and the output tax; round-off either side |
+  | Credit Note | each credit note | the bill turned round, Cr however the money went back |
+  | Receipt | each khata repayment | Dr how it was paid, Cr the customer |
+  | Purchase | each supplier's bill not cancelled, by its bill date | Dr each rate's purchases and the input tax, Cr the supplier, the printed round-off either side |
+  | Payment | each supplier payment, and each expense | Dr the supplier or the expense category, Cr cash or the bank |
+  | Debit Note | each debit note | Dr the supplier, Cr the purchases and input tax; each line's rate is joined from its bill line |
+  | Contra | cash taken out of or put into the till | against a Suspense ledger for the accountant to place |
+
+- **Exact to the paisa.** Every sum is taken in whole paise (`PaiseSql`). A rate's sales or
+  purchase ledger takes the lines' totals less their tax, so the voucher balances whatever the
+  4-decimal taxable values round to.
+  - **A document that still does not add up.** Its payments do not match its lines, which the
+    till never writes but an old or mended book might hold. It is balanced on round-off and named
+    in `DayBookData.Notes`.
+  - **Each ledger once.** A voucher carries each ledger once, debits first.
+- **What is not in it.**
+  - Voided bills and cancelled purchase bills.
+  - The opening float, which is the shop's own cash, not money coming in.
+  - The drawer's side of a refund, a supplier paid from the till or an expense paid from it. Each
+    is already its own voucher, so including it would count the money twice.
+- **Whose records.** The till's own records (bills, returns, repayments, expenses, the drawer) are
+  the lane's. The supplier's side is the whole book's, as the GST return reads it.
+- **The ledger names.** These are `DayBookLedgers`, set under `dayBook` in the settings file and
+  checked when the lane starts. Customers on the khata (`Name (mobile)`) and suppliers are ledgers
+  by name. Expenses use their category.
+- **The files.**
+  - **The CSV.** One row per entry, the voucher's date, type, number and party on each, UTF-8 with
+    a byte-order mark for Excel.
+  - **Tally.** Two files in Tally's XML import envelope:
+    - **Ledgers** (`All Masters`): each ledger once, under Tally's predefined group, loaded first.
+    - **Vouchers.** Accounting vouchers with `ALLLEDGERENTRIES.LIST`. A debit is a negative
+      `AMOUNT` with `ISDEEMEDPOSITIVE` Yes, so each voucher's amounts add up to nothing.
+  - **No stock.** The vouchers carry no inventory: the till keeps the stock, and the books need
+    the money.
+- **Where it is saved.** The owner's GST tab saves the month on screen (`GstReturnViewModel.DayBook`).
+- **What is not checked here.** The Tally files have been checked against the format, not loaded
+  into a running Tally. The runbook says to load them into a test company first.
+
+## 6o. A festival against last year's
+
+`FestivalComparison.Of` sets two windows' figures side by side. Each window is a `FestivalWindow`:
+the festival day, so many days before and so many after.
+- **Where the figures come from.** Each window is gathered by the dashboard's own `DashboardQuery`,
+  so a festival's takings can never disagree with the figures tab's. Each is read with
+  `ItemsRead` (2,000) items, so "not sold this time" is true, not just off the end of a short list.
+- **Aligned on the day.** Days are matched by their distance from the festival, not by date.
+  Deepavali moved from 20 October 2025 to 8 November 2026, and the week before it is what is
+  compared.
+- **What is shown.**
+  - The windows' totals, bills and basket.
+  - Each day.
+  - Departments from either year.
+  - The items that led this year, with last year's figures beside them.
+  - The items sold last time and not at all this time. The first question about those is whether
+    they were on the shelf.
+- **The dates.** The owner types them. The festivals that matter most to a grocery move by weeks
+  from year to year, and a calendar built into the till would be wrong the year nobody updated it.
+  Typing this year's day offers the same date last year, which is right for a fixed festival such
+  as Pongal or Christmas.
+- **What is checked.**
+  - The windows may not overlap, may not start in the future, and reach at most 45 days either
+    side.
+  - A window still going is said to be.
+- **Where it shows.** A card on the figures tab (`OwnerViewModel.UseFestivals`), with a two-year
+  column chart (`OwnerCharts.Festival`) and the tables.
 
 ## 7. Stack
 
@@ -321,6 +687,12 @@ uses `sku >= lo AND sku < hi` for the seek and keeps the `LIKE` only to re-check
 handful of rows the range returns. A range comparison uses the column's collation, which is why
 migration 002 declares `sku ... COLLATE NOCASE` — without it the seek is case-sensitive and a
 cashier typing lowercase finds nothing.
+
+**How it sounds is matched on its own index, pinned.** The fourth branch (§6m) runs last. It
+matches the sound keys inside a subquery with `INDEXED BY ix_items_active_sound`, and fetches only
+the rows that match. Asked directly with `ORDER BY name`, the planner may walk the name index for
+the sort and fetch every row to read its keys: the same trap as the SKU search. The worst case,
+where nothing matches and every branch scans, measures about 24 ms over 100k items.
 
 **The database needs statistics.** With no `sqlite_stat1`, SQLite assumes an equality test beats a
 range and serves the SKU search from the `is_active` index — which matches nearly every row —

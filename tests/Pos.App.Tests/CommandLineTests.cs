@@ -50,6 +50,7 @@ public class CommandLineTests
     [InlineData("close-day", "--preview")]
     [InlineData("close-day", "--yes")]
     [InlineData("close-day", "--force")]
+    [InlineData("close-day", "--yes", "--counted", "1234.50")]
     [InlineData("close-day", "--list")]
     [InlineData("close-day", "--list", "--limit", "50")]
     [InlineData("close-day", "--show", "--id", "12")]

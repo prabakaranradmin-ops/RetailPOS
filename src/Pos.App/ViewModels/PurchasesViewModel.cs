@@ -12,6 +12,48 @@ public sealed record PaymentMethodChoice(SupplierPaymentMethod Method, string La
     public override string ToString() => Label;
 }
 
+/// <summary>One line of a supplier's bill, with a box for how many of it are going back.</summary>
+public sealed class SendBackRow(ReturnablePurchaseLine line) : ObservableObject
+{
+    private string _back = string.Empty;
+
+    public int LineNo => line.LineNo;
+
+    public string Name => line.Name;
+
+    public string OnTheBill => $"{line.Bought:0.###} {Units.Of(line.Unit).Code}";
+
+    public string GoneBack => line.SentBack == 0m ? "—" : $"{line.SentBack:0.###}";
+
+    public decimal Left => line.Left;
+
+    /// <summary>How many are going back now, as typed.</summary>
+    public string Back
+    {
+        get => _back;
+        set
+        {
+            if (Set(ref _back, value ?? string.Empty))
+                Raise(nameof(Problem));
+        }
+    }
+
+    /// <summary>The amount typed, or null when the box is empty or not a number.</summary>
+    public decimal? Quantity =>
+        decimal.TryParse(_back.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var quantity) ? quantity : null;
+
+    /// <summary>What is wrong with the amount typed, or null.</summary>
+    public string? Problem => _back.Trim().Length == 0
+        ? null
+        : Quantity switch
+        {
+            null => $"{Name}: '{_back.Trim()}' is not a number.",
+            < 0m => $"{Name}: a quantity going back cannot be less than nothing.",
+            var q when q > Left => $"{Name}: only {Left:0.###} can still go back.",
+            _ => null,
+        };
+}
+
 /// <summary>
 /// The Purchases tab: the shop's suppliers, entering the bill that came with a delivery, what is
 /// owed to each, and paying them.
@@ -673,8 +715,11 @@ public sealed class PurchasesViewModel : ObservableObject
         get => _selectedBill;
         set
         {
-            if (Set(ref _selectedBill, value))
-                Raise(nameof(CanVoid));
+            if (!Set(ref _selectedBill, value))
+                return;
+
+            Raise(nameof(CanVoid));
+            LoadReturnRows();
         }
     }
 
@@ -719,6 +764,124 @@ public sealed class PurchasesViewModel : ObservableObject
 
         foreach (var bill in _purchases.Recent(40))
             Recent.Add(bill);
+    }
+
+    // ---- Sending goods back ------------------------------------------------------------------
+
+    /// <summary>The lines of the bill picked, each with a box for how many are going back.</summary>
+    public ObservableCollection<SendBackRow> ReturnRows { get; } = [];
+
+    private string _returnReason = string.Empty;
+
+    public string ReturnReason
+    {
+        get => _returnReason;
+        set
+        {
+            if (Set(ref _returnReason, value ?? string.Empty))
+                RaiseSendBack();
+        }
+    }
+
+    public bool HasReturnRows => ReturnRows.Count > 0;
+
+    public bool CanSendBack => SendBackProblem() is null;
+
+    /// <summary>Why the goods cannot go back yet, in words, or empty when they can.</summary>
+    public string SendBackBlocker => SendBackProblem() ?? string.Empty;
+
+    private string? SendBackProblem()
+    {
+        if (SelectedBill is not { } bill)
+            return "Pick the bill the goods came on.";
+
+        if (bill.IsVoided)
+            return "That bill is cancelled; nothing on it can go back.";
+
+        // A box typed wrong is said before anything else: it is the thing to put right.
+        if (ReturnRows.FirstOrDefault(r => r.Problem is not null) is { } wrong)
+            return wrong.Problem;
+
+        if (!ReturnRows.Any(r => r.Quantity is > 0m))
+            return "Type how many of each are going back.";
+
+        if (ReturnReason.Trim().Length == 0)
+            return "Say why they are going back - expired, damaged, the wrong thing.";
+
+        return null;
+    }
+
+    private void RaiseSendBack()
+    {
+        Raise(nameof(CanSendBack));
+        Raise(nameof(SendBackBlocker));
+    }
+
+    private void LoadReturnRows()
+    {
+        foreach (var row in ReturnRows)
+            row.PropertyChanged -= OnReturnRowChanged;
+
+        ReturnRows.Clear();
+
+        if (SelectedBill is { IsVoided: false } bill)
+        {
+            try
+            {
+                foreach (var line in _purchases.Returnable(bill.Id))
+                {
+                    var row = new SendBackRow(line);
+                    row.PropertyChanged += OnReturnRowChanged;
+                    ReturnRows.Add(row);
+                }
+            }
+            catch (Exception ex)
+            {
+                Status = $"That bill's lines could not be read: {ex.Message}";
+            }
+        }
+
+        Raise(nameof(HasReturnRows));
+        RaiseSendBack();
+    }
+
+    private void OnReturnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RaiseSendBack();
+
+    /// <summary>
+    /// Sends the goods typed back to the supplier on a debit note, priced as their bill charged, and
+    /// takes them off the shelf and off what the shop owes.
+    /// </summary>
+    /// <returns>What went wrong, or null.</returns>
+    public string? SendBack()
+    {
+        if (SendBackProblem() is { } problem)
+            return Status = problem;
+
+        var bill = SelectedBill!;
+        var picks = ReturnRows.Where(r => r.Quantity is > 0m).Select(r => new SupplierReturnPick(r.LineNo, r.Quantity!.Value)).ToList();
+
+        SupplierReturn note;
+
+        try
+        {
+            note = _purchases.SendBack(bill.Id, picks, ReturnReason, _laneId, _now());
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return Status = ex.Message.Split(" (Parameter", 2)[0];
+        }
+
+        ReturnReason = string.Empty;
+        RefreshSuppliers();
+        LoadReturnRows();
+
+        var owed = _purchases.Owed(bill.SupplierId);
+
+        Status = $"Debit note {note.Number}: {Plural.Of(note.Lines, "line")} going back to {note.SupplierName}, {Money(note.Total)} off what the shop owes them"
+            + $" - now {Money(owed)}. Write {note.Number} on the goods."
+            + (note.NotCounted.Count > 0 ? $" Not counted, so the shelf was not touched: {string.Join(", ", note.NotCounted)}." : string.Empty);
+
+        return null;
     }
 
     // ---- Parsing -----------------------------------------------------------------------------

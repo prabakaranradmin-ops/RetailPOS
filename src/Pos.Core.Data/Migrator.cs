@@ -31,6 +31,13 @@ public static class Migrator
         "017_orders.sql",
         "018_offers.sql",
         "019_business_buyers.sql",
+        "020_till_events.sql",
+        "021_cash_counted.sql",
+        "022_khata_limit.sql",
+        "023_supplier_returns.sql",
+        "024_older_mrp.sql",
+        "025_open_items.sql",
+        "026_tamil_names.sql",
     ];
 
     /// <summary>Schema version a freshly migrated database ends up at.</summary>

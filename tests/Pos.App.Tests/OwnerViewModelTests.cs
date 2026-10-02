@@ -83,7 +83,16 @@ public class OwnerViewModelTests : IDisposable
         {
             _upiId = id;
             return null;
+        },
+        screenTheme: ScreenTheme.Night,
+        applyScreenTheme: look =>
+        {
+            _look = look;
+            return _refuseLookWith;
         });
+
+    private ScreenTheme? _look;
+    private string? _refuseLookWith;
 
     private decimal _percent = LowStock.DefaultPercent;
 
@@ -487,6 +496,338 @@ public class OwnerViewModelTests : IDisposable
         Assert.False(owner.CanChooseLayout);
         Assert.NotNull(owner.SetReceiptLayout(ReceiptLayout.Compact));
         Assert.Equal(ReceiptLayout.Standard, owner.ReceiptLayout);
+    }
+
+    // ---- Who works the till, and what waits for the owner ---------------------------------------
+
+    private readonly List<string> _added = [];
+    private readonly List<string> _removed = [];
+    private ApprovalSettings? _savedApprovals;
+
+    private OwnerViewModel WithAccess(params string[] cashiers)
+    {
+        var owner = Build();
+
+        owner.UseTillAccess(
+            cashiers,
+            addCashier: (name, pin) =>
+            {
+                Assert.True(pin.Length >= 4);
+                _added.Add(name);
+                return null;
+            },
+            removeCashier: name =>
+            {
+                _removed.Add(name);
+                return null;
+            },
+            new ApprovalSettings(),
+            applyApprovals: approvals =>
+            {
+                _savedApprovals = approvals;
+                return null;
+            });
+
+        return owner;
+    }
+
+    [Fact]
+    public void ACashierIsAddedWithTheirOwnPinTypedTwice()
+    {
+        var owner = WithAccess();
+
+        Assert.True(owner.CanManageAccess);
+        Assert.False(owner.HasCashiers);
+
+        Assert.Null(owner.AddCashier(" Lakshmi ", "2580", "2580"));
+
+        Assert.Equal(["Lakshmi"], _added);
+        Assert.Equal(["Lakshmi"], owner.Cashiers);
+        Assert.Contains("sign on with their own PIN", owner.Status);
+    }
+
+    [Theory]
+    [InlineData("", "2580", "2580", "Type the cashier's name.")]
+    [InlineData("Murugan", "2580", "2580", "There is already a cashier called Murugan.")]
+    [InlineData("Lakshmi", "2580", "2581", "The two PINs do not match.")]
+    [InlineData("Lakshmi", "1234", "1234", "straight run")]
+    [InlineData("Lakshmi", "12", "12", "at least 4")]
+    public void ACashierIsNotAddedWithAProblem(string name, string pin, string again, string said)
+    {
+        var owner = WithAccess("Murugan");
+
+        Assert.Contains(said, owner.AddCashier(name, pin, again));
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public void ACashierIsTakenOff()
+    {
+        var owner = WithAccess("Murugan", "Lakshmi");
+
+        Assert.Null(owner.RemoveCashier("Murugan"));
+
+        Assert.Equal(["Murugan"], _removed);
+        Assert.Equal(["Lakshmi"], owner.Cashiers);
+        Assert.Contains("past sales keep their name", owner.Status);
+    }
+
+    /// <summary>Nothing can be asked of an owner who has no PIN to give.</summary>
+    [Fact]
+    public void ApprovalsWaitForTheOwnersPin()
+    {
+        var owner = WithAccess();
+
+        Assert.False(owner.IsPinSet);
+        Assert.False(owner.CanAskForApproval);
+        Assert.Contains("Set the owner's PIN above first", owner.ApprovalNote);
+
+        Assert.Null(owner.SetPin("Maligai26"));
+
+        Assert.True(owner.CanAskForApproval);
+        Assert.Contains("records whether it was given", owner.ApprovalNote);
+    }
+
+    [Fact]
+    public void EachApprovalIsSavedAsItIsTicked()
+    {
+        var owner = WithAccess();
+        owner.SetPin("Maligai26");
+
+        owner.ApproveVoids = true;
+        Assert.True(_savedApprovals!.Voids);
+        Assert.Contains("voiding a bill", owner.Status);
+
+        owner.DiscountLimitText = "15";
+        owner.ApproveDiscounts = true;
+        Assert.Equal(15m, _savedApprovals.DiscountAbovePercent);
+
+        owner.ApproveCloseDay = true;
+        Assert.True(_savedApprovals.CloseDay);
+        Assert.Contains("voiding a bill, a discount over 15% of a line and closing the day", owner.Status);
+
+        owner.ApproveDiscounts = false;
+        Assert.Null(_savedApprovals.DiscountAbovePercent);
+    }
+
+    [Fact]
+    public void AShareThatCannotBeRightIsNotSaved()
+    {
+        var owner = WithAccess();
+        owner.ApproveDiscounts = true;
+        var saved = _savedApprovals;
+
+        owner.DiscountLimitText = "150";
+
+        Assert.NotNull(owner.SaveDiscountLimit());
+        Assert.Same(saved, _savedApprovals);
+    }
+
+    // ---- At the till, by who ---------------------------------------------------------------------
+
+    [Fact]
+    public void BeforeAnythingIsRecordedTheReportSaysWhatItWillShow()
+    {
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.False(owner.HasExceptions);
+        Assert.Contains("Nothing recorded yet", owner.ExceptionsLine);
+    }
+
+    [Fact]
+    public void EachPersonsExceptionsAreShownWithTheLatestInWords()
+    {
+        var events = new TillEventRepository(_temp.Database);
+        var now = DateTimeOffset.Now;
+
+        events.Record(Lane, now.AddMinutes(-30), TillEventKind.Voided, "Murugan", "RM/26-27/L1-7", 189.50m, approved: true);
+        events.Record(Lane, now.AddMinutes(-20), TillEventKind.Discounted, "Lakshmi", "Toor Dal 1kg", 30m, detail: "15.87% off Toor Dal 1kg");
+        events.Record(Lane, now.AddMinutes(-10), TillEventKind.ApprovalRefused, "Lakshmi", "RM/26-27/L1-8", 40m, approved: false,
+            detail: "Void RM/26-27/L1-8 for ₹40.00: backed out without the owner's PIN.");
+
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.True(owner.HasExceptions);
+        Assert.Equal(2, owner.ExceptionsByCashier.Count);
+
+        var lakshmi = owner.ExceptionsByCashier[0];
+        Assert.Equal("Lakshmi", lakshmi.Cashier);
+        Assert.Equal("1 · ₹30.00", lakshmi.Discounts);
+        Assert.Equal("1", lakshmi.Refused);
+        Assert.Equal("—", lakshmi.Voids);
+
+        Assert.Equal("1 · ₹189.50", owner.ExceptionsByCashier[1].Voids);
+
+        Assert.Equal(3, owner.LatestExceptions.Count);
+        Assert.Equal("refused", owner.LatestExceptions[0].Owner);
+        Assert.Equal("15.87% off Toor Dal 1kg", owner.LatestExceptions[1].What);
+        Assert.Equal(string.Empty, owner.LatestExceptions[1].Owner);
+        Assert.Equal("Voided RM/26-27/L1-7", owner.LatestExceptions[2].What);
+        Assert.Equal("approved", owner.LatestExceptions[2].Owner);
+
+        Assert.Contains("1 void, ₹189.50", owner.ExceptionsLine);
+        Assert.Contains("1 discount typed by hand, ₹30.00", owner.ExceptionsLine);
+        Assert.Contains("1 PIN asked for and not given", owner.ExceptionsLine);
+    }
+
+    // ---- The drawer at closing -------------------------------------------------------------------
+
+    [Fact]
+    public void WithNoCloseThePeriodSaysSo()
+    {
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.False(owner.HasDrawerCloses);
+        Assert.Equal("No day was closed in this period.", owner.DrawersLine);
+    }
+
+    [Fact]
+    public void EachCloseIsShownOverOrShortAndEachPersonsDays()
+    {
+        var closes = new DayCloseRepository(_temp.Database, new HeldBillRepository(_temp.Database));
+
+        SellDalAs("Murugan");
+        closes.Close(Lane, DateTimeOffset.Now.AddMinutes(-10), cashCounted: 180m, countedBy: "Murugan");
+        SellDalAs("Murugan");
+        closes.Close(Lane, DateTimeOffset.Now.AddMinutes(-5));
+
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.True(owner.HasDrawerCloses);
+        Assert.Equal("Counted at 1 of 2 closes; short once, ₹9.00 in all; never over.", owner.DrawersLine);
+
+        // Newest first in the list.
+        Assert.Equal("not counted", owner.DrawerCloses[0].Counted);
+        Assert.Equal("₹180.00 by Murugan", owner.DrawerCloses[1].Counted);
+        Assert.Equal("short by ₹9.00", owner.DrawerCloses[1].Result);
+        Assert.Equal("Murugan", owner.DrawerCloses[1].OnTheTill);
+
+        var murugan = Assert.Single(owner.DrawersByPerson);
+        Assert.Equal("2 days, 1 counted", murugan.Days);
+        Assert.Equal("1 day · ₹9.00", murugan.Short);
+        Assert.Equal("—", murugan.Over);
+
+        // The chart: one short bar, below the line; nothing for the close not counted.
+        Assert.Equal([0d, 0d], owner.DrawerChart!.Series[0].Values);
+        Assert.Equal([-9d, 0d], owner.DrawerChart.Series[1].Values);
+    }
+
+    /// <summary>A ₹189 dal, in the catalogue once.</summary>
+    private Item Dal()
+    {
+        var items = new ItemRepository(_temp.Database);
+
+        if (items.FindBySku("DAL001") is { } known)
+            return known;
+
+        items.UpsertRange([Catalogue.Item(sku: "DAL001", name: "Toor Dal 1kg", price: 189m)]);
+        return items.FindBySku("DAL001")!;
+    }
+
+    private void SellDalAs(string cashier)
+    {
+        var bill = new InvoiceEngine("33");
+        bill.AddItem(Dal());
+
+        var basket = new TenderBasket(bill.Totals.GrandTotal);
+        basket.Add(TenderType.Cash, bill.Totals.GrandTotal);
+
+        new CheckoutService(new InvoiceRepository(_temp.Database), new CustomerRepository(_temp.Database),
+            new RecordingDrawerService(), cashier: () => cashier).Complete(Lane, bill, basket);
+    }
+
+    // ---- What the shelves are worth ----------------------------------------------------------------
+
+    [Fact]
+    public void TheStockTabSaysWhatTheShelvesAreWorth()
+    {
+        var items = new ItemRepository(_temp.Database);
+        items.UpsertRange(
+        [
+            Catalogue.Item(sku: "DAL", name: "Toor Dal 1kg", price: 189m) with { StockQty = 10m, CostPrice = 150m, Category = "Grocery", Mrp = 195m },
+            Catalogue.Item(sku: "NEW", name: "New Soap", price: 40m) with { StockQty = 5m },
+        ]);
+
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.Equal("What the shelves are worth: ₹1,500.00 at cost, ₹2,090.00 at selling price, ₹2,150.00 at MRP.", owner.StockWorthLine);
+        Assert.Contains("Most in Grocery ₹1,890.00", owner.StockWorthDetail);
+        Assert.Contains("1 item with no cost price is not in the value at cost", owner.StockWorthDetail);
+    }
+
+    [Fact]
+    public void WithNothingCountedThereIsNoStockValue()
+    {
+        var owner = Build();
+        owner.Refresh();
+
+        Assert.Equal("Nothing counted is on the shelves, so there is no stock value to give.", owner.StockWorthLine);
+    }
+
+    // ---- How the screens look --------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(ScreenTheme.Morning, "morning look")]
+    [InlineData(ScreenTheme.Noon, "noon look")]
+    [InlineData(ScreenTheme.Evening, "evening look")]
+    [InlineData(ScreenTheme.ByTimeOfDay, "the morning look from 6 am, noon from 11 am, evening from 4 pm and night from 7 pm")]
+    public void TheLookCanBeChangedFromTheScreen(ScreenTheme look, string said)
+    {
+        var owner = Build();
+
+        Assert.True(owner.CanChooseScreenTheme);
+        Assert.Equal(ScreenTheme.Night, owner.ScreenTheme);
+
+        Assert.Null(owner.SetScreenTheme(look));
+
+        Assert.Equal(look, _look);
+        Assert.Equal(look, owner.ScreenTheme);
+        Assert.Contains(said, owner.Status);
+
+        Assert.Null(owner.SetScreenTheme(ScreenTheme.Night));
+        Assert.Equal(ScreenTheme.Night, _look);
+        Assert.Contains("night look", owner.Status);
+    }
+
+    /// <summary>Picking the look already on screen is not a change, and is not saved again.</summary>
+    [Fact]
+    public void PickingTheLookAlreadyShowingDoesNothing()
+    {
+        var owner = Build();
+
+        Assert.Null(owner.SetScreenTheme(ScreenTheme.Night));
+        Assert.Null(_look);
+    }
+
+    /// <summary>
+    /// The screens have already changed when the file fails to save, so the choice shows as made -
+    /// and the owner is told it will not outlast a restart.
+    /// </summary>
+    [Fact]
+    public void ALookThatCouldNotBeSavedStillShowsAsChosen()
+    {
+        _refuseLookWith = "Changed for this session, but it could not be saved: disk full";
+        var owner = Build();
+
+        Assert.NotNull(owner.SetScreenTheme(ScreenTheme.Noon));
+
+        Assert.Equal(ScreenTheme.Noon, owner.ScreenTheme);
+        Assert.Contains("could not be saved", owner.Status);
+    }
+
+    [Fact]
+    public void ALaneWiredWithNowhereToSaveTheLookDoesNotOfferIt()
+    {
+        var owner = new OwnerViewModel(Lane, _ => throw new InvalidOperationException(), Stock, TaxMode.Gst, false, _ => null, _ => null);
+
+        Assert.False(owner.CanChooseScreenTheme);
+        Assert.NotNull(owner.SetScreenTheme(ScreenTheme.Morning));
+        Assert.Equal(ScreenTheme.Night, owner.ScreenTheme);
     }
 
     [Fact]

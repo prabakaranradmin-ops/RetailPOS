@@ -117,6 +117,9 @@ public sealed class BillingHarness : IDisposable
     /// <summary>The catalogue this till sells from.</summary>
     public ItemRepository Items => _temp.Items;
 
+    /// <summary>The database under it all, for a screen that reads the day's figures back.</summary>
+    public PosDatabase Database => _temp.Database;
+
     public ReceiptComposer Receipts { get; }
 
     public DayCloseRepository DayCloses { get; }

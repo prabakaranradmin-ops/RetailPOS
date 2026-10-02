@@ -95,6 +95,9 @@ public sealed class Keymap
         // G for GSTIN: the customer on the bill is a business, and the bill is a tax invoice to them.
         [new(Key.G, ModifierKeys.Control)] = PosAction.BusinessCustomer,
 
+        // I for item: one on the shelf but not in the catalogue, typed in so the queue does not wait.
+        [new(Key.I, ModifierKeys.Control)] = PosAction.OpenItem,
+
         // The owner's screen. Not awkward on purpose — it changes nothing by opening, and an owner
         // who has to remember a hard chord will go back to asking somebody else for the figures.
         // What is behind it is protected by the dashboard PIN, not by an obscure key.

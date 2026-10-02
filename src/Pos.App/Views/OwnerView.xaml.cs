@@ -30,6 +30,7 @@ public partial class OwnerView : Window
     private readonly OrdersViewModel _orders;
     private readonly OffersViewModel? _offers;
     private readonly PricesViewModel _prices;
+    private readonly OpenItemsViewModel? _openItems;
 
     /// <summary>
     /// Suppresses the radio buttons' Checked handlers while the code sets them to match the current
@@ -50,7 +51,10 @@ public partial class OwnerView : Window
         OrdersViewModel orders,
 
         // The offers card. Optional: a screen built without it shows no card.
-        OffersViewModel? offers = null)
+        OffersViewModel? offers = null,
+
+        // What the till sold that is not in the catalogue. Optional in the same way.
+        OpenItemsViewModel? openItems = null)
     {
         ArgumentNullException.ThrowIfNull(orders);
         ArgumentNullException.ThrowIfNull(prices);
@@ -64,7 +68,7 @@ public partial class OwnerView : Window
         ArgumentNullException.ThrowIfNull(maintenance);
 
         InitializeComponent();
-        DarkChrome.Apply(this);
+        TitleBar.Apply(this);
 
         _viewModel = viewModel;
         _catalogue = catalogue;
@@ -88,6 +92,9 @@ public partial class OwnerView : Window
         _offers = offers;
         OffersPanel.DataContext = offers;
         OffersPanel.Visibility = offers is null ? Visibility.Collapsed : Visibility.Visible;
+        _openItems = openItems;
+        OpenItemsCard.DataContext = openItems;
+        OpenItemsNotice.DataContext = openItems;
 
         // The list is read when the tab is first opened rather than with the window, so opening
         // the owner's screen to glance at today's takings does not also read every customer.
@@ -103,6 +110,7 @@ public partial class OwnerView : Window
             {
                 _prices.LoadLabels();
                 _offers?.Load();
+                _openItems?.Load();
                 Dispatcher.BeginInvoke(() => NewItemName.Focus(), System.Windows.Threading.DispatcherPriority.Input);
                 return;
             }
@@ -190,6 +198,9 @@ public partial class OwnerView : Window
         {
             _viewModel.Refresh();
 
+            // Read with the window, small as it is, so the figures tab can say when any are waiting.
+            _openItems?.Load();
+
             // On the no-tax build there is no choice to show: it cannot issue a tax invoice, so the
             // chooser is replaced by a statement of what this build does.
             var switchable = !ProductVariant.ChargesNoTax;
@@ -205,6 +216,13 @@ public partial class OwnerView : Window
             UpiCard.Visibility = _viewModel.CanChangeUpiId ? Visibility.Visible : Visibility.Collapsed;
             LayoutStandard.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Standard;
             LayoutCompact.IsChecked = _viewModel.ReceiptLayout == ReceiptLayout.Compact;
+
+            LookCard.Visibility = _viewModel.CanChooseScreenTheme ? Visibility.Visible : Visibility.Collapsed;
+            LookByTimeOfDay.IsChecked = _viewModel.ScreenTheme == ScreenTheme.ByTimeOfDay;
+            LookMorning.IsChecked = _viewModel.ScreenTheme == ScreenTheme.Morning;
+            LookNoon.IsChecked = _viewModel.ScreenTheme == ScreenTheme.Noon;
+            LookEvening.IsChecked = _viewModel.ScreenTheme == ScreenTheme.Evening;
+            LookNight.IsChecked = _viewModel.ScreenTheme == ScreenTheme.Night;
 
             ApplyTaxMode();
             ApplyPinState();
@@ -308,6 +326,8 @@ public partial class OwnerView : Window
 
     private async void Backup_Click(object sender, RoutedEventArgs e) => await _maintenance.Backup();
 
+    private async void CopyOff_Click(object sender, RoutedEventArgs e) => await _maintenance.CopyToPenDrive();
+
     private async void CheckDb_Click(object sender, RoutedEventArgs e) => await _maintenance.Check();
 
     private async void Compact_Click(object sender, RoutedEventArgs e) => await _maintenance.Compact();
@@ -347,6 +367,24 @@ public partial class OwnerView : Window
     private void SaveBusiness_Click(object sender, RoutedEventArgs e)
     {
         if (_customers.SaveBusiness() is { } problem)
+            Say(problem);
+    }
+
+    private void SaveKhataLimit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.SaveLimit() is { } problem)
+            Say(problem);
+    }
+
+    /// <summary>Enter in the limit box saves it, so the limit is set without reaching for the button.</summary>
+    private void KhataLimit_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        e.Handled = true;
+
+        if (_customers.SaveLimit() is { } problem)
             Say(problem);
     }
 
@@ -461,6 +499,10 @@ public partial class OwnerView : Window
         PreviewImageScroll.ScrollToTop();
     }
 
+    // ---- A festival against last year's -------------------------------------------------------------
+
+    private void CompareFestival_Click(object sender, RoutedEventArgs e) => _viewModel.CompareFestival();
+
     // ---- The GST return ---------------------------------------------------------------------------
 
     private void GstEarlier_Click(object sender, RoutedEventArgs e) => _gst.EarlierMonth();
@@ -482,6 +524,24 @@ public partial class OwnerView : Window
             return;
 
         if (_gst.Save(dialog.FileName) is { } problem)
+            Say(problem);
+    }
+
+    private void DayBookSave_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save the day book for the accountant",
+            Filter = "Day book (*.csv)|*.csv",
+            FileName = _gst.SuggestedDayBookName,
+            AddExtension = true,
+            DefaultExt = ".csv",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        if (_gst.SaveDayBook(dialog.FileName) is { } problem)
             Say(problem);
     }
 
@@ -676,7 +736,23 @@ public partial class OwnerView : Window
 
     private void AddItem_Click(object sender, RoutedEventArgs e) => _newItem.Save();
 
-    private void ClearItem_Click(object sender, RoutedEventArgs e) => _newItem.Clear();
+    private void ClearItem_Click(object sender, RoutedEventArgs e)
+    {
+        _newItem.Clear();
+        _openItems?.ForgetAdding();
+    }
+
+    /// <summary>The till's item into the form below, and the caret into the one box it cannot fill: the SKU.</summary>
+    private void AddOpenItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openItems?.StartAdding() == true)
+        {
+            NewItemSku.BringIntoView();
+            NewItemSku.Focus();
+        }
+    }
+
+    private void LeaveOutOpenItem_Click(object sender, RoutedEventArgs e) => _openItems?.LeaveOut();
 
     private void ImportCatalogue_Click(object sender, RoutedEventArgs e)
     {
@@ -855,6 +931,30 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
+    /// <summary>
+    /// Asked first, like cancelling a bill: a debit note is a document the supplier holds too, and
+    /// it cannot be taken back here.
+    /// </summary>
+    private void SendBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (_purchases.SelectedBill is not { } bill)
+            return;
+
+        var going = _purchases.ReturnRows.Where(r => r.Quantity is > 0m).ToList();
+
+        if (!ConfirmDialog.Ask(this, "Send the goods back?",
+                $"Send {Plural.Of(going.Count, "line")} back to {bill.SupplierName} on a debit note against bill {bill.BillNo}?\n\n"
+                + string.Join("\n", going.Select(r => $"  {r.Name}: {r.Quantity:0.###}"))
+                + "\n\nCounted goods come off the shelf, and what they cost comes off what the shop owes the supplier.",
+                "Send them back", "Not yet", DialogKind.Danger))
+        {
+            return;
+        }
+
+        if (_purchases.SendBack() is { } problem)
+            Say(problem);
+    }
+
     // ---- The stock sheet ---------------------------------------------------------------------
 
     private void SaveStockSheet_Click(object sender, RoutedEventArgs e)
@@ -1027,6 +1127,12 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
+    private void CopyReminder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_customers.CopyReminder() is { } problem)
+            Say(problem);
+    }
+
     private void SaveCatalogueTemplate_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
@@ -1112,6 +1218,22 @@ public partial class OwnerView : Window
             Say(problem);
     }
 
+    /// <summary>
+    /// No confirmation either: a look changes nothing but colours, it shows the moment it is picked,
+    /// and the one before is a key away.
+    /// </summary>
+    private void Look_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_settingUp || sender is not RadioButton { Tag: string tag })
+            return;
+
+        if (!Enum.TryParse<ScreenTheme>(tag, out var look))
+            return;
+
+        if (_viewModel.SetScreenTheme(look) is { } problem)
+            Say(problem);
+    }
+
     private void SavePin_Click(object sender, RoutedEventArgs e)
     {
         var pin = PinBox.Password;
@@ -1157,6 +1279,78 @@ public partial class OwnerView : Window
         }
 
         if (_viewModel.SetPin(null) is { } problem)
+            Say(problem);
+    }
+
+    // ---- Who works the till, and what waits for the owner ----------------------------------------
+
+    private void AddCashier_Click(object sender, RoutedEventArgs e) => AddCashier();
+
+    /// <summary>Enter in the second PIN box adds the cashier, so the whole card is done from the keyboard.</summary>
+    private void NewCashierPinAgain_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        e.Handled = true;
+        AddCashier();
+    }
+
+    private void AddCashier()
+    {
+        if (_viewModel.AddCashier(NewCashierName.Text, NewCashierPin.Password, NewCashierPinAgain.Password) is { } problem)
+        {
+            // The PINs go, the name stays: retyping a name is no hardship, and a PIN left in a box
+            // after a refusal is one more person who might see it typed.
+            NewCashierPin.Clear();
+            NewCashierPinAgain.Clear();
+            Say(problem);
+            return;
+        }
+
+        NewCashierName.Clear();
+        NewCashierPin.Clear();
+        NewCashierPinAgain.Clear();
+        NewCashierName.Focus();
+    }
+
+    private void RemoveCashier_Click(object sender, RoutedEventArgs e)
+    {
+        if (CashierNamesList.SelectedItem is not string name)
+        {
+            Say("Pick the cashier to take off first.");
+            return;
+        }
+
+        if (!ConfirmDialog.Ask(this, $"Take {name} off?",
+                $"{name} will not be able to sign on at the till. Their past sales keep their name.",
+                "Take them off", "Keep them", DialogKind.Danger))
+        {
+            return;
+        }
+
+        if (_viewModel.RemoveCashier(name) is { } problem)
+            Say(problem);
+    }
+
+    private void DiscountLimit_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        e.Handled = true;
+        SaveDiscountLimit();
+    }
+
+    private void DiscountLimit_LostFocus(object sender, RoutedEventArgs e) => SaveDiscountLimit();
+
+    /// <summary>Saves the share, only while discounts are being asked about; otherwise it waits for the tick.</summary>
+    private void SaveDiscountLimit()
+    {
+        if (!_viewModel.ApproveDiscounts)
+            return;
+
+        if (_viewModel.SaveDiscountLimit() is { } problem)
             Say(problem);
     }
 

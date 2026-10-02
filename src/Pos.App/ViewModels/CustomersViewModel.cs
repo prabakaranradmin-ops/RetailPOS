@@ -400,7 +400,13 @@ public sealed class CustomersViewModel : ObservableObject
 
         try
         {
-            foreach (var customer in _query.Find(_searchText, OnlyOwing ? 500 : 50, OnlyOwing))
+            var found = _query.Find(_searchText, OnlyOwing ? 500 : 50, OnlyOwing);
+
+            // The ages are a figure about those who owe, and go with that list.
+            if (!OnlyOwing)
+                AgeingLine = string.Empty;
+
+            foreach (var customer in OnlyOwing ? Aged(found) : found)
                 Results.Add(customer);
 
             Status = Results.Count == 0 && _searchText.Trim().Length > 0
@@ -428,6 +434,193 @@ public sealed class CustomersViewModel : ObservableObject
             LoadProfile();
         }
     }
+
+    // ---- How old the khata is --------------------------------------------------------------------
+
+    private string _ageingLine = string.Empty;
+
+    /// <summary>
+    /// Over the list of those who owe: how much of it is under 30 days old, 31 to 60, 61 to 90 and
+    /// older - the figure that says whether the khata is being paid or only growing.
+    /// </summary>
+    public string AgeingLine
+    {
+        get => _ageingLine;
+        private set
+        {
+            if (Set(ref _ageingLine, value))
+                Raise(nameof(HasAgeingLine));
+        }
+    }
+
+    public bool HasAgeingLine => _ageingLine.Length > 0;
+
+    /// <summary>The ones who owe, each with how long their oldest unpaid bill has waited; and the totals by age.</summary>
+    private List<CustomerSummary> Aged(IReadOnlyList<CustomerSummary> owing)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var aged = new List<CustomerSummary>();
+        decimal upTo30 = 0m, upTo60 = 0m, upTo90 = 0m, older = 0m;
+
+        foreach (var customer in owing)
+        {
+            if (_credit is null || customer.Owed <= 0m)
+            {
+                aged.Add(customer);
+                continue;
+            }
+
+            KhataAgeing ageing;
+
+            try
+            {
+                ageing = KhataAgeing.Of(_credit.Ledger(customer.Id), customer.Owed, today);
+            }
+            catch (Exception)
+            {
+                aged.Add(customer);
+                continue;
+            }
+
+            upTo30 += ageing.UpTo30Days;
+            upTo60 += ageing.Days31To60;
+            upTo90 += ageing.Days61To90;
+            older += ageing.Over90Days;
+
+            aged.Add(customer with { DaysWaiting = ageing.DaysWaiting(today) });
+        }
+
+        AgeingLine = upTo30 + upTo60 + upTo90 + older == 0m
+            ? string.Empty
+            : $"How old: {Show.Money(upTo30)} under 30 days · {Show.Money(upTo60)} 31 to 60 · {Show.Money(upTo90)} 61 to 90 · {Show.Money(older)} over 90.";
+
+        return aged;
+    }
+
+    /// <summary>
+    /// A short reminder for the chosen customer - what they owe and since when - ready to paste into
+    /// WhatsApp. Shorter than the statement, for somebody who has not paid in a while.
+    /// </summary>
+    /// <returns>What went wrong, or null.</returns>
+    public string? CopyReminder()
+    {
+        if (Statement() is not { } statement)
+            return Status;
+
+        if (!statement.OwesAnything)
+            return Status = $"{statement.Customer.Name ?? statement.Customer.MobileNo} owes nothing, so there is nothing to remind them of.";
+
+        try
+        {
+            if (CopyText is not { } copy)
+                return Status = "This screen cannot reach the clipboard.";
+
+            copy(statement.Reminder(ShopName, Upi));
+        }
+        catch (Exception ex)
+        {
+            return Status = $"The reminder could not be copied: {ex.Message}";
+        }
+
+        Status = $"A reminder to {statement.Customer.Name ?? statement.Customer.MobileNo} is on the clipboard. Paste it into WhatsApp.";
+        return null;
+    }
+
+    // ---- The khata limit -------------------------------------------------------------------------
+
+    private string _editLimit = string.Empty;
+
+    /// <summary>The limit box, prefilled with what is on file. Empty is no limit.</summary>
+    public string EditLimit
+    {
+        get => _editLimit;
+        set => Set(ref _editLimit, value ?? string.Empty);
+    }
+
+    /// <summary>Under what they owe: their limit, and when they last paid anything back.</summary>
+    public string KhataNote
+    {
+        get
+        {
+            if (_profile is null)
+                return string.Empty;
+
+            var parts = new List<string>
+            {
+                _record?.CreditLimit is { } limit ? $"Khata limit {Show.Money(limit)}" : "No khata limit",
+            };
+
+            if (_profile.Customer.Owed > 0m)
+            {
+                DateTimeOffset? paid = null;
+
+                try
+                {
+                    paid = _credit?.LastPaid(_profile.Customer.Id);
+                }
+                catch (Exception)
+                {
+                }
+
+                parts.Add(paid is { } at ? $"last paid {Show.Date(at)}" : "nothing paid back yet");
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>
+    /// Sets the most the chosen customer may owe on the khata, or takes the limit off with an empty
+    /// box. A sale at the till that would take them past it waits for the owner's PIN.
+    /// </summary>
+    /// <returns>What went wrong, or null.</returns>
+    public string? SaveLimit()
+    {
+        if (_profile is null)
+            return "Pick a customer first.";
+
+        var typed = EditLimit.Trim().TrimStart('₹').Replace(",", string.Empty, StringComparison.Ordinal);
+        decimal? limit = null;
+
+        if (typed.Length > 0)
+        {
+            if (!decimal.TryParse(typed, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount < 0m)
+                return $"'{EditLimit.Trim()}' is not an amount. Leave the box empty for no limit.";
+
+            if (decimal.Round(amount, 2) != amount)
+                return "A khata limit is in rupees and paise.";
+
+            limit = amount;
+        }
+
+        try
+        {
+            _store.SetCreditLimit(_profile.Customer.Id, limit);
+            _record = _store.FindByMobile(_profile.Customer.MobileNo);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
+        }
+        catch (Exception ex)
+        {
+            return $"Could not save it: {ex.Message}";
+        }
+
+        EditLimit = Limit(_record?.CreditLimit);
+        Raise(nameof(KhataNote));
+
+        var who = _profile.Customer.Label;
+
+        Status = limit is { } set
+            ? $"Saved. {who} may owe up to {Show.Money(set)}; a sale past it waits for the owner's PIN."
+            : $"Saved. {who} has no khata limit.";
+
+        return null;
+    }
+
+    private static string Limit(decimal? limit) =>
+        limit is { } amount ? amount.ToString("0.##", CultureInfo.InvariantCulture) : string.Empty;
 
     /// <summary>The GSTIN box, prefilled with what is on file.</summary>
     public string EditGstin
@@ -602,7 +795,9 @@ public sealed class CustomersViewModel : ObservableObject
 
         EditGstin = _record?.Gstin ?? string.Empty;
         EditAddress = _record?.Address ?? string.Empty;
+        EditLimit = Limit(_record?.CreditLimit);
         Raise(nameof(BusinessLine));
+        Raise(nameof(KhataNote));
 
         foreach (var name in new[]
                  {

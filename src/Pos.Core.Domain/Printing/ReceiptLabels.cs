@@ -122,6 +122,12 @@ public sealed record ReceiptLabels
     public required string ReportNumber { get; init; }
     public required string NoSalesInThisPeriod { get; init; }
     public required string CashInDrawerShouldBe { get; init; }
+    public required string CashCounted { get; init; }
+    public required string CountedBy { get; init; }
+    public required string DrawerOverBy { get; init; }
+    public required string DrawerShortBy { get; init; }
+    public required string DrawerExactlyRight { get; init; }
+    public required string DrawerNotCounted { get; init; }
     public required string CashTaken { get; init; }
     public required string ChangeGiven { get; init; }
     public required string Sales { get; init; }
@@ -331,6 +337,12 @@ public sealed record ReceiptLabels
         ReportNumber = "Report no",
         NoSalesInThisPeriod = "NO SALES IN THIS PERIOD",
         CashInDrawerShouldBe = "CASH IN DRAWER SHOULD BE",
+        CashCounted = "Cash counted",
+        CountedBy = "Counted by",
+        DrawerOverBy = "OVER BY",
+        DrawerShortBy = "SHORT BY",
+        DrawerExactlyRight = "COUNTED: EXACTLY RIGHT",
+        DrawerNotCounted = "Not counted at the close",
         CashTaken = "Cash taken",
         ChangeGiven = "Change given",
         Sales = "Sales",
@@ -499,6 +511,15 @@ public sealed record ReceiptLabels
         ReportNumber = "அறிக்கை எண்",
         NoSalesInThisPeriod = "இந்த நேரத்தில் விற்பனை இல்லை",
         CashInDrawerShouldBe = "பணப்பெட்டியில் இருக்க வேண்டிய தொகை",
+
+        // The count at closing, in the words somebody counting a drawer would say. On the pilot
+        // shop's sign-off sheet with the other words chosen without them.
+        CashCounted = "எண்ணிய ரொக்கம்",
+        CountedBy = "எண்ணியவர்",
+        DrawerOverBy = "கூடுதல்",
+        DrawerShortBy = "குறைவு",
+        DrawerExactlyRight = "சரியாக உள்ளது",
+        DrawerNotCounted = "முடிக்கும்போது எண்ணப்படவில்லை",
         CashTaken = "வந்த ரொக்கம்",
         ChangeGiven = "கொடுத்த மீதம்",
         Sales = "விற்பனை",

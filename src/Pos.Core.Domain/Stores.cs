@@ -40,7 +40,11 @@ public interface IInvoiceStore
 }
 
 /// <summary>What happened when a snapshot was taken.</summary>
-public readonly record struct BackupOutcome(bool Succeeded, string Path, string Detail);
+/// <param name="OffMachine">
+/// What became of the copy off this computer: where it went, why it did not, or that one is
+/// overdue. Null when there is nothing to say.
+/// </param>
+public readonly record struct BackupOutcome(bool Succeeded, string Path, string Detail, string? OffMachine = null);
 
 /// <summary>
 /// Takes a snapshot of the lane's books. Declared here so day-end close can insist on one without
@@ -126,6 +130,9 @@ public interface ICustomerStore
 
     /// <summary>Gives a customer a name, changes it, or clears it with null or blank.</summary>
     void Rename(long customerId, string? name);
+
+    /// <summary>Sets the most a customer may owe on the khata, or takes the limit off with null.</summary>
+    void SetCreditLimit(long customerId, decimal? limit);
 
     /// <summary>
     /// Makes a customer a business: their GSTIN, checked, and their address. The GSTIN decides their

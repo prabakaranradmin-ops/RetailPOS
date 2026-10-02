@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace Pos.App.Views;
 
 /// <summary>
-/// Asks Windows to draw a window's title bar dark, in the page's own colour, so the frame does not
-/// sit as a white stripe across the top of a dark screen.
+/// Asks Windows to draw a window's title bar in the look on screen: dark on a dark look, light on a
+/// light one, in the page's own colour, so the frame does not sit as a white stripe across the top
+/// of a dark screen or a black one across a light screen.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +21,7 @@ namespace Pos.App.Views;
 /// Local to this machine: a call into the desktop window manager, nothing over any network.
 /// </para>
 /// </remarks>
-public static class DarkChrome
+public static class TitleBar
 {
     private const int DarkModeOld = 19;
     private const int DarkMode = 20;
@@ -30,7 +32,7 @@ public static class DarkChrome
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
-    /// <summary>Applies the dark frame when the window gets its handle, or at once if it has one.</summary>
+    /// <summary>Paints the title bar when the window gets its handle, or at once if it has one.</summary>
     public static void Apply(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -41,7 +43,8 @@ public static class DarkChrome
             window.SourceInitialized += (_, _) => Paint(window);
     }
 
-    private static void Paint(Window window)
+    /// <summary>Paints the title bar in the look on screen now. Called again when the look changes.</summary>
+    public static void Paint(Window window)
     {
         try
         {
@@ -50,16 +53,16 @@ public static class DarkChrome
             if (handle == IntPtr.Zero)
                 return;
 
-            var on = 1;
+            var dark = window.TryFindResource("IsDarkTheme") is not false ? 1 : 0;
 
-            if (DwmSetWindowAttribute(handle, DarkMode, ref on, sizeof(int)) != 0)
-                DwmSetWindowAttribute(handle, DarkModeOld, ref on, sizeof(int));
+            if (DwmSetWindowAttribute(handle, DarkMode, ref dark, sizeof(int)) != 0)
+                DwmSetWindowAttribute(handle, DarkModeOld, ref dark, sizeof(int));
 
-            // Windows takes these as 0x00BBGGRR. The caption in the page colour (#0A0D13), its text in
-            // the ink (#F8FAFC), and the border in the rim the cards use (#1F2937).
-            var caption = 0x00130D0A;
-            var text = 0x00FCFAF8;
-            var border = 0x0037291F;
+            // The caption in the page colour, its text in the ink, and the border in the rim the
+            // cards use - whichever look those are now.
+            var caption = Native(window, "Surface", Color.FromRgb(0x0A, 0x0D, 0x13));
+            var text = Native(window, "Ink", Color.FromRgb(0xF8, 0xFA, 0xFC));
+            var border = Native(window, "CardEdge", Color.FromRgb(0x1F, 0x29, 0x37));
 
             DwmSetWindowAttribute(handle, CaptionColour, ref caption, sizeof(int));
             DwmSetWindowAttribute(handle, TextColour, ref text, sizeof(int));
@@ -69,5 +72,12 @@ public static class DarkChrome
         {
             // A Windows without the window manager's API keeps its ordinary frame.
         }
+    }
+
+    /// <summary>A palette colour as Windows takes it: 0x00BBGGRR.</summary>
+    private static int Native(Window window, string key, Color fallback)
+    {
+        var colour = window.TryFindResource(key) is SolidColorBrush brush ? brush.Color : fallback;
+        return colour.R | (colour.G << 8) | (colour.B << 16);
     }
 }

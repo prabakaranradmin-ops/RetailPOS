@@ -196,11 +196,16 @@ public class DrawerTillTests
 
         till.Press(Key.F12, ModifierKeys.Shift);
 
-        Assert.Contains("₹1,149.00 expected in the drawer", till.ViewModel.StatusMessage);
-
-        // And in the pane, a line each: the expense paid out, and the drawer figure last.
+        // The drawer figure is not shown until the drawer is counted.
+        Assert.DoesNotContain("1,149", till.ViewModel.StatusMessage);
         Assert.Contains(new DayCloseRow("Paid out of the drawer", "₹40.00"), till.ViewModel.DayCloseRows);
-        Assert.Equal(new DayCloseRow("Cash expected in the drawer", "₹1,149.00", Emphasis: true), till.ViewModel.DayCloseRows[^1]);
+
+        Type(till, "1149");
+
+        // Counted, then shown: the expense paid out, the drawer figure, and the drawer exactly right.
+        Assert.Contains("exactly right", till.ViewModel.StatusMessage);
+        Assert.Contains(new DayCloseRow("Cash expected in the drawer", "₹1,149.00"), till.ViewModel.DayCloseRows);
+        Assert.Equal(new DayCloseRow("The drawer is", "exactly right", Emphasis: true), till.ViewModel.DayCloseRows[^1]);
     }
 
     /// <summary>The cash pane's title follows the step, so it says what it is asking.</summary>

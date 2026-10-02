@@ -41,11 +41,13 @@ public sealed class DayCloseService(
     /// <summary>What the lane would report if it closed now. Changes nothing.</summary>
     public DayCloseSummary Preview(string laneId) => _closes.Preview(laneId, _clock.GetLocalNow());
 
-    public DayCloseResult Close(string laneId)
+    /// <param name="cashCounted">What was counted in the drawer before the expected figure was shown, or null for none.</param>
+    /// <param name="countedBy">Who counted it.</param>
+    public DayCloseResult Close(string laneId, decimal? cashCounted = null, string? countedBy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(laneId);
 
-        var day = _closes.Close(laneId, _clock.GetLocalNow());
+        var day = _closes.Close(laneId, _clock.GetLocalNow(), cashCounted, countedBy);
 
         var print = Print(day);
         var backup = backups?.Create(_clock.GetLocalNow()) ?? new BackupOutcome(false, string.Empty, "No backup is configured for this lane.");

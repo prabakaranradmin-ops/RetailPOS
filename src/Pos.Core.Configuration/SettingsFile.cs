@@ -85,9 +85,81 @@ public static class SettingsFile
             fresh => fresh.Upi.Id = value);
     }
 
+    /// <summary>
+    /// Writes the list of cashiers and their PINs - as salted hashes, never the PINs - or takes the
+    /// list out when it is empty.
+    /// </summary>
+    public static void SetCashiers(string path, IReadOnlyList<CashierSettings> cashiers)
+    {
+        ArgumentNullException.ThrowIfNull(cashiers);
+
+        if (CashierRules.Problem(cashiers) is { } problem)
+            throw new ArgumentException(problem, nameof(cashiers));
+
+        Patch(
+            path,
+            root =>
+            {
+                if (cashiers.Count == 0)
+                {
+                    root.Remove("cashiers");
+                    return;
+                }
+
+                var list = new JsonArray();
+
+                foreach (var cashier in cashiers)
+                {
+                    list.Add(new JsonObject
+                    {
+                        ["name"] = cashier.Name.Trim(),
+                        ["pin"] = new JsonObject
+                        {
+                            ["salt"] = cashier.Pin!.Salt,
+                            ["hash"] = cashier.Pin.Hash,
+                            ["iterations"] = cashier.Pin.Iterations,
+                        },
+                    });
+                }
+
+                root["cashiers"] = list;
+            },
+            fresh => fresh.Cashiers = [.. cashiers]);
+    }
+
+    /// <summary>Writes which of the till's actions wait for the owner's PIN.</summary>
+    public static void SetApprovals(string path, ApprovalSettings approvals)
+    {
+        ArgumentNullException.ThrowIfNull(approvals);
+
+        if (approvals.Problem() is { } problem)
+            throw new ArgumentException(problem, nameof(approvals));
+
+        Patch(
+            path,
+            root => root["approvals"] = new JsonObject
+            {
+                ["voids"] = approvals.Voids,
+                ["discountAbovePercent"] = approvals.DiscountAbovePercent,
+                ["cashRefunds"] = approvals.CashRefunds,
+                ["cashOut"] = approvals.CashOut,
+                ["closeDay"] = approvals.CloseDay,
+            },
+            fresh => fresh.Approvals = approvals.Copy());
+    }
+
     /// <summary>Writes which bill layout this lane prints, by name.</summary>
     public static void SetReceiptLayout(string path, ReceiptLayout layout) =>
         Patch(path, root => root["receiptLayout"] = layout.ToString(), fresh => fresh.ReceiptLayout = layout);
+
+    /// <summary>Writes how this lane's screens look, by name.</summary>
+    public static void SetScreenTheme(string path, ScreenTheme theme)
+    {
+        if (!Enum.IsDefined(theme))
+            throw new ArgumentOutOfRangeException(nameof(theme), theme, "Not a look this build has.");
+
+        Patch(path, root => root["screenTheme"] = theme.ToString(), fresh => fresh.ScreenTheme = theme);
+    }
 
     /// <summary>
     /// Writes the dashboard PIN into the settings file, or removes it when given null.

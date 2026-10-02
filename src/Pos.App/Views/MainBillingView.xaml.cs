@@ -40,7 +40,7 @@ public partial class MainBillingView : Window
         ArgumentNullException.ThrowIfNull(settings);
 
         InitializeComponent();
-        DarkChrome.Apply(this);
+        TitleBar.Apply(this);
 
         _viewModel = viewModel;
         _router = new KeyboardRouter(keymap, viewModel);
@@ -50,6 +50,8 @@ public partial class MainBillingView : Window
         viewModel.CommitKey = CommitKeyName(keymap);
         viewModel.CancelKey = KeyName(keymap, PosAction.Cancel) ?? "Esc";
         viewModel.CloseDayKey = KeyName(keymap, PosAction.CloseDay) ?? "Shift+F12";
+        viewModel.SignOnKey = KeyName(keymap, PosAction.SetCashier) ?? "Ctrl+U";
+        viewModel.OpenItemKey = KeyName(keymap, PosAction.OpenItem) ?? "Ctrl+I";
 
         DataContext = viewModel;
         Title = $"RetailPOS — Billing — lane {settings.LaneId}";
@@ -66,6 +68,14 @@ public partial class MainBillingView : Window
 
         viewModel.SearchFocusRequested += (_, _) => FocusSearchBox();
         viewModel.OwnerViewRequested += (_, _) => OpenOwnerView();
+
+        // A PIN is emptied after every try, right or wrong, so the next try starts clean and nothing
+        // typed is left lying in a box.
+        viewModel.PinEntryCleared += (_, _) =>
+        {
+            ApprovalBox.Clear();
+            CashierPinBox.Clear();
+        };
 
         // A scan that matched nothing is selected, so the next scan replaces it rather than being
         // added to the end of it and failing as well, and it sounds - the cashier is looking at the
@@ -207,7 +217,41 @@ public partial class MainBillingView : Window
                 break;
 
             case nameof(BillingViewModel.IsSettingCashier) when _viewModel.IsSettingCashier:
-                Dispatcher.BeginInvoke(() => Focus(CashierBox));
+                Dispatcher.BeginInvoke(FocusCashier);
+                break;
+
+            // Which MRP: the list takes the keyboard, so nothing typed lands in the search box behind it.
+            case nameof(BillingViewModel.IsChoosingMrp) when _viewModel.IsChoosingMrp:
+                Dispatcher.BeginInvoke(() => MrpList.Focus());
+                break;
+
+            case nameof(BillingViewModel.IsChoosingMrp) when !InAPane():
+                Dispatcher.BeginInvoke(FocusSearchBox);
+                break;
+
+            // An item not in the catalogue: the box for the name and price, then the list of slabs.
+            case nameof(BillingViewModel.IsAddingOpenItem) or nameof(BillingViewModel.OpenItemStage)
+                when _viewModel.IsAddingOpenItem:
+                Dispatcher.BeginInvoke(FocusOpenItem);
+                break;
+
+            case nameof(BillingViewModel.IsAddingOpenItem) when !InAPane():
+                Dispatcher.BeginInvoke(FocusSearchBox);
+                break;
+
+            // The close pane: straight to the count.
+            case nameof(BillingViewModel.IsConfirmingDayClose) when _viewModel.IsConfirmingDayClose:
+                Dispatcher.BeginInvoke(() => Focus(CloseCountBox));
+                break;
+
+            case nameof(BillingViewModel.IsConfirmingDayClose) when !InAPane():
+                Dispatcher.BeginInvoke(FocusSearchBox);
+                break;
+
+            // The owner's PIN takes the keyboard while it is asked for, and gives it back to whatever
+            // asked - or to wherever the approved action has left the till.
+            case nameof(BillingViewModel.IsApproving):
+                Dispatcher.BeginInvoke(_viewModel.IsApproving ? () => ApprovalBox.Focus() : FocusCurrent);
                 break;
 
             case nameof(BillingViewModel.IsCollecting) when _viewModel.IsCollecting:
@@ -263,7 +307,11 @@ public partial class MainBillingView : Window
 
     /// <summary>True while a pane with its own text box is open over the billing screen.</summary>
     private bool InAPane() =>
-        _viewModel.IsTendering
+        _viewModel.IsApproving
+        || _viewModel.IsChoosingMrp
+        || _viewModel.IsAddingOpenItem
+        || _viewModel.IsConfirmingDayClose
+        || _viewModel.IsTendering
         || _viewModel.IsFindingCustomer
         || _viewModel.IsReprinting
         || _viewModel.IsVoiding
@@ -280,6 +328,51 @@ public partial class MainBillingView : Window
         box.Focus();
         box.SelectAll();
     }
+
+    /// <summary>The name box, or on a lane with cashiers set up, the PIN box beside the list of names.</summary>
+    private void FocusCashier()
+    {
+        if (_viewModel.UsesCashierPins)
+            CashierPinBox.Focus();
+        else
+            Focus(CashierBox);
+    }
+
+    /// <summary>The name or price box, or the list of slabs once it is time to pick one.</summary>
+    private void FocusOpenItem()
+    {
+        if (_viewModel.IsChoosingOpenRate)
+            OpenRateList.Focus();
+        else
+            Focus(OpenItemBox);
+    }
+
+    /// <summary>The box for whatever the till is doing now, or the search box when it is only billing.</summary>
+    private void FocusCurrent()
+    {
+        if (_viewModel.IsApproving) { ApprovalBox.Focus(); return; }
+        if (_viewModel.IsChoosingMrp) { MrpList.Focus(); return; }
+        if (_viewModel.IsAddingOpenItem) { FocusOpenItem(); return; }
+        if (_viewModel.IsConfirmingDayClose) { Focus(CloseCountBox); return; }
+        if (_viewModel.IsEditing) { Focus(EditBox); return; }
+        if (_viewModel.IsTendering) { Focus(TenderBox); return; }
+        if (_viewModel.IsFindingCustomer) { Focus(CustomerBox); return; }
+        if (_viewModel.IsReprinting) { Focus(ReprintBox); return; }
+        if (_viewModel.IsVoiding) { Focus(VoidBox); return; }
+        if (_viewModel.IsSettingCashier) { FocusCashier(); return; }
+        if (_viewModel.IsCollecting) { Focus(CollectBox); return; }
+        if (_viewModel.IsReturning) { Focus(ReturnBox); return; }
+        if (_viewModel.IsUsingDrawer) { Focus(DrawerBox); return; }
+        if (_viewModel.IsUsingQuickKeys) { Focus(QuickKeyBox); return; }
+        if (_viewModel.IsTakingOrder) { Focus(OrderBox); return; }
+        if (_viewModel.IsSettingBusiness) { Focus(BusinessBox); return; }
+
+        FocusSearchBox();
+    }
+
+    private void ApprovalPin_Changed(object sender, RoutedEventArgs e) => _viewModel.ApprovalPin = ApprovalBox.Password;
+
+    private void CashierPin_Changed(object sender, RoutedEventArgs e) => _viewModel.CashierPin = CashierPinBox.Password;
 
     private bool ShouldRoute(Key key)
     {

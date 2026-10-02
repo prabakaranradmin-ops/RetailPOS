@@ -65,6 +65,22 @@ public sealed class CreditRepository(PosDatabase database) : ICreditStore
         return PaiseSql.Rupees(OwedPaise(connection, null, customerId));
     }
 
+    public DateTimeOffset? LastPaid(long customerId)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT received_at FROM credit_payments
+            WHERE customer_id = $id
+            ORDER BY received_at DESC, id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$id", customerId);
+
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? reader.GetDateTimeOffset(0) : null;
+    }
+
     public IReadOnlyList<CustomerBalance> Owing(int limit = 200)
     {
         using var connection = _database.OpenConnection();

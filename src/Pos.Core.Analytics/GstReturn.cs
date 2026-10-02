@@ -116,6 +116,24 @@ public sealed record GstPurchaseRow(
     public IReadOnlyList<GstInputRow> Rates { get; init; } = [];
 }
 
+/// <summary>A debit note: goods sent back to a supplier in the month, with the input tax on them.</summary>
+/// <param name="ChargesGst">False when the bill they came on carried no GST, so there was no input tax to take back.</param>
+public sealed record GstSentBackRow(
+    string? SupplierGstin,
+    string SupplierName,
+    string Number,
+    DateOnly Date,
+    string BillNo,
+    decimal TaxableValue,
+    decimal Igst,
+    decimal Cgst,
+    decimal Sgst,
+    decimal Total,
+    bool ChargesGst)
+{
+    public decimal Tax => Igst + Cgst + Sgst;
+}
+
 /// <summary>
 /// What one lane sold in one month, arranged the way the monthly GST return asks for it.
 /// </summary>
@@ -173,6 +191,12 @@ public sealed record GstReturnData
     public IReadOnlyList<GstPurchaseRow> Purchases { get; init; } = [];
 
     public decimal InputTax => Inputs.Sum(i => i.Tax);
+
+    /// <summary>Goods sent back to suppliers on debit notes in the month.</summary>
+    public IReadOnlyList<GstSentBackRow> SentBack { get; init; } = [];
+
+    /// <summary>The input tax on what went back, which comes off what is claimed.</summary>
+    public decimal InputTaxSentBack => SentBack.Where(s => s.ChargesGst).Sum(s => s.Tax);
 
     /// <summary>Credit notes issued in the month against tax invoices, from any month.</summary>
     public int CreditNotes { get; init; }
@@ -288,6 +312,7 @@ public sealed partial class GstReturnQuery(PosDatabase database)
         var creditNotesValue = consumerNotesValue + businessNotesValue;
         var (taxInvoices, billsOfSupply, billsOfSupplyValue) = ReadCounts(connection, laneId, from, to);
         var purchases = ReadPurchases(connection, month);
+        var sentBack = ReadSentBack(connection, from, to);
 
         var rateWise = new Dictionary<(string Pos, decimal Rate), (long Taxable, long Cgst, long Sgst, long Igst)>();
         var hsn = new Dictionary<(string Hsn, string Uqc, decimal Rate), HsnTotal>();
@@ -442,7 +467,18 @@ public sealed partial class GstReturnQuery(PosDatabase database)
                          "your accountant needs to say which state they went to.");
         }
 
-        var shortCodes = hsn.Keys.Select(k => k.Hsn).Where(code => code.Trim().Length < 4).Distinct().OrderBy(c => c, StringComparer.Ordinal).ToList();
+        // No code at all is an item sold that is not in the catalogue, typed in at the till: said
+        // apart, as what it is, rather than listed as a code with nothing in it.
+        var noCode = lines.Concat(businessLines).Where(l => l.Hsn.Trim().Length == 0).ToList();
+
+        if (noCode.Count > 0)
+        {
+            warnings.Add($"{Plural.Of(noCode.Count, "line")} {Were(noCode.Count)} sold with no HSN code, worth {Money(noCode.Sum(l => l.Total) / 100m)}: " +
+                         "items not in the catalogue, typed in at the till. They are in the HSN summary under a blank code. Ask your accountant " +
+                         "which code they belong under, and add them to the catalogue with it so the next sale carries it.");
+        }
+
+        var shortCodes = hsn.Keys.Select(k => k.Hsn).Where(code => code.Trim().Length is > 0 and < 4).Distinct().OrderBy(c => c, StringComparer.Ordinal).ToList();
 
         if (shortCodes.Count > 0)
         {
@@ -469,6 +505,15 @@ public sealed partial class GstReturnQuery(PosDatabase database)
         {
             warnings.Add($"{Plural.Of(noInput.Count, "purchase bill")} came from suppliers who do not charge GST, worth {Money(noInput.Sum(p => p.Total))}. " +
                          "There is no input tax on them to claim; they are in the purchase register for the record.");
+        }
+
+        var taxSentBack = sentBack.Where(s => s.ChargesGst).Sum(s => s.Tax);
+
+        if (taxSentBack > 0m)
+        {
+            warnings.Add($"{Plural.Of(sentBack.Count, "debit note")} this month for goods sent back to suppliers, worth {Money(sentBack.Sum(s => s.Total))}, " +
+                         $"with {Money(taxSentBack)} of input tax on them. Take that off the input tax claimed: the suppliers' own credit notes " +
+                         "for them should show in GSTR-2B.");
         }
 
         if (billsOfSupply > 0 && taxInvoices == 0 && purchases.Count > 0)
@@ -513,6 +558,7 @@ public sealed partial class GstReturnQuery(PosDatabase database)
             NilB2bIntraState = Rupees(nilB2bIntra),
             NilB2bInterState = Rupees(nilB2bInter),
             Purchases = purchases,
+            SentBack = sentBack,
             Inputs = [.. purchases
                 .Where(p => p.ChargesGst)
                 .SelectMany(p => p.Rates)
@@ -601,6 +647,47 @@ public sealed partial class GstReturnQuery(PosDatabase database)
             b.Fact.Rates.Sum(r => r.Sgst),
             b.Fact.Total,
             b.Fact.ChargesGst) { Rates = b.Fact.Rates })];
+    }
+
+    /// <summary>
+    /// The debit notes made in the month - goods sent back to suppliers - with the tax on them.
+    /// </summary>
+    /// <remarks>Not filtered by lane, like the purchases: a delivery, and what went back of it, is the shop's.</remarks>
+    private static List<GstSentBackRow> ReadSentBack(SqliteConnection connection, DateTimeOffset from, DateTimeOffset to)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT s.gstin, s.name, r.number, r.returned_at, p.bill_no,
+                   r.taxable_value, r.total_igst, r.total_cgst, r.total_sgst, r.total, p.charges_gst
+            FROM supplier_returns r
+            JOIN suppliers s ON s.id = r.supplier_id
+            JOIN purchases p ON p.id = r.purchase_id
+            WHERE r.returned_at >= $from AND r.returned_at < $to
+            ORDER BY r.returned_at, r.id;
+            """;
+        command.Parameters.AddWithValue("$from", from);
+        command.Parameters.AddWithValue("$to", to);
+
+        var rows = new List<GstSentBackRow>();
+        using var reader = command.ExecuteReader();
+
+        while (reader.Read())
+        {
+            rows.Add(new GstSentBackRow(
+                reader.IsDBNull(0) ? null : reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                DateOnly.FromDateTime(reader.GetDateTimeOffset(3).DateTime),
+                reader.GetString(4),
+                reader.GetDecimal(5),
+                reader.GetDecimal(6),
+                reader.GetDecimal(7),
+                reader.GetDecimal(8),
+                reader.GetDecimal(9),
+                reader.GetInt32(10) != 0));
+        }
+
+        return rows;
     }
 
     /// <summary>Midnight at the start of a day, at the offset this machine keeps on that day.</summary>

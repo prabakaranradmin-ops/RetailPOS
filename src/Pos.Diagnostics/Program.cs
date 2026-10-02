@@ -229,7 +229,7 @@ switch (command)
                 return 0;
             }
 
-            Console.WriteLine($"  {"No",5}  {"Closed",-17}  {"Bills",7}  {"Net sales",13}  {"Cash",13}");
+            Console.WriteLine($"  {"No",5}  {"Closed",-17}  {"Bills",7}  {"Net sales",13}  {"Cash",13}  {"Counted",13}  {"Over/short",11}");
 
             // Grouped the way the report itself groups, not the way this machine's locale would.
             // A listing that says 2,06,625.29 beside a report that says 206,625.29 makes somebody
@@ -239,8 +239,10 @@ switch (command)
             foreach (var entry in entries)
             {
                 Console.WriteLine(string.Format(invariant,
-                    "  {0,5}  {1:dd-MM-yyyy HH:mm}  {2,7:N0}  {3,13:N2}  {4,13:N2}",
-                    entry.Id, entry.ClosedAt, entry.InvoiceCount, entry.NetSales, entry.CashExpected));
+                    "  {0,5}  {1:dd-MM-yyyy HH:mm}  {2,7:N0}  {3,13:N2}  {4,13:N2}  {5,13}  {6,11}",
+                    entry.Id, entry.ClosedAt, entry.InvoiceCount, entry.NetSales, entry.CashExpected,
+                    entry.CashCounted is { } count ? count.ToString("N2", invariant) : "not counted",
+                    entry.CashDifference is { } difference ? difference.ToString("+0.00;-0.00;0.00", invariant) : string.Empty));
             }
 
             Console.WriteLine();
@@ -320,8 +322,28 @@ switch (command)
             }
         }
 
-        var closed = closes.Close(settings.LaneId, DateTimeOffset.Now);
+        // What was counted in the drawer, for a close made from here: the till asks for it before
+        // showing the drawer figure; a script passes it.
+        var counted = ParseAmountOption(args, "--counted");
+
+        if (counted is < 0m)
+        {
+            Console.Error.WriteLine("--counted is what is in the drawer, which cannot be less than nothing.");
+            return 2;
+        }
+
+        var closed = closes.Close(settings.LaneId, DateTimeOffset.Now, counted, counted is null ? null : "pos tool");
         Console.WriteLine($"Closed. Report no {closed.Id}, {Plural.Of(closed.InvoiceCount, "invoice")}, net {closed.NetSales:N2}.");
+
+        if (closed.CashDifference is { } over)
+        {
+            Console.WriteLine(over switch
+            {
+                0m => "The drawer counted exactly right.",
+                > 0m => $"The drawer is over by {over:N2}.",
+                _ => $"The drawer is short by {-over:N2}.",
+            });
+        }
 
         // What to reorder, gathered now and printed at the foot of this report only. A reprint
         // months later must not carry today's shelves under last spring's takings.
@@ -1743,6 +1765,21 @@ static string? ParseStringOption(string[] args, string name)
     return null;
 }
 
+/// <summary>An amount after an option, read the invariant way: 1234.50, never 1.234,50.</summary>
+static decimal? ParseAmountOption(string[] args, string name)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase)
+            && decimal.TryParse(args[i + 1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            return value;
+        }
+    }
+
+    return null;
+}
+
 static int? ParseIntOption(string[] args, string name)
 {
     for (var i = 0; i < args.Length - 1; i++)
@@ -1894,10 +1931,11 @@ static void WriteHelp()
               Prints a duplicate, marked as a reprint. For a sheet that was
               lost, or a printer that jammed at closing time.
 
-          pos close-day [--preview] [--yes] [--force]
+          pos close-day [--preview] [--yes] [--force] [--counted <amount>]
               Prints the lane's Z-report and closes the day. Shows the report
               first, because a close cannot be undone. Takes a verified backup
-              as part of closing.
+              as part of closing. --counted is the cash counted in the drawer,
+              kept with the close and printed with whether it is over or short.
 
           pos backup-db [--keep N]
               Takes a verified snapshot into the lane's backups folder, keeping

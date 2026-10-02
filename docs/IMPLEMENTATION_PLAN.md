@@ -349,6 +349,469 @@ to collect it from. On the owner's screen it was counted as money on its way to 
 - The Tamil report and slip keep these labels in English, like the tender names already were,
   rather than print Tamil composed here that no shopkeeper has checked.
 
+## The second programme: money, khata, stock and the accountant *(added 2026-10-01, approved: "I need all but with your own decision of orders")*
+
+Fourteen items, taken in this order. Data safety comes first, because one dead disk loses
+everything else. The money at the counter comes next. The cashier PINs are the foundation of the
+exceptions report and of over-and-short by cashier, so they come before both. Khata, stock and the
+accountant's reports follow. Each item is built and tested before the next starts.
+
+| # | What | For | State |
+|---|---|---|---|
+| 1 | Backups copied to a pen drive, and a warning when no copy is a week old | Owner | **complete** |
+| 2 | Cashier PINs, and the owner's PIN for voids, big discounts, cash refunds, cash taken out of the drawer and closing the day | Billing | **complete** |
+| 3 | Exceptions report: every void, discount typed by hand, cash refund, cash out and refused PIN, by cashier | Owner | **complete** |
+| 4 | Cash counted at closing, before the expected figure is shown; over or short recorded | Billing | **complete** |
+| 5 | Over and short by cashier, as a trend | Owner | **complete** |
+| 6 | Khata limit for each customer, and days since they last paid, at the till | Billing | **complete** |
+| 7 | Khata ageing (30, 60, 90 days), with a reminder ready to send | Owner | **complete** |
+| 8 | Returns to suppliers (debit notes) | Owner | **complete** |
+| 9 | Stock value at cost and at MRP | Owner | **complete** |
+| 10 | One barcode with two MRPs on the shelf: the till asks which | Billing | **complete** |
+| 11 | An item not in the catalogue, sold as a one-off line and flagged for the owner | Billing | **complete** |
+| 12 | Search in Tamil, and by the English spelling of Tamil names | Billing | **complete** |
+| 13 | A day book for the accountant, ready for Tally | Owner | **complete** |
+| 14 | Festival comparison: this festival against the same days last year | Owner | **complete** |
+
+Nothing here puts a network call on the billing path. A pen drive is a local disk, and the reminder
+and the day book are files the owner sends themselves.
+
+### 1. Backups on a pen drive — **complete** *(2026-10-01)*
+
+Every snapshot was on the same disk as the database, so a dead disk, a theft or a fire would take
+the books and all their backups together. ARCHITECTURE.md §6e has the design.
+- **The day close.** When the shop's backup drive is plugged in, the close copies its snapshot
+  there and checks the copy byte for byte. A drive becomes the shop's with its first copy, made
+  from Maintenance with `Alt+P`. Any other pen drive is never written to without being asked.
+- **The reminder.** When the last copy is a week old, or there has never been one, the close
+  message and the Maintenance tab say so.
+- **Restoring.** The drive's copies are listed for restoring beside the local ones.
+- **Tests.** The copy matches the snapshot byte for byte and opens as a sound database. Two lanes
+  share a drive without mixing their copies, and old copies are pruned. A write failure comes back
+  as words, not an exception. The drive is chosen correctly with one drive, with the shop's drive
+  and a stranger's, and with two strangers'. The reminder comes at 7 days and not at 6. The close
+  copies to the shop's drive, leaves a stranger's alone, and says nothing when the copy is recent.
+  The Maintenance tab copies, lists the copy for restoring, and refuses to guess between two
+  drives.
+- **Keyboard.** The access-key test covers the new button. It is not in the acceptance run, which
+  would write to whatever pen drive happened to be in the PC running it.
+
+### 2. Cashier PINs and the owner's approval — **complete** *(2026-10-02)*
+
+The till's cashier was a typed name, and anybody at the till could void a bill, give any discount,
+refund cash, take cash out or close the day. ARCHITECTURE.md §6f has the design.
+- **Cashiers.** The owner adds the people who work the till on the Settings tab, each with their
+  own PIN. They sign on with `Ctrl+U`, their name and their PIN, and the till takes no money until
+  somebody has. A lane with no cashiers set up types a name, as before.
+- **Approvals.** The owner chooses which actions wait for the owner's PIN: a void, a discount typed
+  by hand over a share of the line, a cash refund, cash out or an expense from the drawer, and
+  closing the day. They need the owner's PIN to be set. The PIN is typed over the action, with its
+  amount on screen. While it is asked for, every key but `Enter` and `Esc` is ignored. Three wrong
+  PINs, or `Esc`, do nothing and are recorded as refused.
+- **The record.** Every one of those, every sign-on and every refusal is written to `till_events`
+  with who was on the till and whether it was approved. Item 3's exceptions report reads it.
+- **The plan changed in one place.** The plan said "a drawer opened with no sale". The till has no
+  such key: the drawer opens only for cash sales, refunds and cash in or out. So the guard is on
+  cash *taken out*, which is the same risk.
+- **Tests.**
+  - The rules, the settings round trip, and refusing a hand-edited duplicate or a bad share.
+  - The record read back as written.
+  - At the till, by keystroke: each guarded action asks, and each unguarded one does not. A
+    lowered discount, a UPI refund and the float never ask. No other key works while the PIN is
+    asked for. Three wrong PINs and `Esc` are each recorded. Nothing is asked without an owner's
+    PIN. A cashier signs on, another cashier's PIN does not work, and no money is taken before
+    sign-on.
+  - One test with the real, slow PIN check.
+  - On the window: the PIN box reaches the till, is emptied after every try, and the panes show.
+  - The owner's screen: adding, refusing and removing cashiers, and approvals saved as they are
+    ticked and inert without an owner's PIN.
+  - The new cards fit at 1366 × 768, are readable in every look, and share no access key.
+- **Gate.** 1,010 app tests and 1,587 core tests pass. The screen tests also pass on the no-tax
+  build.
+
+### 3. The exceptions report — **complete** *(2026-10-02)*
+
+The figures tab has a new card, *At the till: voids, discounts, refunds and cash out, by who*, for
+the period chosen at the top.
+- **What it shows.** First a line in words, such as "2 voids, ₹378.00; 1 PIN asked for and not
+  given". Then a table by person: voids, discounts typed by hand, cash refunds and cash out (each
+  as a count and an amount), and refused PINs. Last come the latest 50, one by one: when, who,
+  what in words, how much, and whether the owner approved or refused.
+- **The saved web page.** It carries the same table, from the same figures.
+- **Before anything is recorded.** A lane that has recorded nothing yet says what the card will
+  show rather than claiming nothing happened. A period that starts before the record does says
+  when the record began.
+- **Tests.**
+  - Each kind totalled by person to the paisa, most first. Sign-ons and closes are left out. Nobody
+    on the till goes against "Nobody named". Only this lane and this window are counted.
+  - When the record began. The latest capped at 50, with the totals still counting all of them.
+  - The page carries the table, and leaves it out before anything is recorded.
+  - The owner's screen in words, with approved and refused shown.
+  - The owner-screen fit, name, readability and access-key tests now run with the card full of
+    long names.
+
+### 4. The count at closing — **complete** *(2026-10-02)*
+
+The close pane showed the drawer figure before the drawer was counted, so the count could be a copy
+of it, and the difference was written down on paper, if at all.
+- **At the till.** `Shift+F12` now shows the bills and net sales, and the cursor is in a box for
+  the cash counted. The drawer figure appears only once the count is typed, with the difference:
+  over by, short by, or exactly right. The drawer can be counted again. The second `Shift+F12`
+  closes, so a close is still two presses.
+- **What is kept.** The count and who counted are stored with the close (migration 021).
+- **The report.** The day-end report prints the count, who counted, and the difference. A close
+  made without a count says it was not counted.
+- **The `pos` tool.** `pos close-day --counted` closes with a count, and `--list` shows each close's
+  count and difference.
+- **The Tamil report.** It prints the count in Tamil. The new words are on the pilot shop's sign-off
+  sheet.
+- **Tests.**
+  - On the till: the figure is hidden until counted. Over, short and exact each show. A recount
+    replaces the first. The count is kept with who counted, and printed. A close without a count
+    says so. Backing out forgets the count. A bad amount is refused, and `Enter` with nothing
+    typed says what to do. A count made before the owner's PIN is kept through the approval.
+  - In the core: the count is stored, read back and listed, and nobody is named for an uncounted
+    close. A negative count is refused. The report prints each case, a reprint keeps the count, and
+    the Tamil report prints it in Tamil.
+  - The close pane fits at its tallest. `--counted` is accepted by the tool.
+- **Acceptance.** The run now types a count of 500 at the close, which is deliberately wrong, and
+  checks the stored report carries it with the difference.
+- **Gate.** 1,026 app tests and 1,606 core tests pass.
+
+### 5. Over and short as a trend — **complete** *(2026-10-02)*
+
+The figures tab has a new card, *The drawer at closing: over and short*, for the period chosen at
+the top.
+- **The line.** First a line in words, such as "Counted at 12 of 14 closes; short 3 times, ₹420.00
+  in all; never over".
+- **The chart.** One bar per close, over in green above the line and short in rose below it. Its
+  tooltip names who counted and who was on the till.
+- **By person.** A table of each person who was on the till: days, days counted, days short and
+  over, with the amounts. Then each close, newest first.
+- **Who was on the till.** Whoever took cash or moved it through the drawer that day; somebody who
+  only took UPI is not counted for the drawer. A day two people worked counts for both, and the
+  card says so.
+- **The saved web page.** It carries the summary and the table by person.
+- **Tests.**
+  - In the core: nothing with no closes; who was on the till is whoever touched the drawer, not UPI;
+    the closes run oldest first; the totals; each person's days, with a shared day counting for
+    both; the web page.
+  - The owner's screen: the line, the rows newest first, a person's days and the chart's bars.
+  - The tests that walk every owner tab now run with a counted close, so the chart, the table and
+    the list are laid out, named, readable in every look and free of access-key clashes.
+- **Gate.** 1,028 app tests and 1,610 core tests pass.
+
+### 6. The khata limit — **complete** *(2026-10-02)*
+
+Anybody could be put on the khata for any amount, and the till did not say how long a customer had
+gone without paying anything back. ARCHITECTURE.md §6h has the design.
+- **Setting a limit.** The owner sets a limit for each customer on the Customers tab (`Alt+L`, or
+  `Enter` in the box). Every customer starts with none.
+- **At the till.** A sale on the khata that would take a customer past their limit waits for the
+  owner's PIN, with what they would owe in words. It is refused on a lane with no owner's PIN.
+  An approved one is in the exceptions report, in a column of its own.
+- **What the cashier sees.** Under what a customer owes, the till shows their limit and how long
+  since they last paid back: "limit ₹300.00 · last paid 12 days ago". The owner's Customers tab
+  shows the same.
+- **Tests.**
+  - The store: the limit kept, found by search and taken off; a negative limit, fractions of a
+    paisa and a customer no longer on file refused; the last payment, never or the newest; the
+    exceptions counting it.
+  - At the till: within the limit is not asked, and past it is asked, saying by how much and
+    recorded. It is refused without an owner's PIN. Backing out leaves the payment to be taken
+    another way. No limit is never asked. The note shows "nothing paid back yet" and "last paid
+    today".
+  - The owner's screen: setting, clearing and refusing a limit, and the note.
+- **Gate.** 1,041 app tests and 1,618 core tests pass.
+
+### 7. How old the khata is, and reminders — **complete** *(2026-10-02)*
+
+Each customer's khata statement already worked out how old their debt was (`KhataAgeing`:
+payments settle the oldest bills first), but nothing looked across all of them.
+- **The list of those who owe.** The Customers tab's *Only customers who owe* list now has a
+  **Days** column: how long each customer's oldest unpaid bill has waited.
+- **The ageing line.** Above the list, a line splits the total into under 30 days, 31 to 60, 61 to
+  90 and over 90.
+- **A reminder.** *Copy a reminder* (`Alt+R`) puts a short message on the clipboard, for somebody
+  who has not paid in a while: "Dear Lakshmi, a reminder from Sri Lakshmi Stores: Rs 389.00 is due
+  on your khata, unpaid since 12-08-2026 (51 days). Please pay by UPI to …". The shop sends it from
+  its own phone, and nothing leaves the till.
+- **Tests.**
+  - The reminder's exact words, with and without a UPI ID, for a clear khata, and by number for an
+    unnamed customer.
+  - The ageing line and the days in the list of those who owe, and the line cleared with the list.
+  - A reminder copied, and none for somebody who owes nothing.
+- **Gate.** 1,044 app tests and 1,622 core tests pass.
+
+### 8. Goods sent back to suppliers — **complete** *(2026-10-02)*
+
+Expired or damaged goods had no way back to the wholesaler in the books. ARCHITECTURE.md §6i has
+the design.
+- **On the Purchases tab.** Picking a bill under *Bills already entered* lists its lines, each with
+  what came and what has gone back. Type how many go back now and why, then **Send goods back**
+  (`Alt+B`, after a confirmation).
+- **The debit note.** It is numbered `DN/26-27/L1-1` and priced as the supplier's bill charged. The
+  last of a line takes exactly what is left of it, so the parts add up to the bill to the paisa.
+- **What it changes.**
+  - Counted goods come off the shelf, and what they cost comes off what the shop owes the supplier.
+  - The supplier's account shows it.
+  - Expiry alerts stop counting goods that went back.
+  - A bill with goods sent back can no longer be cancelled.
+- **The GST return.** The month's return lists the debit notes with the input tax on them to take
+  off the claim, warns about them, and saves them as `…-debit-notes.csv`.
+- **Tests.**
+  - In the core: what can go back, the pricing and its number, the shelf and the amount owed; a
+    line sent back in three parts adding up to the paisa; more than came refused; a reason and a
+    line required; an uncounted item; the supplier's account; a bill with goods sent back not
+    cancellable, and nothing going back from a cancelled bill.
+  - The GST return's rows, warning and CSV, and expiry no longer warning about a batch sent back.
+  - On the screen: the rows, a debit note made from the screen, and each wrong quantity said
+    before anything else. The reason box has a name for screen readers.
+- **Gate.** 1,049 app tests and 1,634 core tests pass.
+
+### 9. What the shelves are worth — **complete** *(2026-10-02)*
+
+A bank, an insurer or the year-end asks what the stock is worth, and nothing said. The Stock tab now
+opens with it, and the saved web page carries it by department. ARCHITECTURE.md §6j has the design.
+- **The first line.** "What the shelves are worth: ₹1,500.00 at cost, ₹2,090.00 at selling price,
+  ₹2,150.00 at MRP".
+- **The second line.** The departments holding most, and what the cost value leaves out: items
+  with no cost price, and counts below zero to recount. When every item has a cost, it gives what
+  the stock would make over cost at today's prices instead.
+- **Tests.** Nothing counted is worth nothing. The three values are exact to the paisa. An item
+  with no cost is left out of the cost value and the margin. Empty, below-zero and inactive items
+  are left out. Departments are merged regardless of case and listed most first. The web page and
+  the Stock tab's lines are checked.
+- **Gate.** 1,051 app tests and 1,640 core tests pass.
+
+### 10. One barcode with two MRPs — **complete** *(2026-10-02)*
+
+After an MRP rise the shelf holds packs with both MRPs printed on them under one barcode, and the
+till charged the new price for all of them, including packs that say less. ARCHITECTURE.md §6k has
+the design.
+- **What the catalogue keeps.** When a counted item's MRP goes up, the old MRP, its price and the
+  count of packs then on the shelf are kept beside the new.
+- **At the till.** A scan or a search pick of such an item asks *Which MRP is on the pack?*, with
+  both MRPs, their prices and about how many older packs are left. `↑` `↓` choose, `Enter` adds,
+  and `Esc` adds nothing. The next pack of the same item is offered as the last one was. No other
+  key works while it asks.
+- **When it stops.** Older packs sold are counted off when the sale goes through. When none are
+  left, or the MRP comes back down to the older one, the till stops asking.
+- **Left as it is.** A void or return of an older pack does not put it back, and an older pack on a
+  recalled bill is not counted off. Either way the till asks a little longer than it needs to.
+- **Tests.**
+  - In the core:
+    - A rise is kept, whether from a re-import or the price sheet, and a second rise keeps the MRP
+      just before it.
+    - A fall, a price change alone, an uncounted item and an empty shelf each leave one MRP.
+    - A fall to or below the older MRP forgets it; a fall part of the way keeps it.
+    - Sales count the older packs off, and selling the last of them, or more than the count, forgets
+      the MRP. A sale at an MRP no longer held counts nothing.
+    - `AtOlderMrp` changes only the MRP and price.
+  - At the till, by keystroke:
+    - One MRP goes straight on, and two MRPs ask first, from a scan and from a search.
+    - `Enter` takes the newer MRP and `↓ Enter` the older, at the older price with the tax worked
+      from it. The arrows stop at the ends, and `Esc` adds nothing.
+    - No other key gets round the question, and a click on the list picks the same as the arrows.
+    - The last choice is offered again, and a newer and an older pack are two lines at their own
+      prices.
+    - Sold older packs are counted off, three at a time with `+`. Newer packs and older packs taken
+      off the bill count nothing, and once the older packs are gone the till stops asking.
+  - On the window: the pane fits at 1366 × 768 with a long name and a 5-digit MRP, the list holds
+    the keyboard, and its highlight follows the arrows.
+- **Gate.** 1,070 app tests and 1,663 core tests pass. The screen and till tests also pass on the
+  no-tax build.
+
+### 11. Items not in the catalogue — **complete** *(2026-10-02)*
+
+An item on the shelf but not in the catalogue could not be sold: the customer waited while somebody
+found the owner. ARCHITECTURE.md §6l has the design.
+- **At the till.** `Ctrl+I` takes what it is, its price, then its GST slab.
+  - **What is carried in.** A scan that matched nothing is kept as its barcode, and words typed into
+    the search become its name. "No item matches" now says `Ctrl+I`.
+  - **The slab list.** The shop's own items with a similar name come first, with their HSN code;
+    then 0%, 5%, 18% and 40% with none. Nothing is picked until `↓` is pressed.
+  - **A bill of supply** skips the slab.
+  - **The keys.** `Esc` goes back a step. No other key works while it is open.
+- **What it does to the books.** It is a line like any other for the tax, the bill, a hold, a void
+  and a return. It takes nothing off any shelf count, and no item offer applies.
+- **For the owner.** The Catalogue tab lists what is waiting, grouped by barcode or name, with how
+  many times each sold, the last bill and who sold it. The figures tab says when any are waiting.
+  - **Adding one** (`Alt+G`) fills the add-one-item form from the till. The owner gives it a SKU and
+    an HSN code and adds it. Only then does it leave the list.
+  - **Taking one off** (`Alt+K`) is for a one-off the shop will not stock.
+- **The GST return.** It warns about lines sold with no HSN code, as what they are.
+- **Found along the way: Delete inside a pane deleted a bill line.** Delete is passed through panes
+  on purpose, to take back the last payment while paying or to unpick a line in a return. In every
+  other pane that opens over a bill (a customer, a reprint, a void, who is on the till) it fell
+  through and took the highlighted line off the bill behind the pane, out of sight. It now does
+  nothing there, as the quantity and discount keys already did.
+- **Tests.**
+  - In the core:
+    - The name, price, slab and barcode rules, each with its message, and the price limit in lakhs.
+    - The tax is exact: ₹118 at 18% is ₹100 plus ₹9 and ₹9, the same as a catalogue item.
+    - The sale saved with its snapshots, nothing off a shelf, and nothing back on a void.
+    - A held bill and a credit note keep it.
+    - The owner's list: newest first, voided bills left out, dealt with once (the first word
+      stands), catalogue lines never.
+    - Grouping by name and by barcode.
+    - The GST return's warning, and a short code still called short.
+  - At the till, by keystroke:
+    - The three steps, and nothing picked until `↓`. The slab picked goes on at the exact tax, and
+      the arrows stop at the ends.
+    - A barcode and a name carried in. The shop's own code suggested first.
+    - Each bad name and price refused, saying why. No other key gets round it, and it will not open
+      over another pane.
+    - `Esc` back step by step, and a bill of supply with no slab step.
+    - The sale waiting for the owner, and a held bill keeping the line.
+    - Delete in four panes leaving the bill alone. It failed before the fix.
+  - The owner's list:
+    - Grouping and its words, and adding through the form, which takes the item off the list.
+    - A form that cannot save, or was cleared and used for something else, leaves it on the list.
+    - Taking one off, nothing picked, and the pick kept on a re-read.
+  - On the windows: the till pane fits at its tallest and the box and list take the keyboard. The
+    owner's tests now run with the list and the notice full, in every look, with no clashing
+    access key.
+- **Gate.** 1,108 app tests and 1,703 core tests pass, and the screen and till tests pass on the
+  no-tax build. One core test failed once in five full runs and passed in the other four. It was
+  not one of these new tests, which passed ten runs in a row on their own. A single intermittent
+  core failure has been seen before, with a timing-sensitive backup test the likeliest cause.
+
+### 12. Search by the Tamil name — **complete** *(2026-10-02)*
+
+A customer asks for paruppu, and the catalogue said Toor Dal. ARCHITECTURE.md §6m has the design.
+- **A Tamil name for each item.** It is optional and comes from the catalogue file's `name_ta` column
+  or the owner's add-one-item form. A re-import with it blank keeps the one the item has. The
+  template carries examples.
+- **Search by how it sounds.**
+  - **What it matches.** After the barcode, SKU and name matches, the till finds items whose English
+    or Tamil name sounds like what was typed.
+  - **What folds together.** Tamil script and the English spellings of Tamil words: paruppu,
+    baruppu and பருப்பு; jeeragam, seeragam and சீரகம்; ennai, yennai and எண்ணெய். An English
+    name is found by its spoken spelling too: Kadalai Maavu by gadalai mavu.
+  - **Ranking.** An exact name always ranks above a sound-alike, and fewer than 3 letters matches
+    nothing by sound.
+- **At the till.** The results list shows the Tamil name beside the English.
+- **Speed.** The sound match scans its own index, pinned in the query, and fetches only what matches.
+  Over 100,000 items, a search by sound takes about 24 ms. It is a second scan, so it about doubles
+  the worst case, a miss: 12 ms to 27 ms measured side by side, against the 60 ms budget. Ordinary typed search, which fills its list from the names before the
+  sound match is reached, takes about 9 ms. Existing catalogues get their keys once, at the first
+  start after the upgrade.
+- **Left for later.** The bill still prints the English name. Printing the Tamil name on a Tamil
+  bill needs its own receipt work and sign-off.
+- **Tests.**
+  - The key: about forty Tamil words, each spelled in English against the Tamil, and the common
+    spellings of one word against each other.
+    - Exact keys, and nothing for nothing.
+    - A Tamil letter typed in two parts is the same as one.
+    - Different words stay different, and vowel length is folded on purpose.
+    - The pulli and the inherent a.
+  - The store:
+    - The Tamil name kept and read back.
+    - Found in Tamil script and in English spellings, and an English name found by its spoken
+      spelling.
+    - An exact name above a sound-alike, too little typed finding nothing, and inactive items left
+      out.
+    - A re-import keeping or replacing the name.
+    - Keys filled for a catalogue from before, and not again.
+  - The file: the column read, an old file loading as before, a name too long refused, and an
+    import found at once.
+  - At the till: an item put on the bill from paruppu, பருப்பு or thuvaram, and the result carrying
+    its Tamil name. On the owner's form, a Tamil name saved trimmed and found.
+  - A new latency test for search by sound over 100,000 items.
+- **To check.** The Tamil names in the catalogue template (துவரம் பருப்பு, பாஸ்மதி அரிசி,
+  சர்க்கரை, கோதுமை மாவு, மல்லிகைப் பூ) should be read by a Tamil reader before the next release,
+  like the bill's words.
+- **Gate.** 1,114 app tests and 1,779 core tests pass.
+
+### 13. A day book for the accountant — **complete** *(2026-10-02)*
+
+The only files for the accountant were the GST return's, and the books were kept again by hand
+from the bills. ARCHITECTURE.md §6n has the design.
+- **On the GST tab.** `Alt+D` saves the month's day book. It holds every bill, credit note, khata
+  payment, purchase bill, supplier payment, debit note, expense, and cash taken out of or put into
+  the till, as vouchers.
+- **Three files.** A CSV, one row per ledger entry, for any spreadsheet or package. And two for
+  Tally's XML import: the ledgers, loaded once, and the vouchers.
+- **Balanced to the paisa.** A rate's sales or purchase ledger takes the lines' totals less their
+  tax. A document that still does not add up, in an old or mended book, is balanced on round-off
+  and named on the screen.
+- **Left out on purpose.**
+  - Voided bills and cancelled purchase bills.
+  - The opening float.
+  - The drawer's side of a cash refund, a supplier paid from the till, or an expense. Each is
+    already its own voucher.
+- **Ledger names.** Plain names by default, and the accountant's own through the settings file's
+  `dayBook` section. A bad section stops the lane, saying why. Khata customers and suppliers are
+  ledgers by name.
+- **Not yet done.**
+  - The Tally files follow Tally's published import format but have not been loaded into a running
+    Tally. The runbook says to load them into a test company first.
+  - There is no `pos` command for it yet.
+- **Tests.**
+  - Each kind of voucher with its exact ledgers and amounts:
+    - **Bills.** A cash bill with change; several tenders and the khata; loyalty points; an
+      inter-state bill; round-off on either side; a bill of supply.
+    - **Returns and repayments.** Credit notes refunded in cash and off the khata; a khata
+      repayment.
+    - **Suppliers.** A two-rate purchase; the supplier's round-off; payments by every method;
+      a debit note.
+    - **The drawer.** Expenses from the drawer and from outside; cash out and in, with the float
+      left out.
+  - What is left out: voided bills, other lanes and other months. A refund or supplier payment from
+    the till is counted once.
+  - A mended bill balanced on round-off and named.
+  - A month of everything: every voucher balanced, in date order.
+  - The accountant's names used, a refused name, and the settings section read, defaulted and
+    refused.
+  - The CSV exactly. The Tally vouchers parsed, with debits negative and adding up to nothing. The
+    ledgers once each under their group, an ampersand escaped. The three files written with a
+    byte-order mark.
+  - The screen: saved and said, nothing to save, a note shown, a failure said, and no button
+    without one. The GST tab's layout tests now include the button.
+- **Gate.** 1,119 app tests and 1,817 core tests pass.
+
+### 14. A festival against last year's — **complete** *(2026-10-02)*
+
+The figures offered only the last 7, 30 or 90 days. There was no way to set this Deepavali against
+last year's. ARCHITECTURE.md §6o has the design.
+- **On the figures tab.** A card takes a name, the festival day this year and last year, and how
+  many days before and after, then compares (`Alt+F`, `Alt+Y`, `Alt+L`, `Alt+B`, `Alt+A`,
+  `Alt+C`). Typing this year's day offers the same date last year, which is right for a fixed
+  festival.
+- **What it shows.**
+  - A line: takings, bills and basket, each against last year with the change.
+  - A chart and a table of each day, set beside the same day from last year's festival. The days are
+    counted from the festival, so the two weeks line up however far it moved.
+  - Departments from either year, and what sold most with last year's figures beside it.
+  - What sold last time and not at all this time: was it on the shelf?
+- **No built-in calendar.** Deepavali, Ayudha Pooja and Vinayagar Chathurthi move by weeks, and a
+  calendar of them built into the till would be wrong the year nobody updated it, so the owner
+  types the days.
+- **What is checked.** A date that is not one, days that are not whole numbers or reach past 45 either
+  side, last year overlapping this year, and a festival that has not started are each refused,
+  saying why. A festival still going is said to be.
+- **Tests.**
+  - In the core, over real sales on Deepavali 2025 and 2026:
+    - Each day beside the same day from the festival, three weeks apart in the calendar.
+    - Each year's own totals, with a sale outside either window in neither.
+    - Departments from both years, most first.
+    - What sold with last year's figures, and what did not sell.
+    - Nothing either year.
+    - The change to one place, and none against nothing.
+    - Unequal windows refused, and a window's days and limits.
+  - On the screen:
+    - It opens on today against the same date last year, and a typed day offers last year's.
+    - The line, each day's row, the departments, the items, the missing list and the chart, each
+      exactly.
+    - A festival still going, and nothing to compare.
+    - Each refusal in words, and no card without the figures.
+    - The day names.
+  - The figures tab's layout, readability and access-key tests now run with the card full, against
+    a sale from a year ago.
+- **Gate.** 1,138 app tests and 1,833 core tests pass. The screen and till tests of items 10 to 14
+  also pass on the no-tax build (445).
+
 ## The UI/UX review, a richer look, and charts for the owner — **complete** *(added 2026-09-30, approved: "give me rich look GUI and also plotly kind of charts for owner")*
 
 A review of every screen against usability and WCAG 2.1 AA found 36 problems: 4 critical, 13 major
@@ -462,6 +925,43 @@ the UPI code were already on the sheet (sections 5 and 6); both need the real eq
 **Gate:** 736 app tests and 1,506 core tests pass. New tests cover the khata pane's size from cash
 to UPI, the close-day returns row, and "park" anywhere in the source. The acceptance run passed all
 194 of its checks.
+
+### Looks for the time of day — **complete** *(2026-10-01, approved: "can i have a settings to change the theme from dark to white like suitable themes for morning noon evening and night for billing and for owner too")*
+
+The till was dark only. Under a shop's daylight, or with the sun on the screen, a dark till is hard
+to read, so the screens now have four looks and a fifth choice that follows the clock:
+
+- **The looks.** Morning is light and warm. Noon is the brightest and crispest, for sun on the
+  screen. Evening is dim slate for dusk. Night is the till's original dark look, and is still what
+  a lane starts in.
+- **Following the clock.** Follow the time of day changes the look on its own: morning from 6 am,
+  noon from 11 am, evening from 4 pm, night from 7 pm.
+- **Where it is chosen.** The owner picks a look on the Settings tab, from the keyboard with
+  `Alt+T` (follow the time of day), `Alt+M` (morning), `Alt+O` (noon), `Alt+E` (evening) or
+  `Alt+N` (night). It applies at once to the till, the owner's screen, the dialogs and their title
+  bars, and is kept as `screenTheme` in `settings.json`.
+- **Why not Alt+G for night.** Night was first `Alt+G`. The acceptance run found that Chrome takes
+  `Alt+G` for the whole desktop (its Gemini panel), so on a PC with Chrome the key opened Chrome
+  instead of reaching the till.
+- **How it works.** Each look is a palette in `Pos.App/Themes/` with the same colour names. Views
+  take every colour as a dynamic resource, so changing the palette repaints without reopening
+  anything; ARCHITECTURE.md §6d has the details.
+- **Colours that were written into the views.** The key caps, the chips, the panels behind the
+  owner's PIN, the ranked bars and the brand mark's glyph either joined the palettes or, for the
+  mark, became the same in every look.
+- **A setting that cannot stop the till.** A misspelt or unknown look reads as Night, and the lane
+  starts as usual: unlike the tax mode, a look cannot make a bill wrong.
+
+**Gate:** 968 app tests and 1,542 core tests pass, and the screen tests also pass on the no-tax
+build. The whole contrast suite now runs once for each look. New tests check:
+- that every look defines the same names;
+- that no view takes a palette colour statically;
+- that the look swaps live, follows the clock, and saves and reads back;
+- that an unknown value starts in Night.
+`EveryWordIsReadableInEveryLook` draws the till and every owner tab in each look and measures each
+piece of text against what is really behind it. The showcase tool draws the four looks
+(`dotnet run --project tools\showcase -- looks`). The acceptance run passed all 198 of its checks.
+They include each look picked by its key on the real window and confirmed in `settings.json`.
 
 ## The shop-owner programme *(added 2026-09-29, approved: "I want to do all one by one")*
 

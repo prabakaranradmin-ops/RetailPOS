@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using Pos.Core.Configuration;
 using Pos.Core.Domain;
 using Pos.Core.Hardware.Drawer;
 using Pos.Core.Hardware.Printing;
@@ -447,6 +448,28 @@ public sealed partial class BillingViewModel
             return;
         }
 
+        // Cash out of the drawer waits for the owner's PIN, on a lane that asks. A refund by UPI,
+        // card or off the khata leaves a trail of its own and does not.
+        if (draft.Refund != TenderType.Cash)
+        {
+            IssueReturn(draft, approved: null);
+            return;
+        }
+
+        Guard(
+            Guarded.CashRefund,
+            $"refund {Show.Money(draft.Refunded)} in cash on {draft.Bill.Invoice.InvoiceNo}",
+            TillEventKind.CashRefunded,
+            draft.Bill.Invoice.InvoiceNo,
+            draft.Refunded,
+            approved => IssueReturn(draft, approved));
+    }
+
+    private void IssueReturn(CreditNoteDraft draft, bool? approved)
+    {
+        if (_returns is null)
+            return;
+
         ReturnResult result;
 
         try
@@ -462,6 +485,13 @@ public sealed partial class BillingViewModel
         }
 
         var note = result.Note;
+
+        if (note.Refund == TenderType.Cash)
+        {
+            _security.Record(_laneId, _now(), TillEventKind.CashRefunded, _cashierName,
+                note.Number, note.Refunded, approved, $"Against {draft.Bill.Invoice.InvoiceNo}");
+        }
+
         var message = note.Refund switch
         {
             TenderType.StoreCredit => $"{note.Number}: {Show.Money(note.Refunded)} taken off their khata.",
